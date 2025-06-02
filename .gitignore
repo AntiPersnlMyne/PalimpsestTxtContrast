@@ -1,2 +1,4 @@
-# Tiff files
+# Image files
 *.tif
+*.tiff
+*.png
