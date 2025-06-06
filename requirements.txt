@@ -1,0 +1,3 @@
+envipyengine==1.0.9
+numpy==2.2.6
+opencv-python==4.11.0.86
