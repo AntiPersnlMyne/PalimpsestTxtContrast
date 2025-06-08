@@ -63,7 +63,7 @@ Place all PRE PROCESSED into the following directory:
 
 Images that have been POST PROCESSED are stored in the following directory: 
 
-`envi/data/input`
+`envi/data/output`
 
 All processing logic is stored in the source (src) folder: 
 
