@@ -34,3 +34,4 @@ echo Setup complete.
 
 rem Delete the setup.bat file
 del setup.bat
+del setup.sh
