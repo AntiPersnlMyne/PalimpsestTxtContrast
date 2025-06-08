@@ -57,15 +57,15 @@ More information on these libraries can be found at the following:
 ## Usage
 The current Python script is setup to accept TIFF (.tif or .tiff) raw image files. This is due to the Palimpsest data being multispectral, and stored in the .tif file format.
 
-Place all PRE PROCESSED into the following directory: \
+Place all PRE PROCESSED into the following directory: 
 
 `envi/data/input`
 
-Images that have been POST PROCESSED are stored in the following directory: \
+Images that have been POST PROCESSED are stored in the following directory: 
 
 `envi/data/input`
 
-All processing logic is stored in the source (src) folder: \
+All processing logic is stored in the source (src) folder: 
 
 `envi/src`
 
@@ -73,7 +73,7 @@ All processing logic is stored in the source (src) folder: \
 ## Questions (or complaints)
 With all due respect, I didn't get paid to do this, so complains MAY fall on deaf ears. Questions may fall on ignorant ears.
 
-For questions concerning legality or contact from within CIS, please contact Gian-Mateo (AntiPersnlMyne) at: \
+For questions concerning legality or contact from within CIS, please contact Gian-Mateo (AntiPersnlMyne) at: 
 
 `mt9485@rit.edu`
 
