@@ -28,7 +28,8 @@ This script will
 - Move the `ENVI_script.py` file to the `envi/src` directory
 - Delete the `setup.bat/.sh` file
 
-4. Once the setup is complete, you can start using the project.
+
+(4) Once the setup is complete, you can start using the project.
 
 
 ## Dependencies
