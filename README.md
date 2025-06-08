@@ -6,21 +6,21 @@ An [Unofficial] algorithm for the enhancing the hidden text from historical docu
 
 To set up the project, follow these steps:
 
-1. Clone the repository to your local machine.
+1. Clone the repository to your local machine using a termanl.
 
-git clone https://github.com/AntiPersnlMyne/MISHA-TxtContrast
+git clone https://github.com/AntiPersnlMyne/PalimpsestTxtContrast
 
-2. Open a terminal and navigate to the project directory.
+2. Navigate to the project directory.
 
-cd ~/PATH TO PROJECT/MISHA-TxtContrast
+cd ~/PATH TO PROJECT/PalimpsestTxtContrast
 
 3. Run the setup script:
 
 (Linux)
-bash setup.sh
+`bash setup.sh`
 
 (Windows)
-setup.bat
+`setup.bat`
 
 
 This script will:
@@ -29,7 +29,7 @@ This script will:
 - Install the required dependencies from the `requirements.txt` file
 - Create the necessary directory structure
 - Move the `ENVI_script.py` file to the `envi/src` directory
-- Delete the `setup.bat` file
+- Delete the `setup.bat/.sh` file
 
 4. Once the setup is complete, you can start using the project.
 
