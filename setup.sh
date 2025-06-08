@@ -26,4 +26,11 @@ mkdir -p envi/data/input
 mkdir -p envi/data/output
 mkdir -p envi/src
 
+# Move src file(s) to directory
+mv ENVI_script.py envi/src
+
+# Report setup complete
 echo "Setup complete."
+
+# Delete the setup.sh file
+rm "$0"
