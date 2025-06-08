@@ -49,8 +49,8 @@ This project includes the following libraries:
 The startup script AUTOMATICALLY downloads these libraries into the virtual environment, ready to use, no user input required.
 
 More information on these libraries can be found at the following:
-(envipyengine) https://envi-py-engine.readthedocs.io/en/latest/
-(OpenCV) https://opencv.org/about/
+1. (envipyengine) https://envi-py-engine.readthedocs.io/en/latest/
+2. (OpenCV) https://opencv.org/about/
 
 
 
