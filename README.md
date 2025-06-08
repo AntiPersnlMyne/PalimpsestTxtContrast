@@ -3,18 +3,15 @@ An [Unofficial] algorithm for the enhancing the hidden text from historical docu
 
 
 ## Setup
-
-To set up the project, follow these steps:
-
-1. Clone the repository to your local machine using a termanl.
+(1) Clone the repository to your local machine using a terminal:
 
 git clone https://github.com/AntiPersnlMyne/PalimpsestTxtContrast
 
-2. Navigate to the project directory.
+(2) Navigate to the project directory:
 
 cd ~/PATH TO PROJECT/PalimpsestTxtContrast
 
-3. Run the setup script:
+(3) Run the setup script:
 
 (Linux)
 `bash setup.sh`
@@ -23,7 +20,7 @@ cd ~/PATH TO PROJECT/PalimpsestTxtContrast
 `setup.bat`
 
 
-This script will:
+This script will
 - Create a Python virtual environment named "envi"
 - Activate the virtual environment
 - Install the required dependencies from the `requirements.txt` file
