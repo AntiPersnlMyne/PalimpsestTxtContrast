@@ -1,5 +1,5 @@
 # Palimpsest Text Contrast
-An [Unofficial] algorithm for the enhancing the hidden text from historical documents; in particular, the Archimedes Palimpsest. Independent contribution to the MISHA project.
+An implementation of the Orthoginal Subspace Projection (OSP) target detection method on multi-spectral, historical document imaging. A student contribution to the MISHA project. 
 
 
 ## Setup
@@ -7,9 +7,11 @@ An [Unofficial] algorithm for the enhancing the hidden text from historical docu
 
 git clone https://github.com/AntiPersnlMyne/PalimpsestTxtContrast
 
+
 (2) Navigate to the project directory:
 
 cd ~/PATH TO PROJECT/PalimpsestTxtContrast
+
 
 (3) Run the setup script:
 
@@ -19,21 +21,18 @@ cd ~/PATH TO PROJECT/PalimpsestTxtContrast
 (Windows) \
 `setup.bat`
 
+(4) Move data to be processed into `data/input`
 
-This script will
-- Create a Python virtual environment named "envi"
-- Activate the virtual environment
-- Install the required dependencies from the `requirements.txt` file
+
+This script will ---------------------------------------------------------------
+- Install the required dependencies (libraries) from the `requirements.txt` file
 - Create the necessary directory structure
-- Move the `ENVI_script.py` file to the `envi/src` directory
 - Delete the `setup.bat/.sh` file
+--------------------------------------------------------------------------------
 
-
-(4) Once the setup is complete, you can start using the project.
 
 
 ## Dependencies
-
 This project uses the ENVI (Environment for Visualizing Imagery) software by NV5 Geospatial Software. This project is compatable with the now latest version of ENVI - 6.1 with IDL 9.1
 
 The software can be made available through a CIS (Chester F. Carlson College of Imaging Science) license. The MISHA (Multispectral Imaging System for Historical Artifacts) project is a system created by CIS and the RIT Museum Studies Program.
@@ -43,38 +42,43 @@ ENVI allows you to extract meaningful information from hyperspectral and multisp
 In this instance, ENVI is used to process historical manuscripts to enhance details (text contrast), allowing non-imaging personel to make better decisions about the document's contents.
 
 This project includes the following libraries: 
-1. ENVI Py Engine (envipyengine)
-2. OpenCV (Open Computer Vision)
+1. Numpy (data arrays)
+2. OpenCV (computer vision)
+3. SPy (spectral data processing)
+4. scikit-image (image processing)
+5. SciPy (scientific computing)
+6. Matplotlib (plotting)
 
-The startup script AUTOMATICALLY downloads these libraries into the virtual environment, ready to use, no user input required.
-
-More information on these libraries can be found at the following:
-1. (envipyengine) https://envi-py-engine.readthedocs.io/en/latest/
-2. (OpenCV) https://opencv.org/about/
+The startup script AUTOMATICALLY downloads these libraries, ready to use, no user input required.
+~ It is recommended to setup in a virtual environment for package isolation
 
 
 
 ## Usage
-The current Python script is setup to accept TIFF (.tif or .tiff) raw image files. This is due to the Palimpsest data being multispectral, and stored in the .tif file format.
+The current Python script is setup to accept TIFF (`.tif`, `.tiff`) raw image files, as well as ENVI image cubes (`.hdr`, `.dat`). 
 
 Place all PRE PROCESSED into the following directory: 
-
-`envi/data/input`
+`data/input`
 
 Images that have been POST PROCESSED are stored in the following directory: 
+`data/output`
 
-`envi/data/output`
+Utility Python and IDL files are stored in their respective directories: 
+`src/Python_script`
+`src/IDL_script`
 
-All processing logic is stored in the source (src) folder: 
-
-`envi/src`
+!Important! The execution file and main logic is "main.py"
+[~/PalimpsestTxtContrast] `python main.py`
 
 
 ## Questions (or complaints)
-With all due respect, I didn't get paid to do this, so complains MAY fall on deaf ears. Questions may fall on ignorant ears.
+Complaints may fall on deaf ears. Questions may fall on ignorant ears.
 
 For questions concerning legality or contact from within CIS, please contact Gian-Mateo (AntiPersnlMyne) at: 
-
 `mt9485@rit.edu`
 
+Additional Personel:
+Douglas Tavolette(dft8437@rit.edu) - RIT software engineering student, who devoted his free time to developing code for this project
+Roger Easton Jr.(rlepci@rit.edu)   - My excellent adviser and project sponsor, MISHA personell
+David Messinger(dwmpci@rit.edu)    - Another adviser and mentor, MISHA personell
 

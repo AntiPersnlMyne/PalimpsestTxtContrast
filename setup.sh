@@ -3,14 +3,6 @@
 # Exit immediately if any command fails
 set -e
 
-# Create a Python virtual environment named "envi"
-echo "Creating virtual environment 'envi'..."
-python3 -m venv envi
-
-# Activate the virtual environment
-echo "Activating virtual environment..."
-source envi/bin/activate
-
 # Install required packages
 if [ -f "requirements.txt" ]; then
     echo "Installing dependencies from requirements.txt..."
@@ -22,15 +14,18 @@ fi
 
 # Create the directory structure
 echo "Creating directory structure..."
-mkdir -p envi/data/input
-mkdir -p envi/data/output
-mkdir -p envi/src
+mkdir -p data/input
+mkdir -p data/output
+mkdir -p src
+mkdir -p src/python_scripts
+mkdir -p src/IDL_scripts
 
 # Move src file(s) to directory
-mv ENVI_script.py envi/src
+mv main.py envi/src
 
 # Report setup complete
 echo "Setup complete."
 
 # Delete the setup.sh file
+rm setup.bat
 rm "$0"
