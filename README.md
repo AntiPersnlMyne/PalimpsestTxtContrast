@@ -24,11 +24,10 @@ cd ~/PATH TO PROJECT/PalimpsestTxtContrast
 (4) Move data to be processed into `data/input`
 
 
-This script will ---------------------------------------------------------------
+This script will:
 - Install the required dependencies (libraries) from the `requirements.txt` file
 - Create the necessary directory structure
 - Delete the `setup.bat/.sh` file
---------------------------------------------------------------------------------
 
 
 
@@ -57,18 +56,22 @@ The startup script AUTOMATICALLY downloads these libraries, ready to use, no use
 ## Usage
 The current Python script is setup to accept TIFF (`.tif`, `.tiff`) raw image files, as well as ENVI image cubes (`.hdr`, `.dat`). 
 
-Place all PRE PROCESSED into the following directory: 
+Place all PRE-processed images into the input directory:
+
 `data/input`
 
-Images that have been POST PROCESSED are stored in the following directory: 
+Images that have been POST-processed are stored in the output directory: 
+
 `data/output`
 
 Utility Python and IDL files are stored in their respective directories: 
-`src/Python_script`
-`src/IDL_script`
 
-!Important! The execution file and main logic is "main.py"
-[~/PalimpsestTxtContrast] `python main.py`
+`src/python_scripts`
+`src/IDL_scripts`
+
+The execution file is "main.py":
+
+`[~/PalimpsestTxtContrast] python3 main.py`
 
 
 ## Questions (or complaints)
@@ -78,7 +81,10 @@ For questions concerning legality or contact from within CIS, please contact Gia
 `mt9485@rit.edu`
 
 Additional Personel:
-Douglas Tavolette(dft8437@rit.edu) - RIT software engineering student, who devoted his free time to developing code for this project
-Roger Easton Jr.(rlepci@rit.edu)   - My excellent adviser and project sponsor, MISHA personell
-David Messinger(dwmpci@rit.edu)    - Another adviser and mentor, MISHA personell
+
+Douglas Tavolette(dft8437@rit.edu) | RIT software engineering student, who devoted his free time to developing code for this project\n
+
+Roger Easton Jr.(rlepci@rit.edu) | My excellent adviser and project sponsor, MISHA personell\n
+
+David Messinger(dwmpci@rit.edu) | Another adviser and mentor, MISHA personell
 
