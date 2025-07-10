@@ -1,9 +1,2 @@
-# Image files
-*.tif
-*.tiff
-*.png
-*.jpg
-
-# ENVI files
-*.dat
-*.hdr
+# Data folder
+data
