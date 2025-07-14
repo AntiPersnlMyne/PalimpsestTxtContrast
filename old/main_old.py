@@ -1,20 +1,17 @@
 import subprocess
+import numpy as np
+import scipy
+import skimage
+import cv2 as cv
+import matplotlib.pyplot as plt
 
 def main():
-    print("Hello, world!")
+    print("Running main.py")
     
-    #this is the start of the subprocess stuff
     try:
-        subprocess.run(["javac", "makeAFile.java"], check=True)
-        subprocess.run(["java", "makeAFile"], check=True)
-        
-        print("success")
-    except subprocess.CalledProcessError as e:
-        print("error: ", e)
-        
+        subprocess.run
+    except:
     
     
-
-
 if __name__ == "__main__":
     main()
