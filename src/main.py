@@ -11,23 +11,16 @@ __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Development", or "Production". 
 
-# IDL subprocesses
-import subprocess
-import os
-import argparse
-
-# Python subprocesses
+# Python implementations
 from python_scripts import utils, run_idl, modify_hdr
 
-
 def main():
-    
-    
+
     run_idl.run_idl_script(
         idl_script="build_band_stack",
         src_dir="data/input",
         dst_dir="data/output/test_cube",
-        args=["_mnf", "5"]
+        args=["_mnf"]
     )
         
 
@@ -35,6 +28,6 @@ def main():
 
 
 if __name__ == "__main__":
-    print("Hello main!")
+    print("Hello, main!")
     main()
     print("Goodbye, main!")

@@ -12,6 +12,9 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 import subprocess
 from typing import Any
 
+# Magic string
+idl_exe = r"C:\Program Files\NV5\ENVI61\IDL91\bin\bin.x86_64\idl.exe"
+
 def run_idl_script(idl_script: str, src_dir: str, dst_dir: str, args: list[Any] = []):
     """
     Run an IDL .pro script with required source and destination directories,
@@ -30,7 +33,7 @@ def run_idl_script(idl_script: str, src_dir: str, dst_dir: str, args: list[Any] 
     arg_str = '", "'.join(all_args)
     
      # Format the IDL call to pass arguments
-    idl_command = f'idl -e "{idl_script}" -args "{arg_str}"'
+    idl_command = f'"{idl_exe}" -e .run /"{idl_script}"/ -args "{arg_str}"'
     
     try:
         subprocess.run(

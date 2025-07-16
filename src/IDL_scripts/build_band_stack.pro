@@ -15,7 +15,7 @@ pro build_band_stack
 
   ; Check if minimum required arguments are provided
   if n_elements(cmd_args) lt 2 then begin
-    print, 'Usage: build_band_stack <src_directory> <dst_directory> [suffix] [num_components]'
+    print, 'Usage: build_band_stack <src_directory> <dst_directory> [suffix]'
     return
   endif
 
@@ -23,7 +23,6 @@ pro build_band_stack
   src_dir = cmd_args[0]
   dst_dir = cmd_args[1]
   suffix = n_elements(cmd_args) gt 2 ? cmd_args[2] : ''
-  num_components = n_elements(cmd_args) gt 3 ? fix(cmd_args[3]) : 3
 
   ; Ensure source directory exists
   if ~file_test(src_dir, /directory) then begin
@@ -45,9 +44,9 @@ pro build_band_stack
     input_raster = e.openRaster(all_files[i])
 
     ; Create and configure MNF task
-    task = ENVITask('ForwardMNFTransform')
+    task = ENVITask('BuildBandStack')
     task.input_raster = input_raster
-    if num_components gt 3 then task.output_nbands = num_components
+    task.order_bands_by_wavelength = 1 ; True
 
     ; Execute task
     task.execute
