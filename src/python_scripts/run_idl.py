@@ -10,9 +10,9 @@ __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", or "Production". 
 
 import subprocess
-import argparse
+from typing import Any
 
-def run_idl_script(idl_script: str, src_dir: str, dst_dir: str, args: list[str] = []):
+def run_idl_script(idl_script: str, src_dir: str, dst_dir: str, args: list[Any] = []):
     """
     Run an IDL .pro script with required source and destination directories,
     and optional extra arguments.
@@ -21,19 +21,19 @@ def run_idl_script(idl_script: str, src_dir: str, dst_dir: str, args: list[str] 
         idl_script (str): Name of the IDL script (without .pro extension).
         src_dir (str): Source directory path (passed as first arg).
         dst_dir (str): Destination directory path (passed as second arg).
-        args (List[str]): Any additional arguments required by the IDL script.
+        args (List[Any]): Any additional arguments required by the IDL script.
                           Order matters and is the user's responsibility.
     """
     
-     # Build the full argument string
+    # Build argument string
     all_args = [str(src_dir), str(dst_dir)] + [str(arg) for arg in args]
     arg_str = '", "'.join(all_args)
     
-     # Format the IDL call to pass arguments via command_line_args()
+     # Format the IDL call to pass arguments
     idl_command = f'idl -e "{idl_script}" -args "{arg_str}"'
     
     try:
-        result = subprocess.run(
+        subprocess.run(
             idl_command,
             shell=True,
             check=True,

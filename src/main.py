@@ -17,30 +17,18 @@ import os
 import argparse
 
 # Python subprocesses
-from python_scripts import utils
+from python_scripts import utils, run_idl
 
 
 def main():
     
-    # Create argument parser
-    parser = argparse.ArgumentParser(description='Process IDL scripts')
     
-    parser.add_argument('src_dir', help='Source directory')
-    parser.add_argument('dst_dir', help='Destination directory')
-    
-    # Optional arguments
-    parser.add_argument('-s', '--suffix', 
-                        help='Optional output file suffix')
-    
-    # Parse arguments
-    args = parser.parse_args()
-    
-    # Prepare arguments for IDL script
-    idl_args = [args.src_dir, args.dst_dir]
-    
-    
-    if args.suffix:
-        idl_args.append(args.suffix)
+    run_idl.run_idl_script(
+        idl_script="build_band_stack",
+        src_dir="data/input",
+        dst_dir="data/output/test_cube",
+        args=["_mnf", "5"]
+    )
         
 
 
