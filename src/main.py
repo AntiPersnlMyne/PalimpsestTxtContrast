@@ -2,14 +2,14 @@
 
 """main.py: Main file for running manuscript processing routine"""
 
-__author__ = "Gian-Mateo (GM) Tifone"
+__author__ = "Gian-Mateo (GM) Tifone and Douglas Tavolette"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone", "Douglas Tavolette", "Roger Easton Jr.", "David Messinger"]
 __license__ = "MIT"
-__version__ = "1.0"
+__version__ = "1.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Prototype" # "Development", or "Production". 
+__status__ = "Development" # "Development", or "Production". 
 
 # IDL subprocesses
 import subprocess
@@ -17,7 +17,7 @@ import os
 import argparse
 
 # Python subprocesses
-from python_scripts import utils, run_idl
+from python_scripts import utils, run_idl, modify_hdr
 
 
 def main():
