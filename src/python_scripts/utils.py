@@ -160,7 +160,7 @@ def gaussian_threshold(src_dir: str, dst_dir: str, block_size: int, mean_subtrac
         
     _write_files(dst_dir, dst_images, file_suffix)
     
-def dilation(src_dir:str, dst_dir:str, kernel_shape:tuple = (3,3), iterations:int = 1, file_suffix=""):
+def dilation(src_dir:str, dst_dir:str, kernel_shape:tuple = (3,3), iterations:int = 1, file_suffix="") -> None:
     """Dilation thickens stroke lines by adding pixels to the boundaries of objects in an image.
 
     Args:
@@ -183,7 +183,7 @@ def dilation(src_dir:str, dst_dir:str, kernel_shape:tuple = (3,3), iterations:in
 
     _write_files(dst_dir, dst_images, file_suffix)
    
-def erosion(src_dir:str, dst_dir:str, kernel_shape:tuple = (3,3), iterations:int = 1, file_suffix=""):
+def erosion(src_dir:str, dst_dir:str, kernel_shape:tuple = (3,3), iterations:int = 1, file_suffix="") -> None:
     """Erosion thins stroke lines by subtracting pixels to the boundaries of objects in an image.
 
     Args:

@@ -24,7 +24,7 @@ pro min_noise_fraction
   src_dir = cmd_args[0] ; Source directory
   dst_dir = cmd_args[1] ; Destination directory
   suffix = n_elements(cmd_args) gt 2 ? cmd_args[2] : '_mnf' ; Optional suffix. Default '_mnf'
-  num_components = n_elements(cmd_args) gt 3 ? cmd_args[3] : 3 ; Optional MNF param. Default 3
+  num_components = n_elements(cmd_args) gt 3 ? fix(cmd_args[3]) : 3 ; Optional MNF param. Default 3
 
   ; Ensure directories exist
   if ~file_test(src_dir, /directory) then begin

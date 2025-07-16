@@ -14,6 +14,7 @@ __status__ = "Prototype" # "Development", or "Production".
 # IDL subprocesses
 import subprocess
 import os
+import argparse
 
 # Python subprocesses
 from python_scripts import utils
@@ -21,32 +22,25 @@ from python_scripts import utils
 
 def main():
     
+    # Create argument parser
+    parser = argparse.ArgumentParser(description='Process IDL scripts')
     
-    # Set dir for source files to be called
-    working_directory = "./src"
-    if not os.path.isdir(working_directory):
-        print("Invalid working directory:", working_directory)
-    else:
-        print("Working directory exists")
-        
-    try:
-        """CHANGE OSP.pro TO YOUR FILE'S NAME"""
-        idl_script = os.path.join(working_directory, "OSP.pro")
-        """THIS MIGHT ALSO NEED TO BE CHANGED"""
-        idl_exe = r"C:\Program Files\NV5\ENVI61\IDL91\bin\bin.x86_64\idl.exe"
-        
-        # idl principle_component_analysis /path/to/src/dir /path/to/dst/dir [optional_suffix]
-        command = f'"{idl_exe}" -e ".run \'{idl_script}\' ; open_file"'
-
-        result = subprocess.run(command, cwd=working_directory, shell=True, capture_output=True, text=True)
-        # subprocess.run[]
-        # subprocess.run(["javac", "makeAFile.java"], check=True)
-        # subprocess.run(["java", "makeAFile"], check=True)
-        print("STDOUT:\n", result.stdout)
-        print("STDERR:\n", result.stderr)
-
-    except subprocess.CalledProcessError as e:
-        print("-- Error in main.py: --\n", e)
+    parser.add_argument('src_dir', help='Source directory')
+    parser.add_argument('dst_dir', help='Destination directory')
+    
+    # Optional arguments
+    parser.add_argument('-s', '--suffix', 
+                        help='Optional output file suffix')
+    
+    # Parse arguments
+    args = parser.parse_args()
+    
+    # Prepare arguments for IDL script
+    idl_args = [args.src_dir, args.dst_dir]
+    
+    
+    if args.suffix:
+        idl_args.append(args.suffix)
         
 
 
