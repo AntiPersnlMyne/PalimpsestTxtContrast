@@ -6,7 +6,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone", "Douglas Tavolette", "Roger Easton Jr.", "David Messinger"]
 __license__ = "MIT"
-__version__ = "1.0.0"
+__version__ = "1.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Prototype" # "Development", or "Production". 
@@ -20,7 +20,7 @@ from python_scripts import utils
 
 
 def main():
-    print("Hello, world!")
+    
     
     # Set dir for source files to be called
     working_directory = "./src"
@@ -35,6 +35,7 @@ def main():
         """THIS MIGHT ALSO NEED TO BE CHANGED"""
         idl_exe = r"C:\Program Files\NV5\ENVI61\IDL91\bin\bin.x86_64\idl.exe"
         
+        # idl principle_component_analysis /path/to/src/dir /path/to/dst/dir [optional_suffix]
         command = f'"{idl_exe}" -e ".run \'{idl_script}\' ; open_file"'
 
         result = subprocess.run(command, cwd=working_directory, shell=True, capture_output=True, text=True)
@@ -52,4 +53,6 @@ def main():
 
 
 if __name__ == "__main__":
+    print("Hello main!")
     main()
+    print("Goodbye, main!")

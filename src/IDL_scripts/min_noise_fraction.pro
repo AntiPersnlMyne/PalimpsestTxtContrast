@@ -5,7 +5,7 @@
 ; License: MIT
 ; Version: 1.0
 
-pro principle_component_analysis
+pro min_noise_fraction
   compile_opt idl2
 
   ; Initialize ENVI in headless mode
@@ -16,16 +16,17 @@ pro principle_component_analysis
 
   ; Check if minimum required arguments are provided
   if n_elements(cmd_args) lt 2 then begin
-    print, 'Usage: principle_component_analysis <src_directory> <dst_directory> [suffix]'
+    print, 'Usage: minimum_noise_fraction <src_directory> <dst_directory> [suffix] [num_components] '
     return
   endif
 
   ; Assign arguments
   src_dir = cmd_args[0] ; Source directory
   dst_dir = cmd_args[1] ; Destination directory
-  suffix = n_elements(cmd_args) gt 2 ? cmd_args[2] : '_pca' ; Optional suffix. Default is '_pca'
+  suffix = n_elements(cmd_args) gt 2 ? cmd_args[2] : '_mnf' ; Optional suffix. Default '_mnf'
+  num_components = n_elements(cmd_args) gt 3 ? cmd_args[3] : 3 ; Optional MNF param. Default 3
 
-  ; Ensure source directory exists
+  ; Ensure directories exist
   if ~file_test(src_dir, /directory) then begin
     print, 'Source directory does not exist: ' + src_dir
     return
@@ -44,11 +45,15 @@ pro principle_component_analysis
     ; Open the input file
     input_raster = e.openRaster(tif_files[i])
 
-    ; Create PCA task
-    task = ENVITask('ForwardPCATransform')
+    ; Create MNF task
+    task = ENVITask('ForwardMNFTransform')
     task.input_raster = input_raster
+    ; Set num_components if user provided. Otherwise, use ENVI default.
+    if num_components gt 3 then begin
+      task.output_nbands = num_components
+    endif
 
-    ; Execute PCA
+    ; Execute MNF
     task.execute
 
     ; Get the output raster
@@ -70,5 +75,5 @@ pro principle_component_analysis
   ; Close ENVI
   e.close
 
-  print, 'PCA processing complete. Processed ' + strtrim(n_tif + n_tiff, 2) + ' files.'
+  print, 'MNF processing complete. Processed ' + strtrim(n_tif + n_tiff, 2) + ' files.'
 end

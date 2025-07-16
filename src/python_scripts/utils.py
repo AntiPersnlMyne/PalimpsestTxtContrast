@@ -45,7 +45,7 @@ def _read_files(src_dir: str) -> dict:
         if filename.endswith('.tif') or filename.endswith(".tiff"):
             with open(os.path.join(src_dir, filename), 'r') as file:
                 # dict( filename: image )
-                images.update({file.name: cv.imread(file.name)}) 
+                images.update({file.name: cv.imread(file.name, cv.IMREAD_UNCHANGED)}) 
                 
     return images
 
