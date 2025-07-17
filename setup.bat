@@ -1,31 +1,65 @@
 @echo off
+setlocal enabledelayedexpansion
 
-rem Exit immediately if any command fails
-if errorlevel 1 exit /b 1
+:: Exit immediately if any command fails
+set "ERRORLEVEL=0"
 
-rem Install required packages
-if exist requirements.txt (
+:: Prompt for virtual environment creation
+echo This project only works with Python versions 3.12.7 and below.
+set /p create_venv="Would you like to create a virtual environment (palenv), than includes a working Python version? (y/yes): "
+
+:: Function to create directory structure
+:CreateDirectoryStructure
+echo Creating directory structure...
+mkdir data\input
+mkdir data\output
+mkdir src
+mkdir src\python_scripts
+mkdir src\IDL_scripts
+goto :eof
+
+:: Function to install dependencies
+:InstallDependencies
+if exist "requirements.txt" (
     echo Installing dependencies from requirements.txt...
-    python -m pip install --upgrade pip
+    pip install --upgrade pip
     pip install -r requirements.txt
 ) else (
     echo requirements.txt not found. Skipping package installation.
 )
+goto :eof
 
-rem Create the directory structure
-echo Creating directory structure...
-if not exist data\input mkdir data\input
-if not exist data\output mkdir data\output
-if not exist src mkdir src
-if not exist src\python_scripts mkdir src\python_scripts
-if not exist src\IDL_scripts mkdir src\IDL_scripts
+:: Create directory structure regardless of user input
+call :CreateDirectoryStructure
 
-rem Move src file(s) to directory
-move main.py envi\src
+:: Check if user wants to create virtual environment
+if /i "%create_venv%"=="y" (
+    if /i "%create_venv%"=="yes" (
+        :: Create virtual environment with Python 3.12.7
+        python -m venv palenv
+        
+        :: Activate virtual environment
+        call palenv\Scripts\activate.bat
+        
+        :: Install dependencies in virtual environment
+        call :InstallDependencies
+        
+        :: Move src file(s) to directory
+        move main.py src\
+        
+        :: Deactivate virtual environment
+        deactivate
+    )
+) else (
+    :: Install dependencies system-wide
+    call :InstallDependencies
+    
+    :: Move src file(s) to directory
+    move main.py src\
+)
 
-rem Report setup complete
+:: Report setup complete
 echo Setup complete.
 
-rem Delete the setup.bat file
-del setup.sh
-del setup.bat
+:: Delete the setup.bat file
+del "%~f0"
