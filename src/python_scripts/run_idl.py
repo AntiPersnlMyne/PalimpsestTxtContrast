@@ -1,4 +1,4 @@
-"""run_idl.py: Run IDL scripts through Python. Saved output to data/output as TIFF."""
+"""run_idl.py: Run IDL scripts through Python. Saves output to data/output as ENVI .dat raster."""
 
 __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
@@ -30,13 +30,20 @@ def run_idl_script(idl_script: str, src_dir: str, dst_dir: str, args: list[Any] 
     
     # Build argument string
     all_args = [str(src_dir), str(dst_dir)] + [str(arg) for arg in args]
-    arg_str = '", "'.join(all_args)
+    arg_str = ' '.join([f'"{str(arg)}"' for arg in all_args])
+
     
-     # Format the IDL call to pass arguments
-    idl_command = f'"{idl_exe}" -e .run /"{idl_script}"/ -args "{arg_str}"'
-    
+    # Format the IDL command, compiles dynamically
+    idl_command = (
+        f'"{idl_exe}" '
+        f'-IDL_PATH src/IDL_scripts '
+        f'-e {idl_script} '
+        f'-args {arg_str}'
+    )
+
+
     try:
-        subprocess.run(
+        result = subprocess.run(
             idl_command,
             shell=True,
             check=True,
@@ -46,7 +53,10 @@ def run_idl_script(idl_script: str, src_dir: str, dst_dir: str, args: list[Any] 
         )
 
     except subprocess.CalledProcessError as e:
-        print(f"-- Error running IDL script: {idl_script}")
+        print(f"-- Error calling IDL script: '{idl_script}'")
         print("- STDOUT -\n", e.stdout)
         print("- STDERR -\n", e.stderr)
         raise
+    except Exception as e:
+        print(f"-- Misc Error calling IDL script: {idl_script}\n{e}")
+        

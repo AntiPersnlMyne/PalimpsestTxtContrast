@@ -1,2 +1,9 @@
-# Data folder
-data
+# Ignore data files
+.jpg
+.png
+.dat
+.hdr
+.tif
+
+# Any Python cache
+**/__pycache__

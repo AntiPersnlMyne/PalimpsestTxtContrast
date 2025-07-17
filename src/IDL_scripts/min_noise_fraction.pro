@@ -6,7 +6,10 @@
 ; Version: 1.0
 
 pro min_noise_fraction
-  compile_opt idl2
+  compile_opt idl3
+
+  print, 'Found file at: '
+  message, '', /informational
 
   ; Initialize ENVI in headless mode
   e = envi(/headless)

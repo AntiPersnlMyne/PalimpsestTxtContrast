@@ -5,13 +5,17 @@
 ; Version: 1.1
 
 pro build_band_stack
-  compile_opt idl2
+  compile_opt idl3
+
+  print, 'Found file at: '
+  message, '', /informational
 
   ; Initialize ENVI in headless mode
   e = envi(/headless)
 
   ; Get command line arguments
   cmd_args = command_line_args()
+  print, 'Received arguments: ', cmd_args ; DEBUG
 
   ; Check if minimum required arguments are provided
   if n_elements(cmd_args) lt 2 then begin
@@ -31,6 +35,7 @@ pro build_band_stack
   endif
 
   ; Create destination directory if it doesn't exist
+  print, 'Checking output directory: ', dst_dir
   if ~file_test(dst_dir, /directory) then file_mkdir, dst_dir
 
   ; Find TIFF files
@@ -68,6 +73,8 @@ pro build_band_stack
     input_raster.close
     output_raster.close
   endfor
+
+  print, 'Saved to: ', envi_output_path
 
   ; Close ENVI
   e.close
