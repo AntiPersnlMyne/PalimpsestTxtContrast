@@ -4,3 +4,4 @@ This file contains my (Doug Tavolette's) ideas to try for OSP so that I know wha
 2) OSP to pull out the overtext to create a mask to use for later procedures
 3) OSP after PCA to see if I can get any additional undertext compared to idea 1
 4) Add more blue bands to see where the line between over and undertext showing up is
+

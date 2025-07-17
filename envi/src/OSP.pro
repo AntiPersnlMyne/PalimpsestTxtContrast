@@ -1,8 +1,26 @@
-PRO open_file
-    COMPILE_OPT IDL3
-    e = ENVI(/HEADLESS)
-    file = FILEPATH('qb_boulder_msi', ROOT_DIR=e.ROOT_DIR, SUBDIRECTORY=['data'])
-    PRINT, 'Found file at: ', file
-    MESSAGE, '', /INFORMATIONAL
-END
+pro perform_OSP
+  compile_opt idl3
+  e = envi()
 
+  print, 'DOES THIS WORK?'
+
+  file = 'C:/palimsest cube/cube.dat'
+  raster = e.openRaster(file)
+  ; WORKS
+  if ~obj_valid(raster) then begin
+    print, 'Failed to open raster.'
+    RETURN
+  endif
+
+  dims = raster.dimensions
+  print, 'Raster dimensions: ', dims
+
+  view = e.getView()
+  if ~obj_valid(view) then begin
+    print, 'Failed to get ENVI view.'
+    RETURN
+  endif
+
+  print, 'DOES THIS WORK?'
+  message, 'This shows even if PRINT does not'
+end

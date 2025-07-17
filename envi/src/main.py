@@ -7,6 +7,8 @@ def main():
     """THIS WILL NEED TO BE CHANGED TO BE CORRECT FOR YOUR INDIVIDUAL PATH
        make it so the path ends at "src" for this repository"""
     working_directory = r"C:\Archimedes Palimsest\PalimpsestTxtContrast\envi\src"
+    """THIS IS THE PATH TO YOUR .dat FILE AND WILL NEED TO BE CHANGED"""
+    cube_path = r"C:\palimsest cube\cube.dat"
     
     #This is debugging to make sure that you did correctly change your working directory to something that exists
     if not os.path.isdir(working_directory):
