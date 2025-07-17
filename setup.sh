@@ -9,17 +9,17 @@ read -p "Would you like to create a virtual environment? (y/yes): " create_venv
 
 # Normalize input to lowercase and check if starts with 'y'
 if [[ "${create_venv,,}" =~ ^y ]]; then
-    echo "Creating virtual environment 'palenv' with Python 3.12..."
+    echo "Creating virtual environment 'venv' with Python 3.12..."
 
     if ! command -v python3.12 &>/dev/null; then
         echo "Python 3.12 not found. Please install Python 3.12 before proceeding."
         exit 1
     fi
 
-    python3.12 -m venv palenv
-    source palenv/bin/activate
+    python3.12 -m venv venv
+    source venv/bin/activate
 
-    echo "Virtual environment 'palenv' activated."
+    echo "Virtual environment 'venv' activated."
 
     if [[ -f "requirements.txt" ]]; then
         echo "Installing dependencies from requirements.txt..."
@@ -29,18 +29,18 @@ if [[ "${create_venv,,}" =~ ^y ]]; then
         echo "requirements.txt not found. Skipping package installation."
     fi
     
-    # Move src into palenv
+    # Move src into venv
     if [[ -d "src" ]]; then
-        echo "Moving 'src' folder into palenv..."
-        mv src palenv/
+        echo "Moving 'src' folder into venv..."
+        mv src venv/
     else
         echo "'src' folder not found. Skipping move."
     fi
 
-    # Move data into palenv
+    # Move data into venv
     if [[ -d "data" ]]; then
-        echo "Moving 'data' folder into palenv..."
-        mv data palenv/
+        echo "Moving 'data' folder into venv..."
+        mv data venv/
     else
         echo "'data' folder not found. Skipping move."
     fi
