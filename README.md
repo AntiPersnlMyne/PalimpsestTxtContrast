@@ -35,6 +35,10 @@ This project uses the ENVI (Environment for Visualizing Imagery) software by NV5
 
 The software can be made available through a CIS (Chester F. Carlson College of Imaging Science) license. The MISHA (Multispectral Imaging System for Historical Artifacts) project is a system created by CIS and the RIT Museum Studies Program.
 
+Python Version:
+- 3.12.7 (This is due to a compatability issue with IDL 9.1)
+- When prompted during startup.sh/.bat, creating the virtual environment will provide a compatable Python version for the project
+
 This project includes the following libraries: 
 1. Numpy (data arrays)
 2. OpenCV (computer vision)
