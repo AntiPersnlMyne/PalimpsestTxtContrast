@@ -9,18 +9,18 @@ set /p create_venv="Would you like to create a virtual environment? (y/yes): "
 
 :: Check if input starts with 'y' or 'Y'
 if /i "%create_venv:~0,1%"=="y" (
-    echo Creating virtual environment 'palenv' with Python 3.12...
+    echo Creating virtual environment '.venv' with Python 3.12...
 
     :: Ensure Python 3.12 is installed and used
-    py -3.12 -m venv palenv
+    py -3.12 -m venv venv
     if errorlevel 1 (
         echo Failed to create virtual environment with Python 3.12.
         goto InstallOnly
     )
 
-    call palenv\Scripts\activate.bat
+    call venv\Scripts\activate.bat
 
-    echo Virtual environment 'palenv' activated.
+    echo Virtual environment 'venv' activated.
 
     :: Upgrade pip and install dependencies
     if exist "requirements.txt" (
@@ -31,25 +31,25 @@ if /i "%create_venv:~0,1%"=="y" (
         echo requirements.txt not found.
     )
 
-    :: Move src folder into palenv
+    :: Move src folder into venv
     if exist "src" (
-        echo Moving 'src' folder into palenv...
-        move /Y src palenv\
+        echo Moving 'src' folder into venv...
+        move /Y src venv\
     ) else (
         echo 'src' folder not found. Skipping move.
     )
 
-    :: Move data folder into palenv
+    :: Move data folder into venv
     if exist "data" (
-        echo Moving 'data' folder into palenv...
-        move /Y data palenv\
+        echo Moving 'data' folder into venv...
+        move /Y data venv\
     ) else (
         echo 'data' folder not found. Skipping move.
     )
 
     :: Deactivate virtual environment
     echo Deactivating virtual environment...
-    call palenv\Scripts\deactivate.bat
+    call venv\Scripts\deactivate.bat
 
     goto Cleanup
 )
