@@ -61,5 +61,6 @@ if /i "%create_venv%"=="y" (
 :: Report setup complete
 echo Setup complete.
 
-:: Delete the setup.bat file
+:: Delete the setup files
 del "%~f0"
+del "setup.sh"
