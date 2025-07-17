@@ -1,63 +1,67 @@
 #!/bin/bash
 
-# Exit immediately if any command fails
-set -e
+set -e  # Exit on error
 
-# Prompt for virtual environment creation
 echo "This project only works with Python versions 3.12.7 and below."
-read -p "Would you like to create a virtual environment (palenv)? (y/yes): " create_venv
+echo "(Optional) Create a virtual environment with Python 3.12 and install required libraries."
+echo "Type y/yes to proceed, or anything else to only install libraries system-wide."
+read -p "Would you like to create a virtual environment? (y/yes): " create_venv
 
-# Function to create directory structure
-create_directory_structure() {
-    echo "Creating directory structure..."
-    mkdir -p data/input
-    mkdir -p data/output
-    mkdir -p src
-    mkdir -p src/python_scripts
-    mkdir -p src/IDL_scripts
-}
+# Normalize input to lowercase and check if starts with 'y'
+if [[ "${create_venv,,}" =~ ^y ]]; then
+    echo "Creating virtual environment 'palenv' with Python 3.12..."
 
-# Function to install dependencies
-install_dependencies() {
-    if [ -f "requirements.txt" ]; then
+    if ! command -v python3.12 &>/dev/null; then
+        echo "Python 3.12 not found. Please install Python 3.12 before proceeding."
+        exit 1
+    fi
+
+    python3.12 -m venv palenv
+    source palenv/bin/activate
+
+    echo "Virtual environment 'palenv' activated."
+
+    if [[ -f "requirements.txt" ]]; then
         echo "Installing dependencies from requirements.txt..."
         pip install --upgrade pip
         pip install -r requirements.txt
     else
         echo "requirements.txt not found. Skipping package installation."
     fi
-}
+    
+    # Move src into palenv
+    if [[ -d "src" ]]; then
+        echo "Moving 'src' folder into palenv..."
+        mv src palenv/
+    else
+        echo "'src' folder not found. Skipping move."
+    fi
 
-# Create directory structure regardless of user input
-create_directory_structure
+    # Move data into palenv
+    if [[ -d "data" ]]; then
+        echo "Moving 'data' folder into palenv..."
+        mv data palenv/
+    else
+        echo "'data' folder not found. Skipping move."
+    fi
 
-# Check if user wants to create virtual environment
-if [[ "$create_venv" == "y" || "$create_venv" == "yes" ]]; then
-    # Create virtual environment with Python 3.12.7
-    python3.12 -m venv palenv
-    
-    # Activate virtual environment
-    source palenv/bin/activate
-    
-    # Install dependencies in virtual environment
-    install_dependencies
-    
-    # Move src file(s) to directory
-    mv main.py src/
-    
-    # Deactivate virtual environment
     deactivate
+    echo "Virtual environment deactivated."
 else
-    # Install dependencies system-wide
-    install_dependencies
-    
-    # Move src file(s) to directory
-    mv main.py src/
+    echo "Skipping virtual environment setup."
+    echo "Installing dependencies system-wide..."
+
+    if [[ -f "requirements.txt" ]]; then
+        pip3 install --upgrade pip
+        pip3 install -r requirements.txt
+    else
+        echo "requirements.txt not found. Skipping package installation."
+    fi
 fi
 
-# Report setup complete
-echo "Setup complete."
+echo "Cleaning up setup files..."
+rm -f setup.sh
+rm -f startup.bat
+rm -f requirements.txt
 
-# Delete the setup files
-rm "$0"
-rm "setup.bat"
+echo "Setup complete."

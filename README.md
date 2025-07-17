@@ -26,7 +26,8 @@ cd ~/PATH TO PROJECT/PalimpsestTxtContrast
 
 This script will:
 - Install the required dependencies (libraries) from the `requirements.txt` file
-- Create the necessary directory structure
+- Ask user to optionally create venv, contains dependencies and compatible Python version
+- Delete setup files
 
 
 
