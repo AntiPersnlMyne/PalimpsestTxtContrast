@@ -1,4 +1,4 @@
-pro perform_OSP
+pro perform_OSP_test
   compile_opt idl3
   e = envi()
 

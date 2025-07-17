@@ -7,3 +7,6 @@
 # ENVI files
 *.dat
 *.hdr
+
+#Other stuff
+*.venv
