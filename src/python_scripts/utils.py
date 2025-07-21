@@ -4,7 +4,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "1.0"
+__version__ = "1.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Development", or "Production". 
@@ -16,13 +16,40 @@ import skimage
 import cv2 as cv
 import matplotlib.pyplot as plt
 
-# File management
+# Management
 import os
+import warnings
 
 # Typing
 from typing import Any
 Mat = np.typing.NDArray[Any]
 from enum import Enum
+
+# Sharpen constant aliases
+class SharpenMethod(Enum):
+    KERNEL2D = 0
+    UNSHARP_MASKING = 1
+    HIGH_BOOST = 2
+    
+# Sharpen constant aliases
+class BitwiseOperation(Enum):
+    AND = 0
+    NOT = 1
+    OR = 2
+    XOR = 3
+
+# Bitwise constants
+AND:int = 0
+NOT:int = 1
+OR:int = 2 
+XOR:int = 3
+
+# Sharpen constants
+KERNEL2D:int = 0
+UNSHARP_MASKING:int = 1
+HIGH_BOOST:int = 2 
+
+
 
 # --------------------------------------------------------------------------------------------
 # Helper Functions
@@ -72,12 +99,33 @@ def _write_files(dst_dir: str, dict_of_images: dict[str, np.ndarray], suffix: st
         if not success:
             raise IOError(f"Failed to write image: {output_path}")
 
+def _normalize_image(image: np.ndarray, dtype: np.dtype) -> np.ndarray:
+    max_val = float(np.iinfo(dtype).max)                        # Normalize maxvalue
+    norm_img = np.empty_like(image, dtype=np.float32)           # Empty array for output
+    cv.normalize(image, norm_img, 0, max_val, cv.NORM_MINMAX)   # Normalized between 0 and maxval
+    
+    return norm_img
+
+def _clip_or_norm(image: np.ndarray, dtype: np.dtype, normalize: bool) -> np.ndarray:
+    """Sharpen helper function. Clips output range to dtype, or normalizes output range to dtype's min and max.
+
+    Args:
+        image (np.ndarray): Input image.
+        dtype (np.dtype): Output image desired datatype.
+        normalize (bool): If true, cv.MINMAX normalizes output to dtype range. Otherwise, only clips to dtype range.
+
+    Returns:
+        np.ndarray(np.ndarray): Clipped or normalized output image.
+    """
+    if normalize:
+        return _normalize_image(image, dtype)
+    else:
+        return np.clip(image, 0, np.iinfo(dtype).max).astype(dtype)
 
 
 # --------------------------------------------------------------------------------------------
 # Filters
 # --------------------------------------------------------------------------------------------
-
 def gaussian_blur(src_dir: str, dst_dir: str, kernel_shape = (3,3), sigma_x = 0, file_suffix="") -> None:
     """Applies a Gaussian filter (blur) using a weighted mean
 
@@ -144,29 +192,87 @@ def bilateral_filter(src_dir: str, dst_dir: str, diameter:int, sigma_color:int, 
     _write_files(dst_dir, dst_images, file_suffix)
     pass
 
+def sharpen(src_dir:str, dst_dir:str, s:int = 1, radius:int = 3, sharp_method:int = KERNEL2D, normalize:bool = False, file_suffix:str = "") -> None:
+    """Sharpens image by enhancing contrast at edges. Variable sharpening filter strength, and method.
+
+    Args:
+        src_dir (str): Directory to input image file(s). Accepts `.tif` or `.tiff` images.
+        dst_dir (str, optional): Directory to output image file(s).
+        s (int, optional): This controls how much edges are amplified. Must be >= 1. Defaults to 1.
+        radius (int, optional): Defines the radius (in pixels) of the Gaussian blur kernel for UNSHARP and HIGH_BOOST. Must be an odd integer (e.g., 3, 5, ...). Defaults to 3.
+        sharp_method(int, optional): Sharpening methods in utils.SharpenMethod. Defaults to KERNEL2D.
+        normalize(bool, optional): If true, stretch output to the full dynamic range of the original datatype. Defaults to False.
+        file_suffix(str, optional): Suffix to be appended to processed files. Default is "".
+    """
+    
+    # Input checking
+    if radius < 3 or radius % 2 == 0:
+        raise ValueError("-- Error: radius in sharpen must be an odd integer >= 3 --")
+    if s < 1:
+        raise ValueError("-- Error: sharpening strength 's' must be >= 1 --")
+    if s < 4 and sharp_method == KERNEL2D:
+        warnings.warn(" -- Warning: s < 4 may result inexpected behavior (inverted or dim imagery) --", UserWarning)
+
+    # Read input images
+    src_images = _read_files(src_dir=src_dir)
+    dst_images = src_images.copy() # Shallow copy ; readability purposes only
+    
+    # Gaussian blur standard deviation
+    sigma_x = 0
+    
+    sharpen_kernel = np.array(
+        [[ 0, -1,  0],
+         [-1,  s, -1],
+         [ 0, -1,  0]]
+        , dtype=np.float32)
+    
+    for img in src_images:
+        src_dtype = src_images[img].dtype
+        float_img = src_images[img].astype(np.float32)
+        
+        match sharp_method:
+            case SharpenMethod.KERNEL2D: 
+                sharp_img = cv.filter2D(float_img, cv.CV_32F, sharpen_kernel)
+
+                dst_images[img] = _clip_or_norm(sharp_img, src_dtype, normalize)
+                
+            case SharpenMethod.UNSHARP_MASKING: 
+                # Low-frequency details
+                lowpass_img = cv.GaussianBlur(float_img, (radius, radius), sigma_x)
+                # High-frequency details
+                highpass_img = float_img - lowpass_img
+
+                # Combine high-frequency details to enhance edges
+                sharp_img = (float_img + s * highpass_img).astype(np.float32)
+
+                dst_images[img] = _clip_or_norm(sharp_img, src_dtype, normalize)
+
+            case SharpenMethod.HIGH_BOOST:
+                # Low-frequency details
+                lowpass_img = cv.GaussianBlur(float_img, (radius, radius), sigma_x)
+                
+                # High-boost apply 
+                sharp_img = (s * float_img - lowpass_img).astype(np.float32)
+
+                dst_images[img] = _clip_or_norm(sharp_img, src_dtype, normalize)
+                
+            case _:
+                raise Exception(f"-- Error: Provide valid sharpen method. Use utils.SharpenMethod. --")
+            
+    
+    _write_files(dst_dir, dst_images, file_suffix)
+
+
 # --------------------------------------------------------------------------------------------
 # Bitwise Operations
 # --------------------------------------------------------------------------------------------
-# Enumeration for readabiltiy
-class BitwiseOperation(Enum):
-    AND = 0
-    NOT = 1
-    OR = 2
-    XOR = 3
-
-# Constant for user input
-AND:int = 0
-NOT:int = 1
-OR:int = 2 
-XOR:int = 3
-
-def bitwise(source1:Mat, source2:Mat, operation:int, dst_dir:str|None = None, mask:Mat|None = None) -> Mat|None:
+def bitwise(source1:np.ndarray, source2:np.ndarray, operation:int, dst_dir:str|None = None, mask:Mat|None = None) -> Mat|None:
     """Performs bitwise (AND, NOT, OR, XOR) operation on two images.
 
     Args:
-        source1 (str): First image array
-        source2 (str): Second image array
-        operation (str): Operation type. Use utils.AND,.OR,.NOT,.XOR.
+        source1 (np.ndarray): First image array
+        source2 (np.ndarray): Second image array
+        operation (int): Operation type. Use utils.BitwiseOperation.
         dst_dir (str | None, optional): Directory for processed image. If None, returns image. Defaults to None.
         mask (Mat | None, optional): Image mask. Defaults to None.
     """
@@ -366,9 +472,30 @@ def erosion(src_dir:str, dst_dir:str, kernel_shape:tuple = (3,3), iterations:int
     _write_files(dst_dir, dst_images, file_suffix)
    
    
+
+# --------------------------------------------------------------------------------------------
+# Contrast-related Operations
+# --------------------------------------------------------------------------------------------
+def fft(src_dir:str, dst_dir:str, file_suffix="") -> None:
+    """_summary_
+
+    Args:
+        src_dir (str): Directory to input image file(s). Accepts `.tif` or `.tiff` images.
+        dst_dir (str, optional): Directory to output image file(s).
+        file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
+    """
+    
+    src_images = _read_files(src_dir)
+    dst_images = src_images.copy() # Shallow copy ; readability purposes only
+    
+    for img in src_images:
+        pass
+    
+    _write_files(dst_dir, dst_images, file_suffix)
     
     
     
     
+    pass
     
-    
+    # Enumeration for readabiltiy
