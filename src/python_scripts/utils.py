@@ -99,7 +99,7 @@ def _write_files(dst_dir: str, dict_of_images: dict[str, np.ndarray], suffix: st
         if not success:
             raise IOError(f"Failed to write image: {output_path}")
 
-def _normalize_image(image: np.ndarray, dtype: np.dtype) -> np.ndarray:
+def _normalize_image(img: np.ndarray) -> np.ndarray:
     """_summary_
 
     Args:
@@ -110,11 +110,11 @@ def _normalize_image(image: np.ndarray, dtype: np.dtype) -> np.ndarray:
         np.ndarray: Normalized image, with cv.NORM_MINMAX, as type dtype.
     """
     
-    max_val = float(np.iinfo(dtype).max)                        # Normalize maxvalue
-    norm_img = np.empty_like(image)                             # Empty array for output
-    cv.normalize(image, norm_img, 0, max_val, cv.NORM_MINMAX)   # Normalized between 0 and maxval
+    max_val = np.iinfo(img.dtype).max                         # Normalize dtype maxvalue
+    norm_img = np.empty_like(img)                             # Empty array for output
+    cv.normalize(img, norm_img, 0, max_val, cv.NORM_MINMAX)   # Normalized between 0 and maxval
     
-    return norm_img.astype(dtype) # Returned normalized as dtype
+    return norm_img.astype(img.dtype) # Returned normalized as dtype
 
 def _normalize_image_range(
     img: np.ndarray, 
@@ -157,7 +157,7 @@ def _normalize_image_range(
     
     return normalize_image
 
-def _clip_or_norm(image: np.ndarray, dtype: np.dtype, normalize: bool) -> np.ndarray:
+def _clip_or_norm(img: np.ndarray, dtype: np.dtype, normalize: bool) -> np.ndarray:
     """Sharpen helper function. Clips output range to dtype, or normalizes output range to dtype's min and max.
 
     Args:
@@ -169,9 +169,9 @@ def _clip_or_norm(image: np.ndarray, dtype: np.dtype, normalize: bool) -> np.nda
         np.ndarray(np.ndarray): Clipped or normalized output image as type dtype.
     """
     if normalize:
-        return _normalize_image(image, dtype) # Returns as dtype
+        return _normalize_image(img) # Returns as dtype
     else:
-        return np.clip(image, 0, np.iinfo(dtype).max).astype(dtype)
+        return np.clip(img, 0, np.iinfo(dtype).max).astype(dtype)
 
 
 # --------------------------------------------------------------------------------------------
