@@ -21,7 +21,7 @@ import os
 import warnings
 
 # Typing
-from typing import Any
+from typing import Any, Optional
 Mat = np.typing.NDArray[Any]
 from enum import Enum
 
@@ -100,11 +100,62 @@ def _write_files(dst_dir: str, dict_of_images: dict[str, np.ndarray], suffix: st
             raise IOError(f"Failed to write image: {output_path}")
 
 def _normalize_image(image: np.ndarray, dtype: np.dtype) -> np.ndarray:
+    """_summary_
+
+    Args:
+        image (np.ndarray): Input image.
+        dtype (np.dtype): Output image desired datatype.
+
+    Returns:
+        np.ndarray: Normalized image, with cv.NORM_MINMAX, as type dtype.
+    """
+    
     max_val = float(np.iinfo(dtype).max)                        # Normalize maxvalue
-    norm_img = np.empty_like(image, dtype=np.float32)           # Empty array for output
+    norm_img = np.empty_like(image)                             # Empty array for output
     cv.normalize(image, norm_img, 0, max_val, cv.NORM_MINMAX)   # Normalized between 0 and maxval
     
-    return norm_img
+    return norm_img.astype(dtype) # Returned normalized as dtype
+
+def _normalize_image_range(
+    img: np.ndarray, 
+    min_val: int|None,
+    max_val: int|None
+    ) -> np.ndarray:
+    """
+    Normalize an image to the full range of its dtype, optionally using a specified min/max range.
+    
+    Args:
+        img (np.ndarray): Input image.
+        min_val (int, optional): Minimum input intensity. If None, uses image min.
+        max_val (int, optional): Maximum input intensity. If None, uses image max.
+
+    Returns:
+        np.ndarray: Linearly stretched image, same dtype as input.
+    """
+    dtype_info = np.iinfo(img.dtype)
+    dtype_min, dtype_max = dtype_info.min, dtype_info.max
+
+    img_min = min_val if min_val is not None else int(img.min())
+    img_max = max_val if max_val is not None else int(img.max())
+
+    if img_min == img_max:
+        raise Exception("-- Error: invalid range. min_val and max_val must be different. --")
+
+    # Clip to the range to avoid values outside the stretch window
+    clipped = np.clip(img, img_min, img_max)
+
+    # Normalize using OpenCV (note: output is float32 unless dtype is specified)
+    normalize_image = np.empty_like(clipped)
+    cv.normalize(
+        src=clipped,
+        dst=normalize_image,
+        alpha=dtype_min,
+        beta=dtype_max,
+        norm_type=cv.NORM_MINMAX,
+        dtype=img.dtype
+    )
+    
+    return normalize_image
 
 def _clip_or_norm(image: np.ndarray, dtype: np.dtype, normalize: bool) -> np.ndarray:
     """Sharpen helper function. Clips output range to dtype, or normalizes output range to dtype's min and max.
@@ -115,10 +166,10 @@ def _clip_or_norm(image: np.ndarray, dtype: np.dtype, normalize: bool) -> np.nda
         normalize (bool): If true, cv.MINMAX normalizes output to dtype range. Otherwise, only clips to dtype range.
 
     Returns:
-        np.ndarray(np.ndarray): Clipped or normalized output image.
+        np.ndarray(np.ndarray): Clipped or normalized output image as type dtype.
     """
     if normalize:
-        return _normalize_image(image, dtype)
+        return _normalize_image(image, dtype) # Returns as dtype
     else:
         return np.clip(image, 0, np.iinfo(dtype).max).astype(dtype)
 
@@ -126,11 +177,17 @@ def _clip_or_norm(image: np.ndarray, dtype: np.dtype, normalize: bool) -> np.nda
 # --------------------------------------------------------------------------------------------
 # Filters
 # --------------------------------------------------------------------------------------------
-def gaussian_blur(src_dir: str, dst_dir: str, kernel_shape = (3,3), sigma_x = 0, file_suffix="") -> None:
+def gaussian_blur(
+    src_dir: str, 
+    dst_dir: str, 
+    kernel_shape = (3,3), 
+    sigma_x = 0, 
+    file_suffix=""
+    ) -> None:
     """Applies a Gaussian filter (blur) using a weighted mean
 
     Args:
-        src_dir (str): Directory to input image file(s), accepts `.tif` or `.tiff` images.
+        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
         dst_dir (str): Directory to output image file(s).
         kernel_size (tuple, optional): Shape - (row, col) - of blur kernel. Defaults to (3,3).
         sigma_x (int, optional): The Gaussian kernel standard deviation. Defaults to 0.
@@ -145,12 +202,18 @@ def gaussian_blur(src_dir: str, dst_dir: str, kernel_shape = (3,3), sigma_x = 0,
     
     _write_files(dst_dir, dst_images, file_suffix)
 
-def clahe(src_dir: str, dst_dir: str, tile_grid_size: tuple, clip_limit: int = 3, file_suffix: str = "") -> None:
+def clahe(
+    src_dir: str, 
+    dst_dir: str, 
+    tile_grid_size: tuple, 
+    clip_limit: int = 3, 
+    file_suffix: str = ""
+    ) -> None:
     """
     Contrast Limited Adaptive Historgram Equalization, region-based histogram equalization for under/over-exposed images. Tilewise operation.
 
     Args:
-        src_dir (str): Directory to input image file(s). Accepts `.tif` or `.tiff` images.
+        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
         dst_dir (str, optional): Directory to output image file(s).
         tile_grid_size (tuple, optional): Breaks up image into M x N tiles, to process each tile individually.
         clip_limit (int, optional): Threshold for contrast limiting. Typically leave this value in the range of 2-5. If you set the value too large, process may maximize local contrast, which will, in turn, maximize noise. Defaults to 3.
@@ -170,11 +233,18 @@ def clahe(src_dir: str, dst_dir: str, tile_grid_size: tuple, clip_limit: int = 3
     
     _write_files(dst_dir, dst_images, file_suffix)
 
-def bilateral_filter(src_dir: str, dst_dir: str, diameter:int, sigma_color:int, sigma_space:int, file_suffix: str = "") -> None:
+def bilateral_filter(
+    src_dir: str, 
+    dst_dir: str, 
+    diameter:int, 
+    sigma_color:int, 
+    sigma_space:int, 
+    file_suffix: str = ""
+    ) -> None:
     """Filter for smoothening images and reducing noise, while preserving edges.
 
     Args:
-        src_dir (str): Directory to input image file(s). Accepts `.tif` or `.tiff` images.
+        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
         dst_dir (str, optional): Directory to output image file(s).
         diameter (int): Diameter of each pixel neighborhood that is used during filtering. If it is non-positive, it is computed from sigmaSpace. 
         sigma_color (int): Filter sigma in the color space. A larger value of the parameter means that farther colors within the pixel neighborhood (see sigmaSpace) will be mixed together, resulting in larger areas of semi-equal color. 
@@ -192,11 +262,19 @@ def bilateral_filter(src_dir: str, dst_dir: str, diameter:int, sigma_color:int, 
     _write_files(dst_dir, dst_images, file_suffix)
     pass
 
-def sharpen(src_dir:str, dst_dir:str, s:int = 1, radius:int = 3, sharp_method:int = KERNEL2D, normalize:bool = False, file_suffix:str = "") -> None:
+def sharpen(
+    src_dir:str, 
+    dst_dir:str, 
+    s:int = 1, 
+    radius:int = 3, 
+    sharp_method:int = KERNEL2D, 
+    normalize:bool = False, 
+    file_suffix:str = ""
+    ) -> None:
     """Sharpens image by enhancing contrast at edges. Variable sharpening filter strength, and method.
 
     Args:
-        src_dir (str): Directory to input image file(s). Accepts `.tif` or `.tiff` images.
+        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
         dst_dir (str, optional): Directory to output image file(s).
         s (int, optional): This controls how much edges are amplified. Must be >= 1. Defaults to 1.
         radius (int, optional): Defines the radius (in pixels) of the Gaussian blur kernel for UNSHARP and HIGH_BOOST. Must be an odd integer (e.g., 3, 5, ...). Defaults to 3.
@@ -266,7 +344,13 @@ def sharpen(src_dir:str, dst_dir:str, s:int = 1, radius:int = 3, sharp_method:in
 # --------------------------------------------------------------------------------------------
 # Bitwise Operations
 # --------------------------------------------------------------------------------------------
-def bitwise(source1:np.ndarray, source2:np.ndarray, operation:int, dst_dir:str|None = None, mask:Mat|None = None) -> Mat|None:
+def bitwise(
+    source1:np.ndarray, 
+    source2:np.ndarray, 
+    operation:int, 
+    dst_dir:str|None = None, 
+    mask:Mat|None = None
+    ) -> Mat|None:
     """Performs bitwise (AND, NOT, OR, XOR) operation on two images.
 
     Args:
@@ -302,11 +386,15 @@ def bitwise(source1:np.ndarray, source2:np.ndarray, operation:int, dst_dir:str|N
 # --------------------------------------------------------------------------------------------
 # Thresholding
 # --------------------------------------------------------------------------------------------
-def otsu(src_dir: str, dst_dir: str = "", file_suffix: str = "") -> None:
+def otsu(
+    src_dir: str, 
+    dst_dir: str = "", 
+    file_suffix: str = ""
+    ) -> None:
     """Applies OTSU threshold, maximally separating foreground from background, as binary image.
 
     Args:
-        src_dir (str): Directory to input image file(s). Accepts `.tif` or `.tiff` images.
+        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
         dst_dir (str, optional): Directory to output image file(s). 
         file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
     """
@@ -323,11 +411,17 @@ def otsu(src_dir: str, dst_dir: str = "", file_suffix: str = "") -> None:
         
     _write_files(dst_dir, dst_images, file_suffix)
 
-def gaussian_threshold(src_dir:str, dst_dir:str, block_size:int, mean_subtract:int = 0, file_suffix="") -> None:
+def gaussian_threshold(
+    src_dir:str, 
+    dst_dir:str, 
+    block_size:int, 
+    mean_subtract:int = 0, 
+    file_suffix=""
+    ) -> None:
     """Gaussian thresholding dtermines the threshold for a pixel based on a small region around it. Tilewise operation.
 
     Args:
-        src_dir (str): Directory to input image file(s). Accepts `.tif` or `.tiff` images.
+        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
         dst_dir (str, optional): Directory to output image file(s).
         block_size (int): Determines the size of the neighbourhood area.
         mean_subtract (int, optional): Constant subtracted from average or weighted mean of neighborhood. Defaults to 0.
@@ -363,11 +457,17 @@ def gaussian_threshold(src_dir:str, dst_dir:str, block_size:int, mean_subtract:i
         
     _write_files(dst_dir, dst_images, file_suffix)
 
-def binary_threshold(src_dir: str, dst_dir: str, thresh: int = -1, invert:bool = False, file_suffix="") -> None:
+def binary_threshold(
+    src_dir: str, 
+    dst_dir: str, 
+    thresh: int = -1, 
+    invert:bool = False, 
+    file_suffix=""
+    ) -> None:
     """Simple binary threshold, everything below thresh goes to 0 (black) and above thresh to maxval (white). Flag to invert thresh logic.
 
     Args:
-        src_dir (str): Directory to input image file(s). Accepts `.tif` or `.tiff` images.
+        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
         dst_dir (str, optional): Directory to output image file(s).
         thresh (int): Pixel threshold value. Defaults to Triangle algorithm to choose the optimal threshold value .
         invert (bool, optional): Invert threshold logic; below thresh to maxval (white) and above to 0 (black). Defaults to False.
@@ -391,12 +491,18 @@ def binary_threshold(src_dir: str, dst_dir: str, thresh: int = -1, invert:bool =
     
     _write_files(dst_dir, dst_images, file_suffix)
     
-def to_zero_threshold(src_dir: str, dst_dir: str, thresh: int = -1, invert:bool = False, file_suffix="") -> None:
+def to_zero_threshold(
+    src_dir: str, 
+    dst_dir: str, 
+    thresh: int = -1, 
+    invert:bool = False, 
+    file_suffix=""
+    ) -> None:
     """
      Min/max threshold. Values above thresh stay the same, below thresh to zero. Flag to invert logic.
     
     Args:
-        src_dir (str): Directory to input image file(s). Accepts `.tif` or `.tiff` images.
+        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
         dst_dir (str, optional): Directory to output image file(s).
         thresh (int): Pixel threshold value. Defaults to Triangle algorithm to choose the optimal threshold value .
         invert (bool, optional): Invert threshold logic; below thresh to maxval (white) and above to 0 (black). Defaults to False.
@@ -425,11 +531,16 @@ def to_zero_threshold(src_dir: str, dst_dir: str, thresh: int = -1, invert:bool 
 # --------------------------------------------------------------------------------------------
 # Morphological Operations
 # --------------------------------------------------------------------------------------------
-def dilation(src_dir:str, dst_dir:str, kernel_shape:tuple = (3,3), iterations:int = 1, file_suffix="") -> None:
+def dilation(
+    src_dir:str, 
+    dst_dir:str, 
+    kernel_shape:tuple = (3,3), 
+    iterations:int = 1, 
+    file_suffix="") -> None:
     """Dilation thickens stroke lines by adding pixels to the boundaries of objects in an image.
 
     Args:
-        src_dir (str): Directory to input image file(s). Accepts `.tif` or `.tiff` images.
+        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
         dst_dir (str, optional): Directory to output image file(s). 
         kernel_shape (tuple, optional): Larger kernel leads to broader strokes. Defaults to (3,3).
         iterations (int, optional): Amount of iterations by the kernel, increases strokes added. Defaults to 1.
@@ -448,11 +559,17 @@ def dilation(src_dir:str, dst_dir:str, kernel_shape:tuple = (3,3), iterations:in
 
     _write_files(dst_dir, dst_images, file_suffix)
     
-def erosion(src_dir:str, dst_dir:str, kernel_shape:tuple = (3,3), iterations:int = 1, file_suffix="") -> None:
+def erosion(
+    src_dir:str, 
+    dst_dir:str, 
+    kernel_shape:tuple = (3,3), 
+    iterations:int = 1, 
+    file_suffix=""
+    ) -> None:
     """Erosion thins stroke lines by subtracting pixels to the boundaries of objects in an image.
 
     Args:
-        src_dir (str): Directory to input image file(s). Accepts `.tif` or `.tiff` images.
+        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
         dst_dir (str, optional): Directory to output image file(s). 
         kernel_shape (tuple, optional): Larger kernel leads to broader strokes. Defaults to (3,3).
         iterations (int, optional): Amount of iterations by the kernel, increases strokes added. Defaults to 1.
@@ -476,11 +593,16 @@ def erosion(src_dir:str, dst_dir:str, kernel_shape:tuple = (3,3), iterations:int
 # --------------------------------------------------------------------------------------------
 # Contrast-related Operations
 # --------------------------------------------------------------------------------------------
-def fft(src_dir:str, dst_dir:str, file_suffix="") -> None:
+def fft(
+    src_dir:str, 
+    dst_dir:str, 
+    file_suffix=""
+    ) -> None:
+    raise NotImplementedError
     """_summary_
 
     Args:
-        src_dir (str): Directory to input image file(s). Accepts `.tif` or `.tiff` images.
+        src_dir (str): Directory to input image file(s).  Image type in directory must be `.tif` or `.tiff`.
         dst_dir (str, optional): Directory to output image file(s).
         file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
     """
@@ -489,13 +611,103 @@ def fft(src_dir:str, dst_dir:str, file_suffix="") -> None:
     dst_images = src_images.copy() # Shallow copy ; readability purposes only
     
     for img in src_images:
-        pass
+        np.fft.fft2(src_images[img])
+        dst_images[img] 
     
     _write_files(dst_dir, dst_images, file_suffix)
     
+def scale_brightness(
+    src_dir:str, 
+    dst_dir:str, 
+    alpha:int = 1, 
+    beta:int = 0, 
+    file_suffix=""
+    ) -> None:
+    """Modifies the linear contrast, and additive brightness, onto an image. 
+
+    Args:
+        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
+        dst_dir (str, optional): Directory to output image file(s).
+        alpha (int, optional): Contrast control. E.g., 1.5 is a 50% increase in contrast. Defaults to 1.
+        beta (int, optional): Brightness control. Adds a uniform value beta to all pixel values. Defaults to 0.
+        file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
+    """
+    
+    src_images = _read_files(src_dir)
+    dst_images = src_images.copy() # Shallow copy ; readability purposes only
+    
+    for img in src_images:
+        dst_images[img] = cv.convertScaleAbs(src_images[img], alpha=alpha, beta=beta)
+    
+    _write_files(dst_dir, dst_images, file_suffix)
+    
+def linear_stretch(
+    src_dir:str, 
+    dst_dir:str, 
+    min_val:Optional[int] = None, 
+    max_val:Optional[int] = None, 
+    file_suffix=""
+    ) -> None:
+    """
+    Apply a linear histogram stretch to image(s), with optional min/max clipping.
+
+    Args:
+        src_dir (str): Input directory containing .tif or .tiff images.
+        dst_dir (str): Output directory to write stretched images.
+        min_val (int, optional): Lower pixel limit. If None, uses image minimum.
+        max_val (int, optional): Upper pixel limit. If None, uses image maximum.
+        file_suffix (str, optional): Suffix for output files.
+    """
+
+    src_images = _read_files(src_dir)
+    dst_images = {}
+
+    # Validate custom range if specified
+    if min_val is not None and max_val is not None:
+        if min_val == max_val:
+            raise ValueError("min_val and max_val must differ for a valid range.")
+        if min_val > max_val:
+            raise ValueError("min_val must be less than max_val.")
+
+        # Validate against dtype using a sample image
+        sample_img = next(iter(src_images.values()))
+        dtype_info = np.iinfo(sample_img.dtype)
+        if not (dtype_info.min <= min_val <= dtype_info.max and
+                dtype_info.min <= max_val <= dtype_info.max):
+            raise ValueError(
+                f"min_val and max_val must be within the valid range for {sample_img.dtype}: "
+                f"{dtype_info.min} to {dtype_info.max}"
+            )
+
+    # Process images
+    for name, img in src_images.items():
+        dst_images[name] = _normalize_image_range(img, min_val, max_val)
+
+    _write_files(dst_dir, dst_images, file_suffix)
+
+def log_stretch(
+    src_dir:str, 
+    dst_dir:str, 
+    file_suffix=""
+    ) -> None:
+    raise NotImplementedError
+
+    src_images = _read_files(src_dir)
+    dst_images = src_images.copy() # Shallow copy ; readability purposes only
+        
+    for img in src_images:
+        src_dtype = src_images[img].dtype # Preserve input's datatype
+        
+        dst_images[img]
+    
+    _write_files(dst_dir, dst_images, file_suffix)
+
     
     
     
-    pass
     
-    # Enumeration for readabiltiy
+    
+    
+    
+    
+    
