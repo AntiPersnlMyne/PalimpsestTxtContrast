@@ -22,7 +22,6 @@ import warnings
 
 # Typing
 from typing import Any, Optional
-Mat = np.typing.NDArray[Any]
 from enum import Enum
 
 # Sharpen constant aliases
@@ -349,8 +348,8 @@ def bitwise(
     source2:np.ndarray, 
     operation:int, 
     dst_dir:str|None = None, 
-    mask:Mat|None = None
-    ) -> Mat|None:
+    mask:np.ndarray|None = None
+    ) -> np.ndarray|None:
     """Performs bitwise (AND, NOT, OR, XOR) operation on two images.
 
     Args:

@@ -12,18 +12,20 @@ __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Development", or "Production". 
 
 # Python implementations
-from python_scripts import utils, run_idl, modify_hdr #type:ignore -> only bcs of venv
+from python_scripts import run_idl, modify_hdr 
 
 # Function time comparison
 import time
+import numpy as np
 
 def main():
     
     # ALPR Method
+    print(np.__version__)
     
-    src_dir = "data/input"
-    dst_dir = "data/output/otsu"
-    utils.bilateral_filter(src_dir, dst_dir, 9, 200, 200)
+    # src_dir = "data/input"
+    # dst_dir = "data/output/otsu"
+    # utils.bilateral_filter(src_dir, dst_dir, 9, 200, 200)
 
 
     # Connected Component Analysis Method
