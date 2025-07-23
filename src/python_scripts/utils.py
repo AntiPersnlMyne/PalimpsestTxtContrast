@@ -4,7 +4,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "2.0"
+__version__ = "2.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Development", or "Production", or "Prototype". 
@@ -79,7 +79,11 @@ def _read_files(src_dir: str) -> dict[str, np.ndarray]:
             
     return images
 
-def _write_files(dst_dir: str, dict_of_images: dict[str, np.ndarray], suffix: str = "") -> None:
+def _write_files(
+    dst_dir: str, 
+    dict_of_images: dict[str, np.ndarray], 
+    suffix: str = ""
+    ) -> None:
     """Export processed files into destination directory
 
     Args:
@@ -156,7 +160,11 @@ def _normalize_image_range(
     
     return normalize_image
 
-def _clip_or_norm(img: np.ndarray, dtype: np.dtype, normalize: bool) -> np.ndarray:
+def _clip_or_norm(
+    img: np.ndarray, 
+    dtype: np.dtype, 
+    normalize: bool
+    ) -> np.ndarray:
     """Sharpen helper function. Clips output range to dtype, or normalizes output range to dtype's min and max.
 
     Args:
@@ -202,7 +210,7 @@ def process_images(
         try:
             dst_images[name] = transform_fn(img, **transform_kwargs)
         except Exception as e:
-            raise RuntimeError(f"Failed to process image '{name}': {e}")
+            warnings.warn(f"Failed to process image '{name}': {e}")
 
     _write_files(dst_dir, dst_images, file_suffix)
 
@@ -674,91 +682,100 @@ def scale_brightness(
     _write_files(dst_dir, dst_images, file_suffix)
     
 def linear_stretch(
-    src_dir:str, 
-    dst_dir:str, 
-    min_val:Optional[int] = None, 
-    max_val:Optional[int] = None, 
-    file_suffix=""
-    ) -> None:
+    img: np.ndarray,
+    min_val: int|None = None,
+    max_val: int|None = None
+    ) -> np.ndarray: 
     """
-    Apply a linear histogram stretch to image(s), with optional min/max clipping.
+    Apply a linear histogram stretch to an image using optional custom min/max range.
 
     Args:
-        src_dir (str): Input directory containing .tif or .tiff images.
-        dst_dir (str): Output directory to write stretched images.
-        min_val (int, optional): Lower pixel limit. If None, uses image minimum.
-        max_val (int, optional): Upper pixel limit. If None, uses image maximum.
-        file_suffix (str, optional): Suffix for output files.
+        img (np.ndarray): Input image (integer dtype).
+        min_val (Optional[int]): Lower bound of pixel range. If None, uses image min.
+        max_val (Optional[int]): Upper bound of pixel range. If None, uses image max.
+
+    Returns:
+        np.ndarray: Linearly stretched image of the same dtype.
     """
-
-    src_images = _read_files(src_dir)
-    dst_images = {}
-
-    # Validate custom range if specified
-    if min_val is not None and max_val is not None:
-        if min_val == max_val:
-            raise ValueError("min_val and max_val must differ for a valid range.")
-        if min_val > max_val:
-            raise ValueError("min_val must be less than max_val.")
-
-        # Validate against dtype using a sample image
-        sample_img = next(iter(src_images.values()))
-        dtype_info = np.iinfo(sample_img.dtype)
-        if not (dtype_info.min <= min_val <= dtype_info.max and
-                dtype_info.min <= max_val <= dtype_info.max):
-            raise ValueError(
-                f"min_val and max_val must be within the valid range for {sample_img.dtype}: "
-                f"{dtype_info.min} to {dtype_info.max}"
-            )
-
-    # Process images
-    for name, img in src_images.items():
-        dst_images[name] = _normalize_image_range(img, min_val, max_val)
-
-    _write_files(dst_dir, dst_images, file_suffix)
-
-def log_stretch(
-    src_dir:str, 
-    dst_dir:str, 
-    file_suffix=""
-    ) -> None:
-
-    # Input get and output initialize
-    src_images = _read_files(src_dir)
-    dst_images = {}
     
+    if not np.issubdtype(img.dtype, np.integer):
+        raise TypeError("linear_stretch requires an image with integer dtype.")
+
     # Datatype information
-    dtype_info = np.iinfo(next(iter(src_images.values()))) 
-    
-    for name, img in src_images.items():
-        # Convert image to float for log operation
-        img_float = img.astype(np.float32)
+    dtype_info = np.iinfo(img.dtype)
+    out_min, out_max = dtype_info.min, dtype_info.max
 
-        # Normalize to range [0, 1] to avoid log(0) issues
-        img_normalized = img_float / dtype_info.max
+    # Image min and max
+    img_min = int(img.min()) if min_val is None else min_val
+    img_max = int(img.max()) if max_val is None else max_val
 
-        # Apply logarithmic transformation
-        norm_c = 1.0 / np.log(1 + 1.0)  # Normalizing constant to keep values in [0,1]
-        img_log = norm_c * np.log(1 + img_normalized)
-
-        # Scale back to original dtype range
-        img_stretched = np.empty_like(img_log)
-        cv.normalize(
-            src=img_log,
-            dst=img_stretched,
-            alpha=dtype_info.min,
-            beta=dtype_info.max,
-            norm_type=cv.NORM_MINMAX,
-            dtype=img.dtype
+    # Image min and max bounds checking
+    if img_min == img_max:
+        return np.full_like(img, out_min)  # Avoid division by zero
+    if img_min > img_max:
+        raise ValueError(f"Invalid stretch range: min_val ({img_min}) > max_val ({img_max}).")
+    if not (dtype_info.min <= img_min <= dtype_info.max and dtype_info.min <= img_max <= dtype_info.max):
+        raise ValueError(
+            f"Stretch range ({img_min}, {img_max}) out of bounds for dtype {img.dtype}: "
+            f"{dtype_info.min} to {dtype_info.max}"
         )
-        
-        dst_images[name] = img_stretched
-    
-    _write_files(dst_dir, dst_images, file_suffix)
 
+    # Clip input to avoid out-of-range effects
+    clipped = np.clip(img, img_min, img_max)
+
+    # Normalize to full dtype range
+    img_stretched = np.empty_like(clipped)
+    cv.normalize(
+        src=clipped,
+        dst=img_stretched,
+        alpha=out_min,
+        beta=out_max,
+        norm_type=cv.NORM_MINMAX,
+        dtype=img.dtype
+    )
+
+    return img_stretched
     
+def log_stretch(img: np.ndarray) -> np.ndarray:
+    """
+    Apply a logarithmic stretch to enhance darker regions of the image.
+
+    Args:
+        img (np.ndarray): Input image.
+
+    Returns:
+        np.ndarray: Stretched image with same dtype.
+    """
     
-    
+    if not np.issubdtype(img.dtype, np.integer):
+        raise TypeError("logarithmic_stretch requires integer dtype image.")
+
+    # Datatype information
+    dtype_info = np.iinfo(img.dtype)
+    out_min, out_max = dtype_info.min, dtype_info.max
+
+    # Float conversion for log operation
+    img_float = img.astype(np.float32)
+    img_normalized = img_float / dtype_info.max  # Normalize to [0, 1]
+
+    # Log transformation
+    norm_const = 1.0 / np.log(1 + 1.0)  # Scale constant for normalization
+    img_log = norm_const * np.log1p(img_normalized) 
+
+    # Scale result to dtype range
+    img_stretched = np.empty_like(img_log)
+    cv.normalize(
+        img_log,
+        dst=img_stretched,
+        alpha=out_min,
+        beta=out_max,
+        norm_type=cv.NORM_MINMAX,
+        dtype=img.dtype
+    )
+
+    return img_stretched
+
+
     
     
     
