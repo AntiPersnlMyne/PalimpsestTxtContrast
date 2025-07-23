@@ -150,9 +150,9 @@ def pca(
     data_matrix = multispectral_image.reshape(total_pixels, channels).astype(np.float32)
 
     # Compute PCA basis 
-    mean_vector, eigenvectors, eigenvalues = cv.PCACompute2(
-        data_matrix,
-        mean=None,
+    mean_vector, eigenvectors, _ = cv.PCACompute2(
+        data=data_matrix,
+        mean=np.empty(0),
         maxComponents=num_components
     )
 
