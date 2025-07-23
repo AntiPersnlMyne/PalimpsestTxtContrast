@@ -398,76 +398,73 @@ def bitwise(
 # --------------------------------------------------------------------------------------------
 # Thresholding
 # --------------------------------------------------------------------------------------------
-def otsu(
-    src_dir: str, 
-    dst_dir: str = "", 
-    file_suffix: str = ""
-    ) -> None:
-    """Applies OTSU threshold, maximally separating foreground from background, as binary image.
+def otsu_threshold(img: np.ndarray) -> np.ndarray:
+    """
+    Apply OTSU's binarization to a single image, maximizing foreground/background separation.
 
     Args:
-        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
-        dst_dir (str, optional): Directory to output image file(s). 
-        file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
+        img (np.ndarray): Input 2D image with integer dtype.
+
+    Returns:
+        np.ndarray: Binary image after OTSU thresholding.
     """
     
-    # NOTE: Consider maxVal to be lower, considering most data is in the lower DC (for 165r at least)
-    
-    src_images = _read_files(src_dir=src_dir)
-    dst_images = src_images.copy() # Shallow copy ; readability purposes only
-    
-    for img in src_images:
-        # note: iinfo is unnecessary if assuming each .tif is the same bit depth
-        _, otsu_image = cv.threshold(src_images[img], 0, float( np.iinfo(src_images[img].dtype).max ), cv.THRESH_BINARY + cv.THRESH_OTSU)
-        dst_images[img] = otsu_image
-        
-    _write_files(dst_dir, dst_images, file_suffix)
+    # Datatype and dims check
+    if not np.issubdtype(img.dtype, np.integer):
+        raise TypeError("otsu_threshold requires an image with integer dtype.")
+    if img.ndim != 2:
+        raise ValueError("Input image must be 2D.")
+
+    # Normalize to 8-bit for OTSU's histogram-based thresholding
+    img_8bit = cv.normalize(img, np.empty(0), 0, 255, norm_type=cv.NORM_MINMAX).astype(np.uint8)
+
+    # Apply OTSU thresholding
+    _, binary = cv.threshold(img_8bit, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+
+    # Use mask on original image, or return binary mask depending on use-case
+    output = np.where(binary == 255, img, 0).astype(img.dtype)
+    return output
+
+
 
 def gaussian_threshold(
-    src_dir:str, 
-    dst_dir:str, 
-    block_size:int, 
-    mean_subtract:int = 0, 
-    file_suffix=""
-    ) -> None:
-    """Gaussian thresholding dtermines the threshold for a pixel based on a small region around it. Tilewise operation.
+    img:np.ndarray,
+    block_size:int = 3, 
+    c_subtract:int = 0, 
+    ) -> np.ndarray:
+    """
+    Apply Gaussian adaptive thresholding to a single image.
 
     Args:
-        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
-        dst_dir (str, optional): Directory to output image file(s).
-        block_size (int): Determines the size of the neighbourhood area.
+        img (np.ndarray): Input image.
+        block_size (int, optional): Size of a pixel neighborhood that is used to calculate a threshold value for the pixel: 3, 5, 7, and so on. Defaults to 3.
         mean_subtract (int, optional): Constant subtracted from average or weighted mean of neighborhood. Defaults to 0.
-        file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
     """
     
-    src_images = _read_files(src_dir)
-    dst_images = src_images.copy() # Shallow copy ; readability purposes only
+    # Datatype and dims check
+    if not np.issubdtype(img.dtype, np.integer):
+        raise TypeError("gaussian_threshold requires an integer dtype image.")
+    if img.ndim != 2:
+        raise ValueError("Input image must be 2D.")
+    if block_size % 2 == 0 or block_size < 3:
+        raise ValueError("block_size must be an odd integer ≥ 3.")
+            
+    # Convert down to 8-bit
+    img_8bit = cv.normalize(img, np.empty(0), 0, 255, cv.NORM_MINMAX, cv.CV_8U)
 
-    # -- OpenCV only accepts 8-bit, create mask and apply --
-    
-    for img in src_images:
-                
-        # Convert down 16-bit to 8-bit
-        img_8bit = cv.normalize(src_images[img], None, 0, 255, cv.NORM_MINMAX) #type:ignore
-        img_8bit = img_8bit.astype(np.uint8)
+    # Generate binary mask
+    mask = cv.adaptiveThreshold(
+        img_8bit,
+        maxValue=255,
+        adaptiveMethod=cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+        thresholdType=cv.THRESH_BINARY,
+        blockSize=block_size,
+        C=c_subtract
+    )
 
-        # Binary mask
-        mask = cv.adaptiveThreshold(
-            img_8bit,            
-            255,                 
-            cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv.THRESH_BINARY,
-            block_size,
-            mean_subtract
-        )
-
-        # Apply mask to 16-bit image
-        result = np.where(mask == 255, src_images[img], 0)
-        
-        # note: iinfo is unnecessary if assuming each .tif is the same bit depth
-        dst_images[img] = result
-        
-    _write_files(dst_dir, dst_images, file_suffix)
+    # Apply binary mask to original image
+    output = np.where(mask == 255, img, 0).astype(img.dtype)
+    return output
 
 
 def binary_threshold(
@@ -499,8 +496,7 @@ def binary_threshold(
 
     if thresh is None:
         # Normalize image to 0–255 for OpenCV Triangle algorithm
-        img_uint8 = np.empty_like(img)
-        cv.normalize(img, img_uint8, 0, 255, norm_type=cv.NORM_MINMAX).astype(np.uint8)
+        img_uint8 = cv.normalize(img, np.empty(0), 0, 255, norm_type=cv.NORM_MINMAX).astype(np.uint8)
         
         # Calculate and scale thresh value
         thresh_val, _ = cv.threshold(img_uint8, 0, 255, cv.THRESH_BINARY | cv.THRESH_TRIANGLE)
@@ -538,8 +534,7 @@ def to_zero_threshold(
 
     if thresh is None:
         # Normalize image to 0–255 for OpenCV Triangle algorithm
-        img_uint8 = np.empty_like(img)
-        cv.normalize(img, img_uint8, 0, 255, norm_type=cv.NORM_MINMAX).astype(np.uint8)
+        img_uint8 = cv.normalize(img, np.empty(0), 0, 255, norm_type=cv.NORM_MINMAX).astype(np.uint8)
         thresh_val, _ = cv.threshold(img_uint8, 0, 255, cv.THRESH_BINARY | cv.THRESH_TRIANGLE)
         thresh = int(thresh_val * maxval / 255)  # Scale thresh back to original dtype range
 
@@ -694,10 +689,9 @@ def linear_stretch(
     clipped = np.clip(img, img_min, img_max)
 
     # Normalize to full dtype range
-    img_stretched = np.empty_like(clipped)
-    cv.normalize(
+    img_stretched = cv.normalize(
         src=clipped,
-        dst=img_stretched,
+        dst=np.empty(0),
         alpha=out_min,
         beta=out_max,
         norm_type=cv.NORM_MINMAX,
@@ -733,10 +727,9 @@ def log_stretch(img: np.ndarray) -> np.ndarray:
     img_log = norm_const * np.log1p(img_normalized) 
 
     # Scale result to dtype range
-    img_stretched = np.empty_like(img_log)
-    cv.normalize(
+    img_stretched = cv.normalize(
         img_log,
-        dst=img_stretched,
+        dst=np.empty(0),
         alpha=out_min,
         beta=out_max,
         norm_type=cv.NORM_MINMAX,
@@ -785,11 +778,10 @@ def percentile_stretch(
 
     # Clip and stretch using OpenCV
     clipped = np.clip(img, min_val, max_val)
-    stretched = np.empty_like(clipped)
     
-    cv.normalize(
+    stretched = cv.normalize(
         src=clipped,
-        dst=stretched,
+        dst=np.empty(0),
         alpha=out_min,
         beta=out_max,
         norm_type=cv.NORM_MINMAX,

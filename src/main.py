@@ -14,19 +14,34 @@ __status__ = "Development" # "Development", or "Production".
 # Python implementations
 from python_scripts import run_idl, modify_hdr, utils 
 
+import numpy as np
+import time
+
 def main():
-    # ALPR Method
-    
-    # src_dir = "data/input"
-    # dst_dir = "data/output/otsu"
-    # utils.bilateral_filter(src_dir, dst_dir, 9, 200, 200)
 
+    # Array size
+    SIZE = 10_000_000
 
-    # Connected Component Analysis Method
-    
-    
-    pass
-    # 
+    # Test float32
+    start_32 = time.time()
+    arr32 = np.random.rand(SIZE).astype(np.float32)
+    for _ in range(100):
+        result32 = arr32 * 2 + 5
+    end_32 = time.time()
+
+    # Test float64
+    start_64 = time.time()
+    arr64 = np.random.rand(SIZE).astype(np.float64)
+    for _ in range(100):
+        result64 = arr64 * 2 + 5
+    end_64 = time.time()
+
+    # Print results
+    print(f"float32 time: {end_32 - start_32:.4f} seconds")
+    print(f"float64 time: {end_64 - start_64:.4f} seconds")
+    print(f"Memory usage float32: {arr32.nbytes / 1024 / 1024:.2f} MB")
+    print(f"Memory usage float64: {arr64.nbytes / 1024 / 1024:.2f} MB")
+
     
     
     
