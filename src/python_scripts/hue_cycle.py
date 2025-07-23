@@ -129,23 +129,22 @@ def pca(
     Performs OpenCV's Principle Component Analysis (PCA), creates pseudo-color output array.
 
     Args:
-        multispec_image (List[np.ndarray]): Input image with 3+ bands (image channels).
-        max_components     (int, optional): How many components PCA should retain; by default (`None`) all the components are retained. Defaults to None.
+        multispectral_image (np.ndarray): Input image with 3+ bands (image channels).
+        num_components   (int, optional): How many components PCA should retain. Defaults to 3.
 
     Returns:
         pca_bgr_image (np.ndarray): Output image of shape (rows, cols, num_components) and datatype of source.
-        mean_vector   (np.ndarray): Computed or passed-in mean vector of shape (1, channels).
-        eigenvectors  (np.ndarray): Principal component axes, shape (num_components, channels).
-        eigenvalues   (np.ndarray): Variances along each principal component, shape (num_components, 1).
     """
     
     # Validate input dimensions
     if multispectral_image.ndim != 3:
         raise ValueError("Input image must have shape (rows, cols, channels).")
 
-    # Unpack dimensions 
+    # Unpack multispectral data 
     rows, cols, channels = multispectral_image.shape
     total_pixels = rows * cols
+    src_dtype = multispectral_image.dtype
+    dtype_max = np.iinfo(src_dtype).max
 
     # Flatten image
     data_matrix = multispectral_image.reshape(total_pixels, channels).astype(np.float32)
@@ -156,34 +155,31 @@ def pca(
         mean=None,
         maxComponents=num_components
     )
-    # mean_vector:      shape (1, channels)
-    # eigenvectors:     shape (num_components, channels)
-    # eigenvalues:      shape (num_components, 1)
 
-    # Project the data onto the top principal components
-    # Resulting shape: (total_pixels, num_components)
+    # Project the data onto principal components
     projected_data = cv.PCAProject(data_matrix, mean_vector, eigenvectors)
 
     # Reshape projected data back into image form: (rows, cols, num_components)
     pca_image_float = projected_data.reshape(rows, cols, num_components)
 
     # Allocate output RGB image and normalize each component to [0, 255]
-    pca_rgb_image = np.empty_like(pca_image_float, dtype=np.uint8)
+    pca_bgr_image = np.empty_like(pca_image_float, dtype=src_dtype)
     for component_index in range(num_components):
-        component_plane = pca_image_float[:, :, component_index]
-        min_val = float(component_plane.min())
-        max_val = float(component_plane.max())
+        component = pca_image_float[:, :, component_index]
+        min_val = float(component.min())
+        max_val = float(component.max())
 
         if max_val > min_val:
-            # Linearly stretch to full 8-bit range
-            scaled_plane = (component_plane - min_val) * (255.0 / (max_val - min_val))
+            # Linearly stretch to full 16-bit range
+            scaled_component = np.empty_like(component)
+            cv.normalize(component, scaled_component, 0, dtype_max, cv.NORM_MINMAX)
         else:
             # Avoid division by zero if the component is constant
-            scaled_plane = np.zeros_like(component_plane, dtype=np.float32)
+            scaled_plane = np.zeros_like(component, dtype=np.float32)
 
-        pca_rgb_image[:, :, component_index] = np.round(scaled_plane).astype(np.uint8)
+        pca_bgr_image[:, :, component_index] = np.round(scaled_plane).astype(src_dtype)
 
-    return pca_rgb_image, mean_vector, eigenvectors, eigenvalues
+    return pca_bgr_image
     
 
 
