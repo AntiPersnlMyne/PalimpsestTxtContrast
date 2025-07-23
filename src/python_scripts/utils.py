@@ -633,53 +633,56 @@ def erosion(
 # --------------------------------------------------------------------------------------------
 # Contrast-related Operations
 # --------------------------------------------------------------------------------------------
-def fft(
-    src_dir:str, 
-    dst_dir:str, 
-    file_suffix=""
-    ) -> None:
-    raise NotImplementedError
-    """_summary_
+def fft_magnitude_spectrum_float(img: np.ndarray, use_log:bool = False) -> np.ndarray:
+    """
+    Compute the float32 magnitude spectrum of a 2D image's FFT. Oprtionally, return log-magnitude.
 
     Args:
-        src_dir (str): Directory to input image file(s).  Image type in directory must be `.tif` or `.tiff`.
-        dst_dir (str, optional): Directory to output image file(s).
-        file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
+        img (np.ndarray): Input image (2D, integer dtype).
+        use_log (bool): If true, compute log-magnitude spectrum. Defauls to False.
+
+    Returns:
+        np.ndarray: Float32 magnitude spectrum.
     """
     
-    src_images = _read_files(src_dir)
-    dst_images = src_images.copy() # Shallow copy ; readability purposes only
+    # Datatype and dims check
+    if not np.issubdtype(img.dtype, np.integer):
+        raise TypeError("fft_magnitude_spectrum expects integer input.")
+    if img.ndim != 2:
+        raise ValueError("Input image must be 2D grayscale.")
+
+    # Flaot for precision
+    img_float = img.astype(np.float32)
+
+    # Compute 2D-FFT
+    fft = np.fft.fft2(img_float)
+    fft_shifted = np.fft.fftshift(fft)
+
+    # Magnitude spectrum
+    magnitude = np.abs(fft_shifted)
     
-    for img in src_images:
-        np.fft.fft2(src_images[img])
-        dst_images[img] 
-    
-    _write_files(dst_dir, dst_images, file_suffix)
+    # (optional) Magnitude-log spectrum
+    if use_log: magnitude = np.log1p(magnitude)
+
+    return magnitude.astype(np.float32)
+
+
     
 def scale_brightness(
-    src_dir:str, 
-    dst_dir:str, 
+    img:np.ndarray,
     alpha:int = 1, 
-    beta:int = 0, 
-    file_suffix=""
-    ) -> None:
-    """Modifies the linear contrast, and additive brightness, onto an image. 
+    beta:int = 0
+    ) -> np.ndarray:
+    """
+    Modifies the linear contrast (alpha), and additive brightness (beta).
 
     Args:
-        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
-        dst_dir (str, optional): Directory to output image file(s).
+        img (np.ndarray): Input image.
         alpha (int, optional): Contrast control. E.g., 1.5 is a 50% increase in contrast. Defaults to 1.
         beta (int, optional): Brightness control. Adds a uniform value beta to all pixel values. Defaults to 0.
-        file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
     """
     
-    src_images = _read_files(src_dir)
-    dst_images = src_images.copy() # Shallow copy ; readability purposes only
-    
-    for img in src_images:
-        dst_images[img] = cv.convertScaleAbs(src_images[img], alpha=alpha, beta=beta)
-    
-    _write_files(dst_dir, dst_images, file_suffix)
+    return cv.convertScaleAbs(img, alpha=alpha, beta=beta)
     
 def linear_stretch(
     img: np.ndarray,
@@ -775,7 +778,58 @@ def log_stretch(img: np.ndarray) -> np.ndarray:
 
     return img_stretched
 
+def percentile_stretch(
+    img: np.ndarray,
+    lower_percentile: float = 2.0,
+    upper_percentile: float = 98.0
+    ) -> np.ndarray:
+    """
+    Apply a percentile-based linear stretch to an image to reduce the influence of outliers.
 
+    Args:
+        img (np.ndarray): Input image with integer dtype.
+        lower_percentile (float): Lower percentile threshold (0.0 - 100.0). Defauls to 2.0.
+        upper_percentile (float): Upper percentile threshold (0.0 - 100.0). Defaults to 98.0.
+
+    Returns:
+        np.ndarray: Percentile-stretched image with same dtype.
+    """
+    
+    # Input and percentile parameter check
+    if not np.issubdtype(img.dtype, np.integer):
+        raise TypeError("percentile_stretch requires an image with integer dtype.")
+    if not (0 <= lower_percentile < upper_percentile <= 100):
+        raise ValueError("Percentiles must satisfy: 0 <= lower < upper <= 100.")
+
+    # Datatype information
+    dtype_info = np.iinfo(img.dtype)
+    out_min, out_max = dtype_info.min, dtype_info.max
+
+    # Column-wise flatten image
+    img_flat = img.flatten()
+    min_val = int(np.percentile(img_flat, lower_percentile))
+    max_val = int(np.percentile(img_flat, upper_percentile))
+
+    # Stretch value error handling
+    if min_val == max_val:
+        return np.full_like(img, out_min)  
+    if min_val > max_val:
+        raise ValueError("Computed min_val is > max_val; invalid stretch.")
+
+    # Clip and stretch using OpenCV
+    clipped = np.clip(img, min_val, max_val)
+    stretched = np.empty_like(clipped)
+    
+    cv.normalize(
+        src=clipped,
+        dst=stretched,
+        alpha=out_min,
+        beta=out_max,
+        norm_type=cv.NORM_MINMAX,
+        dtype=img.dtype
+    )
+
+    return stretched
     
     
     
