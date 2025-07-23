@@ -214,116 +214,89 @@ def process_images(
 
     _write_files(dst_dir, dst_images, file_suffix)
 
+
+
 # --------------------------------------------------------------------------------------------
 # Filters
 # --------------------------------------------------------------------------------------------
 def gaussian_blur(
-    src_dir: str, 
-    dst_dir: str, 
-    kernel_shape = (3,3), 
-    sigma_x = 0, 
-    file_suffix=""
-    ) -> None:
-    """Applies a Gaussian filter (blur) using a weighted mean
+    img:np.ndarray,
+    kernel_shape:tuple = (3,3), 
+    sigma_x:int = 0, 
+    ) -> np.ndarray:
+    """
+    Applies a Gaussian filter (blur) using a weighted mean
 
     Args:
-        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
-        dst_dir (str): Directory to output image file(s).
+        img (np.ndarray): Input image.
         kernel_size (tuple, optional): Shape - (row, col) - of blur kernel. Defaults to (3,3).
         sigma_x (int, optional): The Gaussian kernel standard deviation. Defaults to 0.
-        file_suffix(str, optional): Suffix to be appended to processed files. Default is "".
     """
-    src_images = _read_files(src_dir=src_dir)
-    dst_images = src_images.copy() # Shallow copy ; readability purposes only
     
-    for img in src_images:
-        # Run operation and update dst_dict with processed image
-        dst_images[img] = cv.GaussianBlur(src_images[img], kernel_shape, sigma_x)
+    return cv.GaussianBlur(img, kernel_shape, sigma_x)
     
-    _write_files(dst_dir, dst_images, file_suffix)
 
 def clahe(
-    src_dir: str, 
-    dst_dir: str, 
-    tile_grid_size: tuple, 
+    img:np.ndarray,
+    tile_grid_size:tuple, 
     clip_limit: int = 3, 
-    file_suffix: str = ""
-    ) -> None:
+    ) -> np.ndarray:
     """
     Contrast Limited Adaptive Historgram Equalization, region-based histogram equalization for under/over-exposed images. Tilewise operation.
 
     Args:
-        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
-        dst_dir (str, optional): Directory to output image file(s).
-        tile_grid_size (tuple, optional): Breaks up image into M x N tiles, to process each tile individually.
+        img (np.ndarray): Input image.
+        tile_grid_size (tuple): Breaks up image into tuple(r,c) size tiles, to process each tile individually.
         clip_limit (int, optional): Threshold for contrast limiting. Typically leave this value in the range of 2-5. If you set the value too large, process may maximize local contrast, which will, in turn, maximize noise. Defaults to 3.
-        file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
     """
     
-    src_images = _read_files(src_dir=src_dir)
-    dst_images = src_images.copy() # Shallow copy ; readability purposes only
-    
+    # Assert grayscale
+    if img.ndim > 1:
+        raise Exception("Error: CLAHE input image must be grayscale.")
+
     # Create CLAHE operator 
-    #   note: Only works on grayscale (single-band) images
     clahe = cv.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
     
-    for img in src_images:
-        # Run operation and update dst_dict with processed image
-        dst_images[img] = clahe.apply(src_images[img])
+    return clahe.apply(img)
     
-    _write_files(dst_dir, dst_images, file_suffix)
 
 def bilateral_filter(
-    src_dir: str, 
-    dst_dir: str, 
+    img:np.ndarray,
     diameter:int, 
-    sigma_color:int, 
-    sigma_space:int, 
-    file_suffix: str = ""
-    ) -> None:
+    sigma_color:float, 
+    sigma_space:float, 
+    ) -> np.ndarray:
     """Filter for smoothening images and reducing noise, while preserving edges.
 
     Args:
-        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
-        dst_dir (str, optional): Directory to output image file(s).
+        img (np.ndarray): Input image.
         diameter (int): Diameter of each pixel neighborhood that is used during filtering. If it is non-positive, it is computed from sigmaSpace. 
-        sigma_color (int): Filter sigma in the color space. A larger value of the parameter means that farther colors within the pixel neighborhood (see sigmaSpace) will be mixed together, resulting in larger areas of semi-equal color. 
-        sigma_space (int): 	Filter sigma in the coordinate space. A larger value of the parameter means that farther pixels will influence each other as long as their colors are close enough (see sigmaColor ). When d>0, it specifies the neighborhood size regardless of sigmaSpace. Otherwise, d is proportional to sigmaSpace. 
-        file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
+        sigma_color (float): Filter sigma in the color space. A larger value of the parameter means that farther colors within the pixel neighborhood (see sigmaSpace) will be mixed together, resulting in larger areas of semi-equal color. 
+        sigma_space (float): Filter sigma in the coordinate space. A larger value of the parameter means that farther pixels will influence each other as long as their colors are close enough (see sigmaColor ). When d>0, it specifies the neighborhood size regardless of sigmaSpace. Otherwise, d is proportional to sigmaSpace. 
     """
     
-    src_images = _read_files(src_dir=src_dir)
-    dst_images = src_images.copy() # Shallow copy ; readability purposes only
+    return cv.bilateralFilter(src=img, d=diameter, sigmaColor=sigma_color, sigmaSpace=sigma_space)
     
-    for img in src_images:
-        # Run operation and update dst_dict with processed image
-        dst_images[img] = cv.bilateralFilter(src_images[img], diameter, sigma_color, sigma_space)
-    
-    _write_files(dst_dir, dst_images, file_suffix)
-    pass
 
 def sharpen(
-    src_dir:str, 
-    dst_dir:str, 
+    img:np.ndarray,
     s:int = 1, 
     radius:int = 3, 
     sharp_method:int = KERNEL2D, 
     normalize:bool = False, 
-    file_suffix:str = ""
-    ) -> None:
-    """Sharpens image by enhancing contrast at edges. Variable sharpening filter strength, and method.
+    ) -> np.ndarray:
+    """
+    Sharpens image by enhancing contrast at edges.
 
     Args:
-        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
-        dst_dir (str, optional): Directory to output image file(s).
+        img (np.ndarray): Input image.
         s (int, optional): This controls how much edges are amplified. Must be >= 1. Defaults to 1.
         radius (int, optional): Defines the radius (in pixels) of the Gaussian blur kernel for UNSHARP and HIGH_BOOST. Must be an odd integer (e.g., 3, 5, ...). Defaults to 3.
         sharp_method(int, optional): Sharpening methods in utils.SharpenMethod. Defaults to KERNEL2D.
         normalize(bool, optional): If true, stretch output to the full dynamic range of the original datatype. Defaults to False.
-        file_suffix(str, optional): Suffix to be appended to processed files. Default is "".
     """
     
-    # Input checking
+    # Parameter validity
     if radius < 3 or radius % 2 == 0:
         raise ValueError("-- Error: radius in sharpen must be an odd integer >= 3 --")
     if s < 1:
@@ -331,54 +304,47 @@ def sharpen(
     if s < 4 and sharp_method == KERNEL2D:
         warnings.warn(" -- Warning: s < 4 may result inexpected behavior (inverted or dim imagery) --", UserWarning)
 
-    # Read input images
-    src_images = _read_files(src_dir=src_dir)
-    dst_images = src_images.copy() # Shallow copy ; readability purposes only
-    
-    # Gaussian blur standard deviation
+    # Gaussian blur standard deviation; magic-number!
     sigma_x = 0
     
     sharpen_kernel = np.array(
         [[ 0, -1,  0],
          [-1,  s, -1],
-         [ 0, -1,  0]]
-        , dtype=np.float32)
+         [ 0, -1,  0]],
+        dtype=np.float32)
     
-    for img in src_images:
-        src_dtype = src_images[img].dtype
-        float_img = src_images[img].astype(np.float32)
-        
-        match sharp_method:
-            case SharpenMethod.KERNEL2D: 
-                sharp_img = cv.filter2D(float_img, cv.CV_32F, sharpen_kernel)
+    src_dtype = img.dtype
+    float_img = img.astype(np.float32)
+    
+    match sharp_method:
+        case SharpenMethod.KERNEL2D: 
+            sharp_img = cv.filter2D(float_img, cv.CV_32F, sharpen_kernel)
 
-                dst_images[img] = _clip_or_norm(sharp_img, src_dtype, normalize)
-                
-            case SharpenMethod.UNSHARP_MASKING: 
-                # Low-frequency details
-                lowpass_img = cv.GaussianBlur(float_img, (radius, radius), sigma_x)
-                # High-frequency details
-                highpass_img = float_img - lowpass_img
-
-                # Combine high-frequency details to enhance edges
-                sharp_img = (float_img + s * highpass_img).astype(np.float32)
-
-                dst_images[img] = _clip_or_norm(sharp_img, src_dtype, normalize)
-
-            case SharpenMethod.HIGH_BOOST:
-                # Low-frequency details
-                lowpass_img = cv.GaussianBlur(float_img, (radius, radius), sigma_x)
-                
-                # High-boost apply 
-                sharp_img = (s * float_img - lowpass_img).astype(np.float32)
-
-                dst_images[img] = _clip_or_norm(sharp_img, src_dtype, normalize)
-                
-            case _:
-                raise Exception(f"-- Error: Provide valid sharpen method. Use utils.SharpenMethod. --")
+            return _clip_or_norm(sharp_img, src_dtype, normalize)
             
-    
-    _write_files(dst_dir, dst_images, file_suffix)
+        case SharpenMethod.UNSHARP_MASKING: 
+            # Low-frequency details
+            lowpass_img = cv.GaussianBlur(float_img, (radius, radius), sigma_x)
+            # High-frequency details
+            highpass_img = float_img - lowpass_img
+
+            # Combine high-frequency details to enhance edges
+            sharp_img = (float_img + s * highpass_img).astype(np.float32)
+
+            return _clip_or_norm(sharp_img, src_dtype, normalize)
+
+        case SharpenMethod.HIGH_BOOST:
+            # Low-frequency details
+            lowpass_img = cv.GaussianBlur(float_img, (radius, radius), sigma_x)
+            
+            # High-boost apply 
+            sharp_img = (s * float_img - lowpass_img).astype(np.float32)
+
+            return _clip_or_norm(sharp_img, src_dtype, normalize)
+            
+        case _:
+            raise Exception(f"-- Error: Provide valid sharpen method. Use utils.SharpenMethod. --")
+
 
 
 # --------------------------------------------------------------------------------------------
@@ -386,7 +352,7 @@ def sharpen(
 # --------------------------------------------------------------------------------------------
 def bitwise(
     source1:np.ndarray, 
-    source2:np.ndarray, 
+    source2:..., # Nothing can possibly go wrong
     operation:int, 
     dst_dir:str|None = None, 
     mask:np.ndarray|None = None
@@ -397,29 +363,35 @@ def bitwise(
         source1 (np.ndarray): First image array
         source2 (np.ndarray): Second image array
         operation (int): Operation type. Use utils.BitwiseOperation.
-        dst_dir (str | None, optional): Directory for processed image. If None, returns image. Defaults to None.
-        mask (Mat | None, optional): Image mask. Defaults to None.
+        dst_dir (str|None, optional): Directory for processed image. If None, returns image. Defaults to None.
+        mask (Mat|None, optional): Image mask. Defaults to None.
+        
+    Returns:
+        np.ndarray|None: If dst_dir is None, returns bitwise image. Otherwise, saves image to dst_dir as source1 dtype.
     """
     
     # bitwise only works on uint8 or float
     source1 = source1.astype(np.float16)
     source2 = source2.astype(np.float16)
     
-    match operation:
-        case BitwiseOperation.AND:
-            bit_image = cv.bitwise_and(source1, source2, mask=mask)
-        case BitwiseOperation.OR: 
-            bit_image = cv.bitwise_or(source1, source2, mask=mask)
-        case BitwiseOperation.XOR:
-            bit_image = cv.bitwise_xor(source1, source2, mask=mask)
-        case BitwiseOperation.NOT:
-            bit_image = cv.bitwise_not(source1, mask=mask)
-        case _:
-            raise Exception("Please pass valid bitwise operation type: NOR, OR, XOR, AND")
+    if source2 is not None and source2 != BitwiseOperation.NOT:
+        match operation:
+            case BitwiseOperation.AND:
+                img = cv.bitwise_and(source1, source2, mask=mask)
+            case BitwiseOperation.OR: 
+                img = cv.bitwise_or(source1, source2, mask=mask)
+            case BitwiseOperation.XOR:
+                img = cv.bitwise_xor(source1, source2, mask=mask)
+            
+    elif source2 is not None and source2 == BitwiseOperation.NOT:
+            img = cv.bitwise_not(source1, mask=mask)        
+            
+    else: 
+        raise Exception("Please pass valid bitwise operation type: NOR, OR, XOR, AND")
         
-    # Write img to dst if path is provided, else return iamge
-    if dst_dir is not None: cv.imwrite(dst_dir, bit_image.astype(np.uint16))
-    else: return bit_image.astype(np.uint16)
+    # Write img to dst if path is provided, else return iamge as source1 dtype
+    if dst_dir is not None: cv.imwrite(dst_dir, img.astype(np.iinfo(source1).dtype))
+    else: return img.astype(np.iinfo(source1).dtype)
 
 
 
@@ -497,138 +469,135 @@ def gaussian_threshold(
         
     _write_files(dst_dir, dst_images, file_suffix)
 
+
 def binary_threshold(
-    src_dir: str, 
-    dst_dir: str, 
-    thresh: int = -1, 
-    invert:bool = False, 
-    file_suffix=""
-    ) -> None:
-    """Simple binary threshold, everything below thresh goes to 0 (black) and above thresh to maxval (white). Flag to invert thresh logic.
+    img: np.ndarray,
+    thresh: int|None = None,
+    invert: bool = False
+    ) -> np.ndarray:
+    """
+    Apply binary thresholding to a single image, with optional auto-threshold and inversion.
 
     Args:
-        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
-        dst_dir (str, optional): Directory to output image file(s).
-        thresh (int): Pixel threshold value. Defaults to Triangle algorithm to choose the optimal threshold value .
-        invert (bool, optional): Invert threshold logic; below thresh to maxval (white) and above to 0 (black). Defaults to False.
-        file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
+        img (np.ndarray): Input image (integer dtype, 2D).
+        thresh (int, optional): Pixel threshold value. If None, use Triangle algorithm.
+        invert (bool): If True, use inverse binary logic (below=white, above=black).
+
+    Returns:
+        np.ndarray: Binary thresholded image.
     """
     
-    src_images = _read_files(src_dir)
-    dst_images = src_images.copy() # Shallow copy ; readability purposes only
-    
-    # Translate func param values into OpenCV parsable params
-    inversion_state = cv.THRESH_BINARY_INV if invert else cv.THRESH_BINARY # Invert logic, else regular logic
-    for img in src_images:
-        maxval = float( np.iinfo(src_images[img].dtype).max ) # img datatype's max value
-        break
-    thresh = cv.THRESH_TRIANGLE if (thresh<0) else thresh # triangle thresh algorithm, else user input
-    
-    for img in src_images:
-        _, thresh_img = cv.threshold(src_images[img], thresh, maxval, inversion_state, None)
-        dst_images[img] = thresh_img
-        pass
-    
-    _write_files(dst_dir, dst_images, file_suffix)
+    # Datatype and dims check
+    if not np.issubdtype(img.dtype, np.integer):
+        raise TypeError("binary_threshold requires an integer dtype image.")
+    if img.ndim != 2:
+        raise ValueError("Input image must be 2D.")
+
+    # Thresh type to OpenCV readable
+    thresh_type = cv.THRESH_BINARY_INV if invert else cv.THRESH_BINARY
+    maxval = np.iinfo(img.dtype).max
+
+    if thresh is None:
+        # Normalize image to 0–255 for OpenCV Triangle algorithm
+        img_uint8 = np.empty_like(img)
+        cv.normalize(img, img_uint8, 0, 255, norm_type=cv.NORM_MINMAX).astype(np.uint8)
+        
+        # Calculate and scale thresh value
+        thresh_val, _ = cv.threshold(img_uint8, 0, 255, cv.THRESH_BINARY | cv.THRESH_TRIANGLE)
+        thresh = int(thresh_val * maxval / 255)
+
+    _, img_thresh = cv.threshold(img, thresh, maxval, thresh_type)
+    return img_thresh
+
     
 def to_zero_threshold(
-    src_dir: str, 
-    dst_dir: str, 
-    thresh: int = -1, 
-    invert:bool = False, 
-    file_suffix=""
-    ) -> None:
+    img:np.ndarray,
+    thresh:int|None = None,
+    invert:bool = False
+    ) -> np.ndarray:
     """
-     Min/max threshold. Values above thresh stay the same, below thresh to zero. Flag to invert logic.
-    
+    Apply TOZERO thresholding to a single image, with optional inversion and auto-thresholding.
+
     Args:
-        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
-        dst_dir (str, optional): Directory to output image file(s).
-        thresh (int): Pixel threshold value. Defaults to Triangle algorithm to choose the optimal threshold value .
-        invert (bool, optional): Invert threshold logic; below thresh to maxval (white) and above to 0 (black). Defaults to False.
-        file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
+        img (np.ndarray): Input single-channel image with integer dtype.
+        thresh (int, optional): Threshold value. If None, use Triangle method to estimate it.
+        invert (bool): If True, use inverted logic (below threshold retained, others zeroed).
+
+    Returns:
+        np.ndarray: Thresholded image.
     """
     
-    src_images = _read_files(src_dir)
-    dst_images = src_images.copy() # Shallow copy ; readability purposes only
+    # Datatype check 
+    if not np.issubdtype(img.dtype, np.integer):
+        raise TypeError("to_zero_threshold requires an integer input image.")
+
+    # Thresh type to OpenCV readable
+    thresh_type = cv.THRESH_TOZERO_INV if invert else cv.THRESH_TOZERO
     
-    # Translate func param values into OpenCV parsable params
-    inversion_state = cv.THRESH_TOZERO_INV if invert else cv.THRESH_TOZERO # Invert logic, else regular logic
-    for img in src_images:
-        maxval = float( np.iinfo(src_images[img].dtype).max ) # img datatype's max value
-        break
-    thresh = cv.THRESH_TRIANGLE if (thresh<0) else thresh # triangle thresh algorithm, else user input
-    
-    for img in src_images:
-        _, thresh_img = cv.threshold(src_images[img], thresh, maxval, inversion_state, None)
-        dst_images[img] = thresh_img
-        pass
-    
-    _write_files(dst_dir, dst_images, file_suffix)
-    
+    maxval = np.iinfo(img.dtype).max
+
+    if thresh is None:
+        # Normalize image to 0–255 for OpenCV Triangle algorithm
+        img_uint8 = np.empty_like(img)
+        cv.normalize(img, img_uint8, 0, 255, norm_type=cv.NORM_MINMAX).astype(np.uint8)
+        thresh_val, _ = cv.threshold(img_uint8, 0, 255, cv.THRESH_BINARY | cv.THRESH_TRIANGLE)
+        thresh = int(thresh_val * maxval / 255)  # Scale thresh back to original dtype range
+
+    # Use thresh value to threshold original image
+    _, img_thresh = cv.threshold(img, thresh, maxval, thresh_type)
+    return img_thresh
+
     
     
 # --------------------------------------------------------------------------------------------
 # Morphological Operations
 # --------------------------------------------------------------------------------------------
 def dilation(
-    src_dir:str, 
-    dst_dir:str, 
+    img:np.ndarray,
     kernel_shape:tuple = (3,3), 
     iterations:int = 1, 
-    file_suffix="") -> None:
-    """Dilation thickens stroke lines by adding pixels to the boundaries of objects in an image.
+    ) -> np.ndarray:
+    """
+    Dilation thickens stroke lines by adding pixels to the boundaries of objects in an image.
 
     Args:
-        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
-        dst_dir (str, optional): Directory to output image file(s). 
+        img (np.ndarray): Input image.
         kernel_shape (tuple, optional): Larger kernel leads to broader strokes. Defaults to (3,3).
         iterations (int, optional): Amount of iterations by the kernel, increases strokes added. Defaults to 1.
-        file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
+        
+    Returns:
+        np.ndarray: Dilated image.
     """
     
-    src_images = _read_files(src_dir)
-    dst_images = src_images.copy() # Shallow copy ; readability purposes only
-    
-    # Defining kernel
+    # Dilation kernel
     kernel = np.ones(kernel_shape,dtype=np.uint8)
     
-    for img in src_images:
-        # Applying dilation operation
-        dst_images[img] = cv.dilate(src_images[img], kernel, iterations=iterations)
+    return cv.dilate(img, kernel, iterations=iterations)
 
-    _write_files(dst_dir, dst_images, file_suffix)
-    
+
 def erosion(
-    src_dir:str, 
-    dst_dir:str, 
+    img:np.ndarray,
     kernel_shape:tuple = (3,3), 
     iterations:int = 1, 
-    file_suffix=""
-    ) -> None:
-    """Erosion thins stroke lines by subtracting pixels to the boundaries of objects in an image.
+    ) -> np.ndarray:
+    """
+    Erosion thins stroke lines by subtracting the pixels on the boundaries of objects.
 
     Args:
-        src_dir (str): Directory to input image file(s). Image type in directory must be `.tif` or `.tiff`.
-        dst_dir (str, optional): Directory to output image file(s). 
+        img (np.ndarray): Input image.
         kernel_shape (tuple, optional): Larger kernel leads to broader strokes. Defaults to (3,3).
         iterations (int, optional): Amount of iterations by the kernel, increases strokes added. Defaults to 1.
-        file_suffix (str, optional): Suffix to be appended to processed files. Default is "".
+        
+    Returns:
+        np.ndarray: Eroded image.
     """
     
-    src_images = _read_files(src_dir)
-    dst_images = src_images.copy() # Shallow copy ; readability purposes only
-    
-    # Defining kernel
+    # Erosion kernel
     kernel = np.ones(kernel_shape,dtype=np.uint8)
     
-    for img in src_images:
-        # Applying dilation operation
-        dst_images[img] = cv.erode(src_images[img], kernel, iterations=iterations)
+    return cv.erode(src=img, kernel=kernel, iterations=iterations)
+   
 
-    _write_files(dst_dir, dst_images, file_suffix)
-   
-   
 
 # --------------------------------------------------------------------------------------------
 # Contrast-related Operations
@@ -665,8 +634,6 @@ def fft_magnitude_spectrum_float(img: np.ndarray, use_log:bool = False) -> np.nd
     if use_log: magnitude = np.log1p(magnitude)
 
     return magnitude.astype(np.float32)
-
-
     
 def scale_brightness(
     img:np.ndarray,
@@ -683,7 +650,7 @@ def scale_brightness(
     """
     
     return cv.convertScaleAbs(img, alpha=alpha, beta=beta)
-    
+
 def linear_stretch(
     img: np.ndarray,
     min_val: int|None = None,
