@@ -22,16 +22,16 @@ import warnings
 
 # Typing
 from typing import Any, Optional, Callable
-from enum import Enum
+from enum import IntEnum
 
 # Sharpen constant aliases
-class SharpenMethod(Enum):
+class SharpenMethod(IntEnum):
     KERNEL2D = 0
     UNSHARP_MASKING = 1
     HIGH_BOOST = 2
     
 # Sharpen constant aliases
-class BitwiseOperation(Enum):
+class BitwiseOperation(IntEnum):
     AND = 0
     NOT = 1
     OR = 2
@@ -352,8 +352,8 @@ def sharpen(
 # --------------------------------------------------------------------------------------------
 def bitwise(
     source1:np.ndarray, 
-    source2:..., # Nothing can possibly go wrong
-    operation:int, 
+    source2:np.ndarray|None, # Nothing can possibly go wrong
+    operation:BitwiseOperation, 
     dst_dir:str|None = None, 
     mask:np.ndarray|None = None
     ) -> np.ndarray|None:
@@ -370,11 +370,18 @@ def bitwise(
         np.ndarray|None: If dst_dir is None, returns bitwise image. Otherwise, saves image to dst_dir as source1 dtype.
     """
     
-    # bitwise only works on uint8 or float
-    source1 = source1.astype(np.float16)
-    source2 = source2.astype(np.float16)
+    # Input matching check
+    if source2 is not None and source1.dtype != source2.dtype:
+        raise TypeError("source1 and source2 must be same type")
+    if source2 is not None and source1.shape != source2.shape:
+        raise ValueError("source1 and source2 must have the same shape.")
     
-    if source2 is not None and source2 != BitwiseOperation.NOT:
+    # bitwise only works on uint8 or float
+    source1 = source1.astype(np.float32)
+    source2 = source2.astype(np.float32) if source2 is not None else None
+    
+    # source1 and source2 provided
+    if source2 is not None and operation != BitwiseOperation.NOT:
         match operation:
             case BitwiseOperation.AND:
                 img = cv.bitwise_and(source1, source2, mask=mask)
@@ -382,16 +389,20 @@ def bitwise(
                 img = cv.bitwise_or(source1, source2, mask=mask)
             case BitwiseOperation.XOR:
                 img = cv.bitwise_xor(source1, source2, mask=mask)
-            
-    elif source2 is not None and source2 == BitwiseOperation.NOT:
-            img = cv.bitwise_not(source1, mask=mask)        
-            
+                
+    # source1 provided only
+    elif operation == BitwiseOperation.NOT:
+        if source2 is not None: warnings.warn("Operation bitwise NOT, source 2 ignored.")
+        img = cv.bitwise_not(source1, mask=mask)
+        
+    # Invalid bitwise operaiton
     else: 
         raise Exception("Please pass valid bitwise operation type: NOR, OR, XOR, AND")
         
-    # Write img to dst if path is provided, else return iamge as source1 dtype
-    if dst_dir is not None: cv.imwrite(dst_dir, img.astype(np.iinfo(source1).dtype))
-    else: return img.astype(np.iinfo(source1).dtype)
+    # Write img to dst if path is provided
+    if dst_dir is not None: cv.imwrite(filename=dst_dir, img=img)
+    
+    return img.astype(np.iinfo(source1).dtype)
 
 
 
@@ -400,31 +411,45 @@ def bitwise(
 # --------------------------------------------------------------------------------------------
 def otsu_threshold(img: np.ndarray) -> np.ndarray:
     """
-    Apply OTSU's binarization to a single image, maximizing foreground/background separation.
+    Apply OTSU's thresholding maximally separating background from foreground.
 
     Args:
-        img (np.ndarray): Input 2D image with integer dtype.
+        img (np.ndarray): Input image.
 
     Returns:
-        np.ndarray: Binary image after OTSU thresholding.
+        np.ndarray: Binary image - same dtype as img - where pixels >= threshold are 255 (white), else 0 (black).
     """
     
     # Datatype and dims check
     if not np.issubdtype(img.dtype, np.integer):
-        raise TypeError("otsu_threshold requires an image with integer dtype.")
+        raise TypeError("otsu_threshold_manual requires an integer dtype image.")
     if img.ndim != 2:
         raise ValueError("Input image must be 2D.")
 
-    # Normalize to 8-bit for OTSU's histogram-based thresholding
-    img_8bit = cv.normalize(img, np.empty(0), 0, 255, norm_type=cv.NORM_MINMAX).astype(np.uint8)
+    # Flatten image
+    flat = img.ravel()
+    
+    # Preserve bit depth of source with bin number
+    dtype_info = np.iinfo(img.dtype)
+    bins = dtype_info.max + 1  # e.g., 65536 for uint16
 
-    # Apply OTSU thresholding
-    _, binary = cv.threshold(img_8bit, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    # Compute histogram
+    hist, _ = np.histogram(flat, bins=bins, range=(0, dtype_info.max), density=False)
+    total = flat.size
 
-    # Use mask on original image, or return binary mask depending on use-case
-    output = np.where(binary == 255, img, 0).astype(img.dtype)
-    return output
+    # Compute OTSU's threshold
+    prob = hist / total
+    omega = np.cumsum(prob)                 # cumulative probability
+    mu = np.cumsum(prob * np.arange(bins))  # cumulative mean
+    mu_t = mu[-1]                           # total mean
 
+    sigma_b_squared = (mu_t * omega - mu) ** 2 / (omega * (1 - omega) + 1e-10)  # Between-class variance
+
+    otsu_thresh = np.argmax(sigma_b_squared)
+    
+    # Apply threshold to original image
+    img_otsu = np.where(img >= otsu_thresh, 255, 0).astype(img.dtype)
+    return img_otsu
 
 
 def gaussian_threshold(
