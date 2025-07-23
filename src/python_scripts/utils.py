@@ -11,8 +11,8 @@ __status__ = "Development" # "Development", or "Production", or "Prototype".
 
 # Image processing
 import numpy as np
-import scipy
-import skimage
+# import scipy
+# import skimage
 import cv2 as cv
 import matplotlib.pyplot as plt
 
@@ -572,7 +572,7 @@ def to_zero_threshold(
 # --------------------------------------------------------------------------------------------
 # Morphological Operations
 # --------------------------------------------------------------------------------------------
-def dilation(
+def morph_dilation(
     img:np.ndarray,
     kernel_shape:tuple = (3,3), 
     iterations:int = 1, 
@@ -595,7 +595,7 @@ def dilation(
     return cv.dilate(img, kernel, iterations=iterations)
 
 
-def erosion(
+def morph_erosion(
     img:np.ndarray,
     kernel_shape:tuple = (3,3), 
     iterations:int = 1, 
@@ -617,6 +617,15 @@ def erosion(
     
     return cv.erode(src=img, kernel=kernel, iterations=iterations)
    
+   
+def morph_gradient(img:np.ndarray) -> np.ndarray:
+    raise NotImplementedError
+
+def morph_open(img:np.ndarray) -> np.ndarray:
+    raise NotImplementedError
+
+def morph_close(img:np.ndarray) -> np.ndarray:
+    raise NotImplementedError
 
 
 # --------------------------------------------------------------------------------------------
