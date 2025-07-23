@@ -689,15 +689,37 @@ def log_stretch(
     dst_dir:str, 
     file_suffix=""
     ) -> None:
-    raise NotImplementedError
 
+    # Input get and output initialize
     src_images = _read_files(src_dir)
-    dst_images = src_images.copy() # Shallow copy ; readability purposes only
+    dst_images = {}
+    
+    # Datatype information
+    dtype_info = np.iinfo(next(iter(src_images.values()))) 
+    
+    for name, img in src_images.items():
+        # Convert image to float for log operation
+        img_float = img.astype(np.float32)
+
+        # Normalize to range [0, 1] to avoid log(0) issues
+        img_normalized = img_float / dtype_info.max
+
+        # Apply logarithmic transformation
+        norm_c = 1.0 / np.log(1 + 1.0)  # Normalizing constant to keep values in [0,1]
+        img_log = norm_c * np.log(1 + img_normalized)
+
+        # Scale back to original dtype range
+        img_stretched = np.empty_like(img_log)
+        cv.normalize(
+            src=img_log,
+            dst=img_stretched,
+            alpha=dtype_info.min,
+            beta=dtype_info.max,
+            norm_type=cv.NORM_MINMAX,
+            dtype=img.dtype
+        )
         
-    for img in src_images:
-        src_dtype = src_images[img].dtype # Preserve input's datatype
-        
-        dst_images[img]
+        dst_images[name] = img_stretched
     
     _write_files(dst_dir, dst_images, file_suffix)
 
