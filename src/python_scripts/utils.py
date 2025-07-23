@@ -4,10 +4,10 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "1.1"
+__version__ = "2.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Development" # "Development", or "Production". 
+__status__ = "Development" # "Development", or "Production", or "Prototype". 
 
 # Image processing
 import numpy as np
@@ -21,7 +21,7 @@ import os
 import warnings
 
 # Typing
-from typing import Any, Optional
+from typing import Any, Optional, Callable
 from enum import Enum
 
 # Sharpen constant aliases
@@ -172,6 +172,39 @@ def _clip_or_norm(img: np.ndarray, dtype: np.dtype, normalize: bool) -> np.ndarr
     else:
         return np.clip(img, 0, np.iinfo(dtype).max).astype(dtype)
 
+def process_images(
+    src_dir: str,
+    dst_dir: str,
+    file_suffix: str,
+    transform_fn: Callable[..., np.ndarray],
+    transform_kwargs: Optional[dict[str, Any]] = None
+) -> None:
+    """
+    Apply a transform function to all images in a directory and write outputs.
+
+    Args:
+        src_dir (str): Directory of input images.
+        dst_dir (str): Directory to write transformed images.
+        file_suffix (str): Suffix to append to output filenames.
+        transform_fn (Callable): A function that accepts an image and returns a transformed image.
+        transform_kwargs (dict, optional): Optional keyword arguments passed to the transform function.
+    """
+    
+    if transform_kwargs is None:
+        transform_kwargs = {}
+
+    # Read input and Allocate output
+    src_images = _read_files(src_dir)
+    dst_images = {}
+
+    # Process all images from source directory
+    for name, img in src_images.items():
+        try:
+            dst_images[name] = transform_fn(img, **transform_kwargs)
+        except Exception as e:
+            raise RuntimeError(f"Failed to process image '{name}': {e}")
+
+    _write_files(dst_dir, dst_images, file_suffix)
 
 # --------------------------------------------------------------------------------------------
 # Filters
