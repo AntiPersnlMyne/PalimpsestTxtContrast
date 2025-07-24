@@ -27,13 +27,14 @@ cd ~/PATH TO PROJECT/PalimpsestTxtContrast
 This script will ---------------------------------------------------------------
 - Install the required dependencies (libraries) from the `requirements.txt` file
 - Create the necessary directory structure
+- Optionally creates virtual environment - keeps dependencies isolated
 - Delete the `setup.bat/.sh` file
 --------------------------------------------------------------------------------
 
 
 
 ## Dependencies
-This project uses the ENVI (Environment for Visualizing Imagery) software by NV5 Geospatial Software. This project is compatable with the now latest version of ENVI - 6.1 with IDL 9.1
+This project uses the ENVI (Environment for Visualizing Imagery) software by NV5 Geospatial Software. This project is compatable with the now latest version of ENVI - 6.1 with IDL 9.1. Compatible Python versions are > 3.10.x and < 3.12.x. 
 
 The software can be made available through a CIS (Chester F. Carlson College of Imaging Science) license. The MISHA (Multispectral Imaging System for Historical Artifacts) project is a system created by CIS and the RIT Museum Studies Program.
 
@@ -48,6 +49,8 @@ This project includes the following libraries:
 4. scikit-image (image processing)
 5. SciPy (scientific computing)
 6. Matplotlib (plotting)
+7. Pytesseract (OCR)
+8. Pillow/PIL (OCR dependancy)
 
 The startup script AUTOMATICALLY downloads these libraries, ready to use, no user input required.
 ~ It is recommended to setup in a virtual environment for package isolation
