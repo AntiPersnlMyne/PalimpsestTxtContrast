@@ -14,7 +14,7 @@ import numpy as np
 # import scipy
 # import skimage
 import cv2 as cv
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 # Management
 import os
@@ -79,6 +79,7 @@ def _read_files(src_dir: str) -> dict[str, np.ndarray]:
             
     return images
 
+
 def _write_files(
     dst_dir: str, 
     dict_of_images: dict[str, np.ndarray], 
@@ -102,6 +103,7 @@ def _write_files(
         if not success:
             raise IOError(f"Failed to write image: {output_path}")
 
+
 def _normalize_image(img: np.ndarray) -> np.ndarray:
     """_summary_
 
@@ -118,6 +120,7 @@ def _normalize_image(img: np.ndarray) -> np.ndarray:
     cv.normalize(img, norm_img, 0, max_val, cv.NORM_MINMAX)   # Normalized between 0 and maxval
     
     return norm_img.astype(img.dtype) # Returned normalized as dtype
+
 
 def _normalize_image_range(
     img: np.ndarray, 
@@ -160,6 +163,7 @@ def _normalize_image_range(
     
     return normalize_image
 
+
 def _clip_or_norm(
     img: np.ndarray, 
     dtype: np.dtype, 
@@ -179,6 +183,7 @@ def _clip_or_norm(
         return _normalize_image(img) # Returns as dtype
     else:
         return np.clip(img, 0, np.iinfo(dtype).max).astype(dtype)
+
 
 def process_images(
     src_dir: str,
@@ -574,7 +579,7 @@ def to_zero_threshold(
 # --------------------------------------------------------------------------------------------
 def morph_dilation(
     img:np.ndarray,
-    kernel_shape:tuple = (3,3), 
+    kernel_size:int= 3, 
     iterations:int = 1, 
     ) -> np.ndarray:
     """
@@ -590,14 +595,14 @@ def morph_dilation(
     """
     
     # Dilation kernel
-    kernel = np.ones(kernel_shape,dtype=np.uint8)
+    kernel = np.ones((kernel_size,kernel_size),dtype=np.uint8)
     
     return cv.dilate(img, kernel, iterations=iterations)
 
 
 def morph_erosion(
     img:np.ndarray,
-    kernel_shape:tuple = (3,3), 
+    kernel_size:int = 3, 
     iterations:int = 1, 
     ) -> np.ndarray:
     """
@@ -605,35 +610,139 @@ def morph_erosion(
 
     Args:
         img (np.ndarray): Input image.
-        kernel_shape (tuple, optional): Larger kernel leads to broader strokes. Defaults to (3,3).
+        kernel_shape (tuple, optional): Larger kernel leads to broader strokes. Requires odd integer, e.g. 3 = (3,3), 5 = (5,5), etc. Defaults to 3.
         iterations (int, optional): Amount of iterations by the kernel, increases strokes added. Defaults to 1.
         
     Returns:
         np.ndarray: Eroded image.
     """
     
+    # Kernel value check
+    if kernel_size % 2 == 0 or kernel_size <= 1: 
+        raise ValueError("Kernel size must be an odd integer, greater than 1.")
+    
     # Erosion kernel
-    kernel = np.ones(kernel_shape,dtype=np.uint8)
+    kernel = np.ones((kernel_size,kernel_size),dtype=np.uint8)
     
     return cv.erode(src=img, kernel=kernel, iterations=iterations)
-   
-   
-def morph_gradient(img:np.ndarray) -> np.ndarray:
-    raise NotImplementedError
 
 
-def morph_open(img:np.ndarray) -> np.ndarray:
-    raise NotImplementedError
+def morph_open(
+    img:np.ndarray,
+    kernel_size:int = 3,
+    iterations:int = 1
+    ) -> np.ndarray:
+    """
+    Erosion followed by Dilation. It is useful in removing small holes outside the foreground object, or small white points outside the object. 
+
+    Args:
+        img (np.ndarray): Input image.
+        kernel_shape (tuple, optional): Larger kernel leads to more agressive noise removal. Requires odd integer, e.g. 3 = (3,3), 5 = (5,5), etc. Defaults to 3.
+        iterations (int, optional): Amount of iterations by the kernel, increases strokes added. Defaults to 1.
+
+    Returns:
+        np.ndarray: Processed image.
+    """
+    if kernel_size % 2 == 0 or kernel_size <= 1: 
+        raise ValueError("Kernel size must be an odd integer, greater than 1.")
+    
+    # close  kernel
+    kernel = np.ones((kernel_size,kernel_size),dtype=np.uint8)
+    
+    return cv.morphologyEx(img, cv.MORPH_CLOSE, kernel=kernel, iterations=iterations)
 
 
-def morph_close(img:np.ndarray) -> np.ndarray:
-    raise NotImplementedError
+def morph_close(
+    img:np.ndarray,
+    kernel_size:np.ndarray,
+    iterations:int = 1
+    ) -> np.ndarray:
+    """
+    Dilation followed by Erosion. It is useful in closing small holes inside the foreground objects, or small black points on the object. 
+
+    Args:
+        img (np.ndarray): Input image.
+        kernel_shape (tuple, optional): Larger kernel leads to more agressive noise removal. Requires odd integer, e.g. 3 = (3,3), 5 = (5,5), etc. Defaults to 3.
+        iterations (int, optional): Amount of iterations by the kernel, increases strokes added. Defaults to 1.
+
+    Returns:
+        np.ndarray: _description_
+    """
+    if kernel_size % 2 == 0 or kernel_size <= 1: 
+        raise ValueError("Kernel size must be an odd integer, greater than 1.")
+    
+    # close  kernel
+    kernel = np.ones((kernel_size,kernel_size),dtype=np.uint8)
+    
+    return cv.morphologyEx(img, cv.MORPH_CLOSE, kernel=kernel, iterations=iterations)
+
+
+def morph_tophat(
+    img:np.ndarray, 
+    kernel_size:np.ndarray,
+    iterations:int = 1
+    ) -> np.ndarray:
+    """
+    The top-hat filter is used to enhance bright objects of interest in a dark background.
+      The very small details are enhanced and taken out using the Top-Hat operation. Hence, 
+      it is useful in observing the minor details of the inputs when are present as 
+      light pixels on a dark background. 
+
+    Args:
+        img (np.ndarray): Input image.
+        kernel_shape (tuple, optional): Larger kernel leads to more agressive noise removal. Requires odd integer, e.g. 3 = (3,3), 5 = (5,5), etc. Defaults to 3.
+        iterations (int, optional): Amount of iterations by the kernel, increases strokes added. Defaults to 1.
+
+    Returns:
+        np.ndarray: Processed image.
+    """
+    
+    # Kernel value check
+    if kernel_size % 2 == 0 or kernel_size <= 1: 
+        raise ValueError("Kernel size must be an odd integer, greater than 1.")
+    
+    # tophat  kernel
+    kernel = np.ones((kernel_size,kernel_size),dtype=np.uint8)
+    
+    return cv.morphologyEx(img, cv.MORPH_TOPHAT, kernel=kernel, iterations=iterations)
+
+
+def morph_blackhat(
+    img:np.ndarray, 
+    kernel_size:np.ndarray,
+    iterations:int = 1
+    ) -> np.ndarray:
+    """
+    The top-hat filter is used to enhance bright objects of interest in a dark background.
+      The very small details are enhanced and taken out using the Top-Hat operation. Hence, 
+      it is useful in observing the minor details of the inputs when are present as 
+      light pixels on a dark background. 
+
+    Args:
+        img (np.ndarray): Input image.
+        kernel_shape (tuple, optional): Larger kernel leads to more agressive noise removal. Requires odd integer, e.g. 3 = (3,3), 5 = (5,5), etc. Defaults to 3.
+        iterations (int, optional): Amount of iterations by the kernel, increases strokes added. Defaults to 1.
+
+    Returns:
+        np.ndarray: Processed image.
+    """
+    
+    # Kernel value check
+    if kernel_size % 2 == 0 or kernel_size <= 1: 
+        raise ValueError("Kernel size must be an odd integer, greater than 1.")
+    
+    # tophat  kernel
+    kernel = np.ones((kernel_size,kernel_size),dtype=np.uint8)
+    
+    return cv.morphologyEx(img, cv.MORPH_BLACKHAT, kernel=kernel, iterations=iterations)
+
+
 
 
 # --------------------------------------------------------------------------------------------
 # Contrast-related Operations
 # --------------------------------------------------------------------------------------------
-def fft_magnitude_spectrum_float(img: np.ndarray, use_log:bool = False) -> np.ndarray:
+def fft_magnitude(img: np.ndarray, use_log:bool = False) -> np.ndarray:
     """
     Compute the float32 magnitude spectrum of a 2D image's FFT. Oprtionally, return log-magnitude.
 
@@ -642,7 +751,7 @@ def fft_magnitude_spectrum_float(img: np.ndarray, use_log:bool = False) -> np.nd
         use_log (bool): If true, compute log-magnitude spectrum. Defauls to False.
 
     Returns:
-        np.ndarray: Float32 magnitude spectrum.
+        np.ndarray (float32): Magnitude spectrum.
     """
     
     # Datatype and dims check
