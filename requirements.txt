@@ -4,3 +4,4 @@ scipy-stubs[scipy]       # ==1.16.0
 scikit-image==0.25.2     # Image processing (?!)
 scikit-learn==1.7        # Machine learning (?!)
 matplotlib==3.10.0       # Plotting visualization (?!)
+pytesseract==0.3.13

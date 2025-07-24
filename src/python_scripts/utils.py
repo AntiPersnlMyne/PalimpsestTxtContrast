@@ -21,7 +21,7 @@ import os
 import warnings
 
 # Typing
-from typing import Any, Optional, Callable
+from typing import Any, Optional, Callable, List, Tuple, Sequence
 from enum import IntEnum
 
 # Sharpen constant aliases
@@ -621,8 +621,10 @@ def morph_erosion(
 def morph_gradient(img:np.ndarray) -> np.ndarray:
     raise NotImplementedError
 
+
 def morph_open(img:np.ndarray) -> np.ndarray:
     raise NotImplementedError
+
 
 def morph_close(img:np.ndarray) -> np.ndarray:
     raise NotImplementedError
@@ -823,6 +825,17 @@ def percentile_stretch(
     )
 
     return stretched
+    
+    
+    
+# --------------------------------------------------------------------------------------------
+# Character Recognition Operations
+# --------------------------------------------------------------------------------------------
+def find_contours(img:np.ndarray) -> tuple[Sequence[np.ndarray], np.ndarray]:
+    raise NotImplementedError
+    
+def draw_contours(img:np.ndarray, contours:List[np.ndarray], color:tuple, thickness:int):
+    raise NotImplementedError
     
     
     
