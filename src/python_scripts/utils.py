@@ -184,6 +184,44 @@ def _clip_or_norm(
     else:
         return np.clip(img, 0, np.iinfo(dtype).max).astype(dtype)
 
+def _return_cv_dtype(img:np.ndarray|None = None, np_dtype:np.dtype|None = None):
+    """Converts np.dtype to cv.dtype. Pass in one parameter to return the dtype. If both parameters are passed (not None), np_dtype is ignored.
+    Args:
+        img (np.ndarray | None, optional): Returns the dtype of image as cv.dtype. If None, assumes np.dtype parameter was passed instead. Defaults to None.
+        np_dtype (np.dtype | None, optional): Converts the np.dtype to cv.dtype. If None, assumes img parameter was passed instead. Defaults to None.
+    """
+    # Return img dtype
+    if img is not None:
+        # Warn second parameter is being ignored
+        if np_dtype is not None: warnings.warn("np_dtype parameter is ignored")
+        
+        # Return cv dtype
+        match np.iinfo(img.dtype):
+            case np.uint8:
+                return cv.CV_8U
+            case np.uint16:
+                return cv.CV_16U
+            case np.float32:
+                return cv.CV_32F
+            case np.float64:
+                return cv.CV_64F
+            case _:
+                raise Exception("Warning: image dtype is not supported")
+            
+    # Return np_dtype 
+    if np_dtype is not None:
+        match np_dtype:
+            case np.uint8:
+                return cv.CV_8U
+            case np.uint16:
+                return cv.CV_16U
+            case np.float32:
+                return cv.CV_32F
+            case np.float64:
+                return cv.CV_64F
+            case _:
+                raise Exception("Warning: image dtype is not supported")
+
 
 def process_images(
     src_dir: str,
@@ -878,7 +916,7 @@ def log_stretch(img: np.ndarray) -> np.ndarray:
         alpha=out_min,
         beta=out_max,
         norm_type=cv.NORM_MINMAX,
-        dtype=img.dtype
+        dtype=cv.CV_16U
     )
 
     return img_stretched
