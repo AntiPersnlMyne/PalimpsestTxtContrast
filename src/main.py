@@ -11,27 +11,29 @@ __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Development", or "Production". 
 
-# Python implementations
-from python_scripts import run_idl, modify_hdr, utils 
 
-import numpy as np  
-import cv2 as cv
-import time         # Time execution
+from python_scripts import utils, gui # Custom scripts
+import cv2 as cv                      # Image show
+import time                           # Execution timing
+
 
 def main():
-    
+    # Directories for "process_images"
     src_dir = "data/input/"
     dst_dir = "data/output/"
     
+    # Single image analysis
     single_img_path = "data/input/Arch_165r_370nm.tif"
     input_img = cv.imread(single_img_path, cv.IMREAD_UNCHANGED) 
-    
-    if input_img is None:
+
+    if input_img is None: # Imread check
         raise FileNotFoundError("Error: Single input image was not read-in")
     else:
         stretch_img = utils.log_stretch(input_img)
-        cv.imshow("Stretched Image", stretch_img)
-    
+        gui.display(stretch_img, "stretch")
+        bilateral_img = utils.bilateral_filter(input_img, -1, 200, 200)
+        gui.display(bilateral_img, "stretch->bilateral")
+
     
     
     

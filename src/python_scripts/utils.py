@@ -14,7 +14,7 @@ import numpy as np
 # import scipy
 # import skimage
 import cv2 as cv
-# import matplotlib.pyplot as plt
+import numba
 
 # Management
 import os
@@ -158,7 +158,7 @@ def _normalize_image_range(
         alpha=dtype_min,
         beta=dtype_max,
         norm_type=cv.NORM_MINMAX,
-        dtype=img.dtype
+        dtype=_return_cv_dtype(img=img)
     )
     
     return normalize_image
@@ -184,7 +184,8 @@ def _clip_or_norm(
     else:
         return np.clip(img, 0, np.iinfo(dtype).max).astype(dtype)
 
-def _return_cv_dtype(img:np.ndarray|None = None, np_dtype:np.dtype|None = None):
+
+def _return_cv_dtype(img:np.ndarray|None = None, np_dtype:np.dtype|None = None) -> int:
     """Converts np.dtype to cv.dtype. Pass in one parameter to return the dtype. If both parameters are passed (not None), np_dtype is ignored.
     Args:
         img (np.ndarray | None, optional): Returns the dtype of image as cv.dtype. If None, assumes np.dtype parameter was passed instead. Defaults to None.
@@ -196,7 +197,8 @@ def _return_cv_dtype(img:np.ndarray|None = None, np_dtype:np.dtype|None = None):
         if np_dtype is not None: warnings.warn("np_dtype parameter is ignored")
         
         # Return cv dtype
-        match np.iinfo(img.dtype):
+        img_dtype = img.dtype
+        match img_dtype:
             case np.uint8:
                 return cv.CV_8U
             case np.uint16:
@@ -206,7 +208,7 @@ def _return_cv_dtype(img:np.ndarray|None = None, np_dtype:np.dtype|None = None):
             case np.float64:
                 return cv.CV_64F
             case _:
-                raise Exception("Warning: image dtype is not supported")
+                raise Exception(f"Warning: image dtype - {img_dtype} - is not supported")
             
     # Return np_dtype 
     if np_dtype is not None:
@@ -220,7 +222,10 @@ def _return_cv_dtype(img:np.ndarray|None = None, np_dtype:np.dtype|None = None):
             case np.float64:
                 return cv.CV_64F
             case _:
-                raise Exception("Warning: image dtype is not supported")
+                raise Exception(f"Warning: image dtype - {np_dtype} - is not supported")
+
+    warnings.warn("Error: No valid parameters given", RuntimeWarning)
+    return -1 # Exit falure, will crash OpenCV
 
 
 def process_images(
@@ -302,14 +307,15 @@ def clahe(
     
     return clahe.apply(img)
     
-
+@njit(parallel=True)
 def bilateral_filter(
     img:np.ndarray,
     diameter:int, 
     sigma_color:float, 
     sigma_space:float, 
     ) -> np.ndarray:
-    """Filter for smoothening images and reducing noise, while preserving edges.
+    """
+    Filter for smoothening images and reducing noise, while preserving edges.
 
     Args:
         img (np.ndarray): Input image.
@@ -318,7 +324,18 @@ def bilateral_filter(
         sigma_space (float): Filter sigma in the coordinate space. A larger value of the parameter means that farther pixels will influence each other as long as their colors are close enough (see sigmaColor ). When d>0, it specifies the neighborhood size regardless of sigmaSpace. Otherwise, d is proportional to sigmaSpace. 
     """
     
-    return cv.bilateralFilter(src=img, d=diameter, sigmaColor=sigma_color, sigmaSpace=sigma_space)
+    # Convert to float32
+    src_dtype = np.iinfo(img.dtype)
+    img = img.astype(np.float32)
+    
+    dst_img = cv.bilateralFilter(src=img, d=diameter, sigmaColor=sigma_color, sigmaSpace=sigma_space)
+    
+    # Convert to original dtype
+    dst_img = dst_img.astype(src_dtype)
+    
+    print(f"Pixel ex: {img[0,:]}")
+    
+    return dst_img
     
 
 def sharpen(
@@ -780,7 +797,10 @@ def morph_blackhat(
 # --------------------------------------------------------------------------------------------
 # Contrast-related Operations
 # --------------------------------------------------------------------------------------------
-def fft_magnitude(img: np.ndarray, use_log:bool = False) -> np.ndarray:
+def fft_magnitude(
+    img: np.ndarray, 
+    use_log:bool = False
+    ) -> np.ndarray:
     """
     Compute the float32 magnitude spectrum of a 2D image's FFT. Oprtionally, return log-magnitude.
 
@@ -813,6 +833,7 @@ def fft_magnitude(img: np.ndarray, use_log:bool = False) -> np.ndarray:
 
     return magnitude.astype(np.float32)
     
+    
 def scale_brightness(
     img:np.ndarray,
     alpha:int = 1, 
@@ -828,6 +849,7 @@ def scale_brightness(
     """
     
     return cv.convertScaleAbs(img, alpha=alpha, beta=beta)
+
 
 def linear_stretch(
     img: np.ndarray,
@@ -878,10 +900,11 @@ def linear_stretch(
         alpha=out_min,
         beta=out_max,
         norm_type=cv.NORM_MINMAX,
-        dtype=img.dtype
+        dtype=_return_cv_dtype(img=img)
     )
 
     return img_stretched
+    
     
 def log_stretch(img: np.ndarray) -> np.ndarray:
     """
@@ -916,10 +939,11 @@ def log_stretch(img: np.ndarray) -> np.ndarray:
         alpha=out_min,
         beta=out_max,
         norm_type=cv.NORM_MINMAX,
-        dtype=cv.CV_16U
+        dtype=_return_cv_dtype(img=img)
     )
 
     return img_stretched
+
 
 def percentile_stretch(
     img: np.ndarray,
@@ -968,7 +992,7 @@ def percentile_stretch(
         alpha=out_min,
         beta=out_max,
         norm_type=cv.NORM_MINMAX,
-        dtype=img.dtype
+        dtype=_return_cv_dtype(img=img)
     )
 
     return stretched
