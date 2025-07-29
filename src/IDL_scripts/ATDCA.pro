@@ -29,13 +29,11 @@ pro ATDCA
   ; -------------------------------------------------------------------
   ; Initialize ENVI session
   ; -------------------------------------------------------------------
-  e = envi()
+  e = envi(/headless)
   if ~isa(e, 'ENVI') then begin
     print, 'ENVI must be initialized.'
     RETURN
   endif
-
-  help, e
 
   ; -------------------------------------------------------------------
   ; Prompt user to select multiple raster files (one-band each)
@@ -67,15 +65,17 @@ pro ATDCA
     rasters.add, raster
   endfor
 
-  stacked_result = e.doTask('Layer Stack', $
-    input_rasters = rasters.toArray(), $
-    output_name = 'base_stack')
+  ; Matrix operations more efficient than raster-by-raster
+  ; Build bandstack
+  buildstack_task = ENVITask('BuildBandStack')
+  buildstack_task.input_rasters = rasters
+  buildstack_task.execute
 
   ; -------------------------------------------------------------------
   ; Automatic Target Detection Classification Algorithm (ATDCA)
   ; -------------------------------------------------------------------
   ; Band Generation Process (BGP)
-  generated_raster = BGP(stacked_result['OUTPUT_RASTER'])
+  generated_raster = BGP(buildstack_task.output_raster)
 
   ; Target Generation Process (TGP)
   target_matrix = TGP(generated_raster, opci_threshold = 0.01, max_targets = 15)

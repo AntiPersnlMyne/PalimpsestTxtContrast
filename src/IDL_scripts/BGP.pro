@@ -25,7 +25,7 @@ function BGP, raster
   ; -------------------------------------------------------------------
   ; Initialize ENVI session
   ; -------------------------------------------------------------------
-  e = envi()
+  e = envi(/headless)
   if ~isa(e, 'ENVI') then begin
     print, 'ENVI must be initialized to run this program.'
     RETURN, ''
