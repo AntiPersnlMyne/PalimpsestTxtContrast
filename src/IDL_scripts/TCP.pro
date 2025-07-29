@@ -39,14 +39,10 @@ pro TCP, raster, target_matrix, class_images = score_cube
   rows = raster.nRows
   cols = raster.nCols
 
-  ; -----------------------------
   ; Allocate output cube
-  ; -----------------------------
   score_cube = fltarr(rows, cols, n_targets)
 
-  ; -----------------------------
-  ; Loop through each target
-  ; -----------------------------
+  ; Loop through targets
   for k = 0, n_targets - 1 do begin
     ; -----------------------------------------
     ; Construct undesired targets' matrix U_k

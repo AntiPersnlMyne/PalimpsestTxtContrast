@@ -53,78 +53,92 @@ function BGP, raster
     for j = i, nBands - 1 do begin
       bj = rasters[j]
 
-      ; ---------------------------------------------------------------
-      ; Generate expression and execute expression using Band Math
-      ; Inputs must be ordered and aliased correctly as b1, b2
-      ; ---------------------------------------------------------------
-      task_result = e.doTask('Band Math', $
-        input_raster = [bi, bj], $
-        expression = 'b1 * b2', $
-        output_name = 'b' + strtrim(i + 1, 2) + '_mul_b' + strtrim(j + 1, 2))
+      ; Stack bi and bj into a 2-band raster
+      layerstack_task = ENVITask('BuildBandStack')
+      layerstack_task.input_rasters = [bi, bj]
+      layerstack_task.execute
+      temp_stack = layerstack_task.output_raster
 
-      output_rasters.add, task_result['OUTPUT_RASTER']
+      ; Now perform band math on stacked raster
+      bandmath_task = ENVITask('PixelwiseBandMathRaster')
+      bandmath_task.input_raster = temp_stack
+      bandmath_task.expression = 'b1 * b2'
+
+      bandmath_task.execute
+
+      ; Add result raster to output list
+      output_rasters.add, bandmath_task.output_raster
     endfor
   endfor
 
   ; -------------------------------------------------------------------
   ; (CONTRAST) Generate all (b=band) b_i ^ 2 combinations
   ; -------------------------------------------------------------------
-  ; ; Loop over all bands and create bi^2 (b1 squared) combinations
-  ; FOR i = 0, nBands - 1 DO BEGIN
+  ; for i = 0, nBands - 1 do begin
   ; bi = rasters[i]
-  ; ; Apply pixel-wise multiplication
-  ; mult_result = e.doTask('Band Math', $
-  ; INPUT_RASTER=[bi], $
-  ; EXPRESSION='b1 * b1', $
-  ; OUTPUT_NAME='b' + i + '_square', $
-  ; OUTPUT_RASTER=raster_out)
-  ;
-  ; output_rasters.Add, mult_result['OUTPUT_RASTER']
-  ; ENDFOR
+
+  ; ; ---------------------------------------------------------------
+  ; ; Generate expression and execute expression using Band Math
+  ; ; Inputs must be ordered and aliased correctly as b1
+  ; ; ---------------------------------------------------------------
+  ; bandmath_task = ENVITask('PixelwiseBandMathRaster')
+  ; bandmath_task.input_raster = [bi]
+  ; bandmath_task.expression = 'b1 * b1'
+  ; bandmath_task.output_raster_uri = 'b' + i + '_square'
+  ; bandmath_task.execute
+
+  ; output_rasters.add, bandmath_task['OUTPUT_RASTER']
+  ; endfor
 
   ; -------------------------------------------------------------------
   ; (DARK AREAS) Generate all (b=band) log b_i combinations
   ; -------------------------------------------------------------------
-  ; ; Loop over all bands and create alog10(bi) (log base 10 on bi) combinations
-  ; FOR i = 0, nBands - 1 DO BEGIN
+  ; for i = 0, nBands - 1 do begin
   ; bi = rasters[i]
-  ; ; Apply pixel-wise multiplication
-  ; mult_result = e.doTask('Band Math', $
-  ; INPUT_RASTER=[bi], $
-  ; EXPRESSION='alog10(b1)', $
-  ; OUTPUT_NAME='b' + i + '_log', $
-  ; OUTPUT_RASTER=raster_out)
-  ;
-  ; output_rasters.Add, mult_result['OUTPUT_RASTER']
-  ; ENDFOR
+
+  ; ; ---------------------------------------------------------------
+  ; ; Generate expression and execute expression using Band Math
+  ; ; Inputs must be ordered and aliased correctly as b1
+  ; ; ---------------------------------------------------------------
+  ; bandmath_task = ENVITask('PixelwiseBandMathRaster')
+  ; bandmath_task.input_raster = [bi]
+  ; bandmath_task.expression = 'alog10(b1)'
+  ; bandmath_task.output_raster_uri = 'b' + i + '_log'
+  ; bandmath_task.execute
+
+  ; output_rasters.add, bandmath_task['OUTPUT_RASTER']
+  ; endfor
 
   ; -------------------------------------------------------------------
   ; (DARK AREAS) Generate all (b=band) exponent b_i combinations
   ; -------------------------------------------------------------------
-  ; ; Loop over all bands and create exp(bi) (e to the power of bi) combinations
-  ; FOR i = 0, nBands - 1 DO BEGIN
+  ; for i = 0, nBands - 1 do begin
   ; bi = rasters[i]
-  ; ; Apply pixel-wise multiplication
-  ; mult_result = e.doTask('Band Math', $
-  ; INPUT_RASTER=[bi], $
-  ; EXPRESSION='exp(b1)', $
-  ; OUTPUT_NAME='b' + i + '_exp', $
-  ; OUTPUT_RASTER=raster_out)
-  ;
-  ; output_rasters.Add, mult_result['OUTPUT_RASTER']
-  ; ENDFOR
+
+  ; ; ---------------------------------------------------------------
+  ; ; Generate expression and execute expression using Band Math
+  ; ; Inputs must be ordered and aliased correctly as b1
+  ; ; ---------------------------------------------------------------
+  ; bandmath_task = ENVITask('PixelwiseBandMathRaster')
+  ; bandmath_task.input_raster = [bi]
+  ; bandmath_task.expression = 'exp(b1)'
+  ; bandmath_task.output_raster_uri = 'b' + i + '_exp'
+  ; bandmath_task.execute
+
+  ; output_rasters.add, bandmath_task['OUTPUT_RASTER']
+  ; endfor
 
   ; -------------------------------------------------------------------
   ; Stack all output rasters into a single multi-band raster
   ; -------------------------------------------------------------------
-  stacked_result = e.doTask('Layer Stack', $
-    input_rasters = output_rasters.toArray(), $
-    output_name = 'nonlinear_generated_bands')
+  bandstack_task = ENVITask('BuildBandStack')
+  bandstack_task.input_rasters = output_rasters
+  bandstack_task.execute
 
   ; -------------------------------------------------------------------
   ; Return stacked raster
   ; -------------------------------------------------------------------
-  RETURN, stacked_result['OUTPUT_RASTER']
+  RETURN, bandstack_task['OUTPUT_RASTER']
 end
 
 ; End PRO

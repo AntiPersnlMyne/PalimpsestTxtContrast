@@ -38,52 +38,56 @@ function TGP, raster, opci_threshold = opci_thresh, max_targets = max_targets
   ; -------------------------
   ; Prepare image data
   ; -------------------------
-  img = raster.getData()
-  dims = size(img, /dimensions)
+  img_data = raster.getData()
+  dims = size(img_data, /dimensions)
   n_bands = dims[0]
 
-  ; Normalize pixel vectors
-  norms = sqrt(total(img ^ 2, 1))
-  normalized = img / replicate(1.0, n_bands) # norms
+  ; Now look, I'm ASSUMING the Chang,Ren paper wants you to normalize the results
+  ; I'm doing it because it feels like the right thing to do, but no better reason
+  ; Also the normalizing function is in the ML library, and I'm not downloading it
+  norms = sqrt(total(img_data ^ 2, 1))
+  normalized = img_data / replicate(1.0, n_bands) # norms
 
   ; -------------------------
-  ; Step 1: Select initial target with max norm
+  ; Select initial target with "most extreme" attribute (i.e. magnitude)
   ; -------------------------
   idx_max = max(norms, /nan)
-  t0 = normalized[*, idx_max]
+  T0 = normalized[*, idx_max]
 
   ; Initialize target list
-  target_list = [t0]
+  target_list = [T0]
   done = 0
   k = 1 ; Target counter
 
+  ; Author of everything in the while loop = ChatGPT (OpenAI)
+  ; I couldn't translate the math notation on my own
   while ~done and (k lt max_targets) do begin
-    ; -------------------------
-    ; Step 2: Project all pixels onto orthogonal subspace of previous targets
-    ; -------------------------
+    ; -----------------------------------------------------------------------
+    ; Project all pixels onto orthogonal subspace of previous targets
+    ; -----------------------------------------------------------------------
     T_mat = transpose(reform(target_list, n_bands, k)) ; [n_bands, k]
     pinv_T = PINV(T_mat)
     PU = identity(n_bands) - T_mat ## pinv_T
 
-    ; -------------------------
-    ; Step 3: Apply PU to all pixel vectors and find max projection magnitude
-    ; -------------------------
-    projected = PU ## img
+    ; -----------------------------------------------------------------------
+    ; Apply P_U to all pixel vectors and find max projection magnitude
+    ; -----------------------------------------------------------------------
+    projected = PU ## img_data
     mags = total(projected ^ 2, 1)
 
     idx_next = max(mags, /nan)
     t_next = normalized[*, idx_next]
 
-    ; -------------------------
-    ; Step 4: Compute OPCI between new target and current subspace
+    ; -----------------------------------------------------------------------
+    ; Compute OPCI between new target and current subspace
     ; OPCI = || (I - PU) * t_next ||^2
-    ; -------------------------
+    ; -----------------------------------------------------------------------
     residual = (identity(n_bands) - PU) ## t_next
     opci = total(residual ^ 2)
 
-    ; -------------------------
+    ; -----------------------------------------------------------------------
     ; Check stopping condition
-    ; -------------------------
+    ; -----------------------------------------------------------------------
     if opci lt opci_thresh then begin
       done = 1
     endif else begin
