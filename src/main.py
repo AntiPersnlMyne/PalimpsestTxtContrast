@@ -12,9 +12,10 @@ __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Development", or "Production". 
 
 
-from python_scripts import utils, gui # Custom scripts
-import cv2 as cv                      # Image show
-import time                           # Execution timing
+from python_scripts import utils, gui           # Custom scripts
+from python_scripts.utils import process_images # Too lazy to say utils.
+import cv2 as cv                                # Image import 
+import time                                     # Execution timing
 
 
 def main():
@@ -29,18 +30,21 @@ def main():
     if input_img is None: # Imread check
         raise FileNotFoundError("Error: Single input image was not read-in")
     else:
-        stretch_img = utils.log_stretch(input_img)
-        gui.display(stretch_img, "stretch")
-        bilateral_img = utils.bilateral_filter(input_img, -1, 200, 200)
-        gui.display(bilateral_img, "stretch->bilateral")
+        # Logarithmic stretch
+        process_images(src_dir, dst_dir, "", utils.log_stretch)
+        
+        # Bilateral filter
+        process_images(src_dir, dst_dir, "", utils.bilateral_filter, 
+                       {"diameter": 3,
+                        "sigma_color": 50,
+                        "sigma_space": 100})
+        
 
-    
-    
-    
-    
-    
-    
-    pass
+        # Close windows and exit
+        gui.close_windows()
+
+
+
     
     
     

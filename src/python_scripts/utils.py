@@ -14,7 +14,6 @@ import numpy as np
 # import scipy
 # import skimage
 import cv2 as cv
-import numba
 
 # Management
 import os
@@ -23,6 +22,10 @@ import warnings
 # Typing
 from typing import Any, Optional, Callable, List, Tuple, Sequence
 from enum import IntEnum
+
+# Optimization
+# from numba import njit
+# import cython
 
 # Sharpen constant aliases
 class SharpenMethod(IntEnum):
@@ -243,7 +246,7 @@ def process_images(
         dst_dir (str): Directory to write transformed images.
         file_suffix (str): Suffix to append to output filenames.
         transform_fn (Callable): A function that accepts an image and returns a transformed image.
-        transform_kwargs (dict, optional): Optional keyword arguments passed to the transform function.
+        transform_kwargs (dict, optional): Optional keyword arguments passed to the transform function. e.g., to pass keyword arguments (kwargs) for utils.bitwise: {"source2": image, "dst_dir": "data/output"}.
     """
     
     if transform_kwargs is None:
@@ -307,12 +310,12 @@ def clahe(
     
     return clahe.apply(img)
     
-@njit(parallel=True)
+    
 def bilateral_filter(
     img:np.ndarray,
-    diameter:int, 
-    sigma_color:float, 
-    sigma_space:float, 
+    diameter:int = 5, 
+    sigma_color:float = 50, 
+    sigma_space:float = 50, 
     ) -> np.ndarray:
     """
     Filter for smoothening images and reducing noise, while preserving edges.
@@ -320,22 +323,25 @@ def bilateral_filter(
     Args:
         img (np.ndarray): Input image.
         diameter (int): Diameter of each pixel neighborhood that is used during filtering. If it is non-positive, it is computed from sigmaSpace. 
-        sigma_color (float): Filter sigma in the color space. A larger value of the parameter means that farther colors within the pixel neighborhood (see sigmaSpace) will be mixed together, resulting in larger areas of semi-equal color. 
-        sigma_space (float): Filter sigma in the coordinate space. A larger value of the parameter means that farther pixels will influence each other as long as their colors are close enough (see sigmaColor ). When d>0, it specifies the neighborhood size regardless of sigmaSpace. Otherwise, d is proportional to sigmaSpace. 
+        sigma_color (float): Filter standard deviation (sigma) in the color space. A larger value of the parameter means that farther colors within the pixel neighborhood (see sigma_space) will be mixed together, resulting in larger areas of semi-equal color. 
+        sigma_space (float): Filter standard deviation (sigma) in the coordinate space. A larger value of the parameter means that farther pixels will influence each other as long as their colors are close enough (see sigmaColor ). When diameter>0, it specifies the neighborhood size regardless of sigma_space. Otherwise, diameter is proportional to sigma_space. 
     """
     
+    # Input typchecking
+    if not np.issubdtype(img.dtype, np.integer):
+        raise TypeError("Image must have integer dtype.")
+
     # Convert to float32
-    src_dtype = np.iinfo(img.dtype)
-    img = img.astype(np.float32)
+    dtype_info = np.iinfo(img.dtype)
+    float_img = img.astype(np.float32)
     
-    dst_img = cv.bilateralFilter(src=img, d=diameter, sigmaColor=sigma_color, sigmaSpace=sigma_space)
+    filtered_img = cv.bilateralFilter(src=float_img, d=diameter, sigmaColor=sigma_color, sigmaSpace=sigma_space)
     
-    # Convert to original dtype
-    dst_img = dst_img.astype(src_dtype)
+    # Clip values and convert to original dtype
+    filtered_clipped = np.clip(filtered_img, dtype_info.min, dtype_info.max)
+    result = filtered_clipped.astype(img.dtype)
     
-    print(f"Pixel ex: {img[0,:]}")
-    
-    return dst_img
+    return result
     
 
 def sharpen(

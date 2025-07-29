@@ -15,7 +15,7 @@ from screeninfo import get_monitors
 
 def display(image:np.ndarray, win_name:str, wait_time_ms:int = 0) -> None:
     """
-    Displays image. 
+    Displays image. Displays as uint8, so does not faithfully display original image bit depth.
 
     Args:
         image (np.ndarray): Image to display.
@@ -25,6 +25,11 @@ def display(image:np.ndarray, win_name:str, wait_time_ms:int = 0) -> None:
     Returns:
         None
     """
+    
+    # if image.dtype != np.uint8:
+    #     dtype_info = np.iinfo(np.uint8)
+    #     # Auto-normalize for display purposes only
+    #     image = cv.normalize(image, np.empty(0), dtype_info.min, dtype_info.max, norm_type=cv.NORM_MINMAX).astype(np.uint8)
     
     for m in get_monitors():
         # NOTE: Assumes you only have one monitor. May break if using multi-monitor system.

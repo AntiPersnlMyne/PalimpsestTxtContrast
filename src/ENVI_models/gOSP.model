@@ -1,0 +1,24 @@
+{
+    "schema": "envimodel_1.0",
+    "nodes": [
+        {
+            "display_name": "11 files",
+            "location": [1404, 1520],
+            "name": "raster_1",
+            "type": "rasterfile",
+            "uris": [                "C:\\Users\\General Motors\\Desktop\\Projects\\Palimpsest_OSP_Added\\PalimpsestTxtContrast\\data\\input\\Arch_165r_370nm.tif",
+                "C:\\Users\\General Motors\\Desktop\\Projects\\Palimpsest_OSP_Added\\PalimpsestTxtContrast\\data\\input\\Arch_165r_448nm.tif",
+                "C:\\Users\\General Motors\\Desktop\\Projects\\Palimpsest_OSP_Added\\PalimpsestTxtContrast\\data\\input\\Arch_165r_476nm.tif",
+                "C:\\Users\\General Motors\\Desktop\\Projects\\Palimpsest_OSP_Added\\PalimpsestTxtContrast\\data\\input\\Arch_165r_499nm.tif",
+                "C:\\Users\\General Motors\\Desktop\\Projects\\Palimpsest_OSP_Added\\PalimpsestTxtContrast\\data\\input\\Arch_165r_519nm.tif",
+                "C:\\Users\\General Motors\\Desktop\\Projects\\Palimpsest_OSP_Added\\PalimpsestTxtContrast\\data\\input\\Arch_165r_636nm.tif",
+                "C:\\Users\\General Motors\\Desktop\\Projects\\Palimpsest_OSP_Added\\PalimpsestTxtContrast\\data\\input\\Arch_165r_700nm.tif",
+                "C:\\Users\\General Motors\\Desktop\\Projects\\Palimpsest_OSP_Added\\PalimpsestTxtContrast\\data\\input\\Arch_165r_735nm.tif",
+                "C:\\Users\\General Motors\\Desktop\\Projects\\Palimpsest_OSP_Added\\PalimpsestTxtContrast\\data\\input\\Arch_165r_780nm.tif",
+                "C:\\Users\\General Motors\\Desktop\\Projects\\Palimpsest_OSP_Added\\PalimpsestTxtContrast\\data\\input\\Arch_165r_870nm.tif",
+                "C:\\Users\\General Motors\\Desktop\\Projects\\Palimpsest_OSP_Added\\PalimpsestTxtContrast\\data\\input\\Arch_165r_940nm.tif"]
+        }
+    ],
+    "edges": [
+    ]
+}
