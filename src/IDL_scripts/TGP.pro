@@ -45,55 +45,59 @@ function TGP, raster, opci_threshold = opci_thresh, max_targets = max_targets
   n_bands = dims[2]
   n_pixels = samples * lines
 
-  ; Convert to [bands, pixels]
-  img_data = reform(transpose(img_data, [2, 0, 1]), n_bands, n_pixels)
+  img_data = transpose(img_data, [2, 0, 1]) ; [n_bands, samples, lines]
+  img_data = reform(img_data, n_bands, n_pixels) ; [n_bands, n_pixels]
 
   ; Convert to float to avoid integer overflow
   img_data = float(img_data)
 
   ; Now look, I'm ASSUMING the Chang & Ren paper wants you to normalize...
-  ; I'm doing it because it feels like the right thing to do, but no better reason
-  ; Also the normalizing function is in the ML library, and I'm not downloading it
-  norms = sqrt(total(float(img_data) ^ 2, 1)) ; sqrt( sum( px^2 ) )
-  norms = norms > 1e-10 ; prevent div zero
-
-  normalized = img_data / norms ; broadcasts as [bands, pixels] / [pixels]
+  norms = sqrt(total(img_data ^ 2, 1)) ; [n_pixels]
+  norms = norms > 1e-10
+  norms2d = rebin(norms, n_bands, n_pixels) ; broadcast to [n_bands, n_pixels]
+  normalized = img_data / norms2d ; [n_bands, n_pixels]
+  help, img_data
+  help, normalized
 
   ; -------------------------
   ; Select initial target with "most extreme" attribute (i.e. magnitude)
   ; -------------------------
-  idx_max = max(norms, /nan)
+  ; Index of the max value, choose chosen as first target
+  _ = max(norms, idx_max, /nan)
   T0 = normalized[*, idx_max]
-
-  ; Initialize target list
-  target_list = [T0]
+  target_list = reform(T0, n_bands, 1)
+  target_num = 1
   done = 0
-  k = 1 ; Target counter
 
-  ; Author of everything in the while loop = ChatGPT (OpenAI)
-  ; I couldn't translate the math notation on my own
-  while ~done and (k lt max_targets) do begin
+  ; Mathematical proof: Cheng and Ren, IEEE, November 2000
+  while ~done and (target_num lt max_targets) do begin
     ; -----------------------------------------------------------------------
     ; Project all pixels onto orthogonal subspace of previous targets
     ; -----------------------------------------------------------------------
-    T_mat = transpose(reform(target_list, n_bands, k)) ; [n_bands, k]
-    pinv_T = PINV(T_mat)
-    PU = identity(n_bands) - T_mat ## pinv_T
+    T_mat = transpose(reform(target_list, n_bands, target_num)) ; [n_bands, k]
+
+    ; Compute Moore-Penrose Pseudoinverse - bcs ENVI doesn't have that builtin??
+    pinv_T = invert(matrix_multiply(T_mat, T_mat, /atranspose)) ; (AT * A)^-1
+    pinv_T = matrix_multiply(pinv_T, T_mat, /btranspose) ; (AT * A)^-1 * AT
+    PU = identity(n_bands) - matrix_multiply(pinv_T, T_mat)
 
     ; -----------------------------------------------------------------------
     ; Apply P_U to all pixel vectors and find max projection magnitude
     ; -----------------------------------------------------------------------
-    projected = PU ## img_data
+    help, PU
+    help, img_data
+    projected = matrix_multiply(PU, img_data)
     mags = total(projected ^ 2, 1)
 
-    idx_next = max(mags, /nan)
+    ; Fix: get index of max value in mags
+    _ = max(mags, idx_next, /nan)
     t_next = normalized[*, idx_next]
 
     ; -----------------------------------------------------------------------
     ; Compute OPCI between new target and current subspace
     ; OPCI = || (I - PU) * t_next ||^2
     ; -----------------------------------------------------------------------
-    residual = (identity(n_bands) - PU) ## t_next
+    residual = matrix_multiply(t_next, identity(n_bands) - PU)
     opci = total(residual ^ 2)
 
     ; -----------------------------------------------------------------------
@@ -102,14 +106,13 @@ function TGP, raster, opci_threshold = opci_thresh, max_targets = max_targets
     if opci lt opci_thresh then begin
       done = 1
     endif else begin
-      target_list = [target_list, t_next]
-      k += 1
+      target_list = [[target_list], [reform(t_next, n_bands, 1)]]
+      target_num += 1
     endelse
   endwhile
 
   ; -------------------------
   ; Return target matrix
   ; -------------------------
-  targets = reform(target_list, n_bands, k)
-  RETURN, targets
+  RETURN, target_list
 end
