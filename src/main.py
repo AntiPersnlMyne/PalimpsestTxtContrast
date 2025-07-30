@@ -20,26 +20,19 @@ def main():
     # Directories for "process_images"
     src_dir = "data/input/"
     dst_dir = "data/output/"
+
+    # Logarithmic stretch
+    process_images(src_dir, dst_dir, "", log_stretch)
     
-    # Single image analysis
-    single_img_path = "data/input/Arch_165r_370nm.tif"
-    input_img = imread(single_img_path) 
+    # Bilateral filter
+    process_images(src_dir, dst_dir, "", bilateral_filter, 
+                    {"diameter": 3,
+                    "sigma_color": 50,
+                    "sigma_space": 100})
+    
 
-    if input_img is None: # Imread check
-        raise FileNotFoundError("Error: Single input image was not read-in")
-    else:
-        # Logarithmic stretch
-        process_images(src_dir, dst_dir, "", log_stretch)
-        
-        # Bilateral filter
-        process_images(src_dir, dst_dir, "", bilateral_filter, 
-                       {"diameter": 3,
-                        "sigma_color": 50,
-                        "sigma_space": 100})
-        
-
-        # Close windows and exit
-        cv.destroyAllWindows()
+    # Close windows and exit
+    close_windows()
 
 
 

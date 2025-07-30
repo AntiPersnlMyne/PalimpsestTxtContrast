@@ -52,7 +52,8 @@ def _glob_import(filepath: str, extension: str | List[str] | None = None) -> dic
 # Input
 # --------------------------------------------------------------------------------------------
 def imread(filepath:str) -> np.ndarray:
-    """Reads in image
+    """
+    Reads in image. Protects against returning None.
 
     Args:
         filepath (str): Directory to image, include image name and extension e.g. "data/image.png"
