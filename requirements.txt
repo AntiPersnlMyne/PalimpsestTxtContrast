@@ -22,3 +22,4 @@ rasterio      # Tilewise processing
 
 # Graphical User Interface 
 screeninfo==0.8.1 # Screen resolution
+tqdm              # Progress bar

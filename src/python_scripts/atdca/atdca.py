@@ -1,4 +1,7 @@
-"""atdca.py: Wraps BGP + TGP + TCP workflow into a pipeline. DO NOT RUN this file, run "run_atdca_pipeline()" in main.py"""
+"""atdca.py: Wraps BGP + TGP + TCP workflow into a pipeline.
+             ATDCA: Automatic Target Detection Classification Algorithm
+             Does: Automatically finds N likely targets in image and classififes all pixels
+"""
 
 __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
