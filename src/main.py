@@ -15,7 +15,6 @@ __status__ = "Prototype" # "Development", or "Production".
 # Image processing library and helpers
 from python_scripts.utils import *          # Helper functions
 from python_scripts.improc import *         # Image processing
-from python_scripts.utils.fileio import *   # File I/O
 
 def main():
     # Directories for "process_images"
