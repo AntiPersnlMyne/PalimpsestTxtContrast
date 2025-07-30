@@ -16,6 +16,7 @@ import pytesseract
 # Pyteseract expects RGB
 img = cv.imread(r'data/input/Arch_165r_370nm.tif', cv.IMREAD_COLOR_RGB)
 
+# Print pytesseract's guess at reading text
 print( pytesseract.image_to_string(img) )
 
 

@@ -78,7 +78,7 @@ pro ATDCA
   generated_raster = BGP(buildstack_task.output_raster)
 
   ; Target Generation Process (TGP)
-  target_matrix = TGP(generated_raster, opci_threshold = 0.01, max_targets = 15)
+  target_matrix = TGP(generated_raster, opci_threshold = 0.01, max_targets = 10)
 
   ; Target Classification Process (TCP)
   TCP, generated_raster, target_matrix, class_images = class_outputs

@@ -7,7 +7,7 @@ __license__ = "MIT"
 __version__ = "1.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Development" # "Prototype", "Development", "Production"
+__status__ = "Prototype" # "Prototype", "Development", "Production"
 
 import subprocess
 from typing import Any

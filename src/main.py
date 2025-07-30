@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""main.py: Main file for running manuscript processing routine"""
+"""main.py: Main driver file for image processing on manuscript"""
 
 __author__ = "Gian-Mateo (GM) Tifone and Douglas Tavolette"
 __copyright__ = "2025, RIT MISHA"
@@ -9,13 +9,13 @@ __license__ = "MIT"
 __version__ = "1.2"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Development" # "Development", or "Production". 
+__status__ = "Prototype" # "Development", or "Production". 
 
 
-from python_scripts import utils, gui           # Custom scripts
-from python_scripts.utils import process_images # Too lazy to say utils.
-import cv2 as cv                                # Image import 
-import time                                     # Execution timing
+from python_scripts.improc import utils                # Custom scripts
+from python_scripts.improc.utils import process_images # Too lazy to say utils.
+import cv2 as cv                                       # Image import 
+import time                                            # Execution timing
 
 
 def main():
@@ -41,7 +41,7 @@ def main():
         
 
         # Close windows and exit
-        gui.close_windows()
+        cv.destroyAllWindows()
 
 
 

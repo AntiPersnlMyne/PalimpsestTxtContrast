@@ -23,15 +23,6 @@ function BGP, raster
   compile_opt idl2
 
   ; -------------------------------------------------------------------
-  ; Initialize ENVI session
-  ; -------------------------------------------------------------------
-  e = envi(/headless)
-  if ~isa(e, 'ENVI') then begin
-    print, 'ENVI must be initialized to run this program.'
-    RETURN, ''
-  endif
-
-  ; -------------------------------------------------------------------
   ; Load rasters
   ; -------------------------------------------------------------------
   nBands = raster.nBands

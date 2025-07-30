@@ -67,7 +67,7 @@ function TGP, raster, opci_threshold = opci_thresh, max_targets = max_targets
   target_num = 1
   done = 0
 
-  ; Mathematical proof read Cheng and Ren, IEEE, 2000
+  ; Mathematical proof read Cheng and Ren, IEEE 2000
   while ~done and (target_num lt max_targets) do begin
     ; -----------------------------------------------------------------------
     ; Project all pixels onto orthogonal subspace of previous targets
@@ -87,7 +87,10 @@ function TGP, raster, opci_threshold = opci_thresh, max_targets = max_targets
 
     ; Fix: get index of max value in mags
     _ = max(mags, idx_next, /nan)
-    t_next = normalized[*, idx_next]
+    t_next = projected[*, idx_next]
+
+    ; Optionally normalize t_next here if needed
+    t_next = t_next / (sqrt(total(t_next ^ 2)) > 1e-10)
 
     ; -----------------------------------------------------------------------
     ; Compute OPCI between new target and current subspace
@@ -103,6 +106,7 @@ function TGP, raster, opci_threshold = opci_thresh, max_targets = max_targets
       done = 1
     endif else begin
       target_list = [[target_list], [reform(t_next, n_bands, 1)]]
+      target_list = reform(target_list, n_bands, target_num + 1)
       target_num += 1
     endelse
   endwhile
