@@ -40,13 +40,24 @@ function TGP, raster, opci_threshold = opci_thresh, max_targets = max_targets
   ; -------------------------
   img_data = raster.getData()
   dims = size(img_data, /dimensions)
-  n_bands = dims[0]
+  samples = dims[0]
+  lines = dims[1]
+  n_bands = dims[2]
+  n_pixels = samples * lines
 
-  ; Now look, I'm ASSUMING the Chang,Ren paper wants you to normalize the results
+  ; Convert to [bands, pixels]
+  img_data = reform(transpose(img_data, [2, 0, 1]), n_bands, n_pixels)
+
+  ; Convert to float to avoid integer overflow
+  img_data = float(img_data)
+
+  ; Now look, I'm ASSUMING the Chang & Ren paper wants you to normalize...
   ; I'm doing it because it feels like the right thing to do, but no better reason
   ; Also the normalizing function is in the ML library, and I'm not downloading it
-  norms = sqrt(total(img_data ^ 2, 1))
-  normalized = img_data / replicate(1.0, n_bands) # norms
+  norms = sqrt(total(float(img_data) ^ 2, 1)) ; sqrt( sum( px^2 ) )
+  norms = norms > 1e-10 ; prevent div zero
+
+  normalized = img_data / norms ; broadcasts as [bands, pixels] / [pixels]
 
   ; -------------------------
   ; Select initial target with "most extreme" attribute (i.e. magnitude)

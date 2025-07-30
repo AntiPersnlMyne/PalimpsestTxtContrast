@@ -138,7 +138,7 @@ function BGP, raster
   ; -------------------------------------------------------------------
   ; Return stacked raster
   ; -------------------------------------------------------------------
-  RETURN, bandstack_task['OUTPUT_RASTER']
+  RETURN, bandstack_task.output_raster
 end
 
 ; End PRO
