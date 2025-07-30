@@ -30,14 +30,14 @@ pro TCP, raster, target_matrix, class_images = score_cube
   ; -------------------------------------------------------------------
   img = raster.getData()
   dims = size(img, /dimensions)
-  n_bands = dims[0]
-  ; n_pixels = dims[1]
+  n_bands = dims[2]
+
   dims = size(target_matrix, /dimensions)
   n_targets = dims[1]
 
   ; Image shape for reshaping output
   rows = raster.nRows
-  cols = raster.nCols
+  cols = raster.nColumns
 
   ; Allocate output cube
   score_cube = fltarr(rows, cols, n_targets)
@@ -56,15 +56,22 @@ pro TCP, raster, target_matrix, class_images = score_cube
     ; -----------------------------------------
     ; Compute orthogonal projector P_U_k
     ; -----------------------------------------
-    pinv_U = PINV(undesired)
-    PU = identity(n_bands) - undesired ## pinv_U
+    ; Compute Moore-Penrose Pseudoinverse
+    pinv_U = invert(matrix_multiply(undesired, undesired, /atranspose)) ; (AT * A)^-1
+    pinv_U = matrix_multiply(pinv_U, undesired, /btranspose) ; (AT * A)^-1 * AT
+
+    PU = identity(n_bands) - matrix_multiply(pinv_U, undesired)
 
     ; -----------------------------------------
     ; Apply projection to all pixels
     ; y_k = P_Uk * x
     ; score = |y_k|^2
     ; -----------------------------------------
-    projected = PU ## img
+    ; Convert image to float and reshape to [bands, pixels]
+    img_data = reform(float(img), n_bands, rows * cols)
+
+    ; Project pixels into orthogonal subspace
+    projected = matrix_multiply(PU, img_data)
     scores = total(projected ^ 2, 1)
 
     ; -----------------------------------------

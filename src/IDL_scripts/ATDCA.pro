@@ -94,17 +94,28 @@ pro ATDCA
     if size(class_outputs, /n_dimensions) eq 3 then begin
       dims = size(class_outputs, /dimensions)
       nBands = dims[2]
+      nRows = dims[1]
+      nColumns = dims[0]
     endif else begin
+      dims = size(class_outputs, /dimensions)
       nBands = 1
+      nRows = dims[1]
+      nColumns = dims[0]
     endelse
 
-    ; Convert classification array into an ENVI raster using ENVIArray
-    result_array = ENVIArray(class_outputs, $
-      r_fid = generated_raster.fid, $
+    ; Convert classification array into an ENVI raster using ENVI::CreateRaster
+    result_raster = e.createRaster(output_file, class_outputs, $
+      spatialref = generated_raster.spatialRef, $
+      data_type = 4, $ ; 4 = float
+      interleave = 'bsq', $
+      nrows = nRows, $
+      ncolumns = nColumns, $
       nbands = nBands)
 
-    ; Save to disk
-    result_array.save, filename = output_file
+    ; Save result
+    result_raster.save
+
+    ; Print exit success or exit failure
     print, 'Classification results saved to: ', output_file
   endif else begin
     print, 'No output file selected. Classification results not saved.'

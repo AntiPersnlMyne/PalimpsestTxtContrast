@@ -54,14 +54,12 @@ function TGP, raster, opci_threshold = opci_thresh, max_targets = max_targets
   ; Now look, I'm ASSUMING the Chang & Ren paper wants you to normalize...
   norms = sqrt(total(img_data ^ 2, 1)) ; [n_pixels]
   norms = norms > 1e-10
-  norms2d = rebin(norms, n_bands, n_pixels) ; broadcast to [n_bands, n_pixels]
+  norms2d = replicate(1.0, n_bands, 1) # norms ; broadcast to [n_bands, n_pixels]
   normalized = img_data / norms2d ; [n_bands, n_pixels]
-  help, img_data
-  help, normalized
 
-  ; -------------------------
+  ; -------------------------------------------------------------------------
   ; Select initial target with "most extreme" attribute (i.e. magnitude)
-  ; -------------------------
+  ; -------------------------------------------------------------------------
   ; Index of the max value, choose chosen as first target
   _ = max(norms, idx_max, /nan)
   T0 = normalized[*, idx_max]
@@ -69,7 +67,7 @@ function TGP, raster, opci_threshold = opci_thresh, max_targets = max_targets
   target_num = 1
   done = 0
 
-  ; Mathematical proof: Cheng and Ren, IEEE, November 2000
+  ; Mathematical proof read Cheng and Ren, IEEE, 2000
   while ~done and (target_num lt max_targets) do begin
     ; -----------------------------------------------------------------------
     ; Project all pixels onto orthogonal subspace of previous targets
@@ -84,8 +82,6 @@ function TGP, raster, opci_threshold = opci_thresh, max_targets = max_targets
     ; -----------------------------------------------------------------------
     ; Apply P_U to all pixel vectors and find max projection magnitude
     ; -----------------------------------------------------------------------
-    help, PU
-    help, img_data
     projected = matrix_multiply(PU, img_data)
     mags = total(projected ^ 2, 1)
 
