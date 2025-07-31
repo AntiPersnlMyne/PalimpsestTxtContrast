@@ -1,4 +1,4 @@
-"""io.py: File read and write"""
+"""fileio.py: File read and write"""
 
 __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
@@ -16,6 +16,8 @@ __status__ = "Prototype" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 import cv2 as cv
 import numpy as np
+import rasterio
+import rasterio
 from typing import List
 import os
 
@@ -100,6 +102,43 @@ def imread_folder(filepath:str, extension:str|List[str]|None = None) -> dict:
     return images
 
 
+def get_block_reader(image_path:str):
+    """
+    Returns a callable that reads blocks from a raster image.
+
+    The returned function supports:
+    - `window=( (row_off, col_off), (height, width) )`: returns a block (rows, cols, bands)
+    - `window='shape'`: returns full image shape (height, width)
+
+    Args:
+        image_path (str): Path to the input TIFF image.
+
+    Returns:
+        image_reader (Callable): Image reader object that reads blocks from raster image
+    """
+
+    dataset = rasterio.open(image_path)
+
+    def image_reader(window):
+        if window == "shape":
+            return dataset.height, dataset.width
+
+        (row_off, col_off), (width, height) = window
+
+        try:
+            # Read all bands in the window; shape: (bands, height, width)
+            data = dataset.read(
+                window = rasterio.windows.Window(col_off, row_off, width, height)#type:ignore
+            )
+            # Transpose to shape: (height, width, bands)
+            return np.transpose(data, (1, 2, 0))
+
+        except Exception as e:
+            print(f"[Warning] Skipping block at ({row_off}, {col_off}): {e}")
+            return None
+
+    return image_reader
+
 
 # --------------------------------------------------------------------------------------------
 # Output
@@ -114,4 +153,4 @@ def imwrite(filepath:str, image:np.ndarray) -> None:
     
     cv.imwrite(filepath, image)
 
-    
+

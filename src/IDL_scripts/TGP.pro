@@ -1,31 +1,36 @@
 ;+
-; :Author: Gian-Mateo (GM) Tifone
-; :Project: MISHA RIT
-; :Copyright: MIT
-; :Date: July 29 2025
+; :Returns: any
 ;
-; PURPOSE:
-;   Implements the Target Generation Process (TGP) for ATDCA,
-;   which detects potential target vectors in an unsupervised fashion.
+; :Arguments:
+;   raster: in, optional, any
+;     Placeholder docs for argument, keyword, or property
 ;
-; CALLING SEQUENCE:
+; :Keywords:
+;   max_targets: bidirectional, optional, any
+;     Placeholder docs for argument, keyword, or property
+;   opci_threshold: bidirectional, optional, any
+;     Placeholder docs for argument, keyword, or property
+;
+; :Name:
+;   TGP
+;
+; :Purpose:
+;   Implements the Target Generation Process (TGP) for ATDCA, which detects potential target vectors in an unsupervised fashion.
+;
+; :Category:
+;   Hyperspectral Target Detection
+;
+; :Calling sequence:
 ;   targets = TGP(raster, OPCI_THRESHOLD=opci_thresh, MAX_TARGETS=max_targets)
 ;
-; INPUTS:
-;   raster - ENVI raster object (expanded bands via BGP)
+; :Outputs:
+;   Returns an array of target vectors: [n_bands, n_targets]
 ;
-; KEYWORDS:
-;   OPCI_THRESHOLD - (optional) Orthogonal Projection Correlation Index, stopping threshold for residual projection.
-;                               Higher (e.g. 0.1)   -> greater quantity, lower purity targets. May add reduntant classes.
-;                               Lower (e.g. 0.001) -> fewer quantity, higher purity targets.
-;                               [default=0.01]
+; :Modification history:
+;   Written by Gian-Mateo (GM) Tifone, July 29 2025, for the MISHA RIT project.
+;   Copyright: MIT
 ;
-;   MAX_TARGETS    - (optional) maximum number of targets to generate. [default=10]
-;
-; RETURNS:
-;   Array of target vectors: [n_bands, n_targets]
 ;-
-
 function TGP, raster, opci_threshold = opci_thresh, max_targets = max_targets
   compile_opt idl2
 

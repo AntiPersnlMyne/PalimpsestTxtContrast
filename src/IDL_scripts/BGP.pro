@@ -1,24 +1,34 @@
 ;+
-; :Author: Gian-Mateo (GM) Tifone
-; :Project: MISHA RIT
-; :Copyright: MIT
-; :Date: July 29 2025
+; :Returns: ENVI raster object containing the original and generated bands
 ;
-; PURPOSE:
-;   Implements the Band Generation Process (BGP) from gOSP:
-;   generates new bands using autocorrelation, cross-correlation,
-;   and nonlinear transforms.
+; :Arguments:
+;   raster: bidirectional, required, any
+;     Placeholder docs for argument, keyword, or property
 ;
-; INPUTS:
-;   :raster - ENVI raster object (multispectral image)
+; :Project:
+;   MISHA RIT
 ;
-; KEYWORDS:
-;   VERBOSE - Print debug messages
+; :Copyright:
+;   MIT
 ;
-; :RETURNS:
-;   ENVI raster object containing the original and generated bands
+; :Date:
+;   July 29 2025
+;
+;    PURPOSE:
+;      Implements the Band Generation Process (BGP) from gOSP:
+;      generates new bands using autocorrelation, cross-correlation,
+;      and nonlinear transforms.
+;
+;    INPUTS:
+;      :raster - ENVI raster object (multispectral image)
+;
+;    KEYWORDS:
+;      VERBOSE - Print debug messages
+;
+; :Author:
+;   Gian-Mateo (GM) Tifone
+;
 ;-
-
 function BGP, raster
   compile_opt idl2
 
@@ -45,15 +55,15 @@ function BGP, raster
       bj = rasters[j]
 
       ; Stack bi and bj into a 2-band raster
-      layerstack_task = ENVITask('BuildBandStack')
+      layerstack_task = ENVITask("BuildBandStack")
       layerstack_task.input_rasters = [bi, bj]
       layerstack_task.execute
       temp_stack = layerstack_task.output_raster
 
       ; Now perform band math on stacked raster
-      bandmath_task = ENVITask('PixelwiseBandMathRaster')
+      bandmath_task = ENVITask("PixelwiseBandMathRaster")
       bandmath_task.input_raster = temp_stack
-      bandmath_task.expression = 'b1 * b2'
+      bandmath_task.expression = "b1 * b2"
 
       bandmath_task.execute
 
@@ -122,7 +132,7 @@ function BGP, raster
   ; -------------------------------------------------------------------
   ; Stack all output rasters into a single multi-band raster
   ; -------------------------------------------------------------------
-  bandstack_task = ENVITask('BuildBandStack')
+  bandstack_task = ENVITask("BuildBandStack")
   bandstack_task.input_rasters = output_rasters
   bandstack_task.execute
 

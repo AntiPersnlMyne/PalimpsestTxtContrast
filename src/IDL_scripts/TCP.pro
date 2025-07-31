@@ -1,27 +1,43 @@
 ;+
-; :Author: Gian-Mateo (GM) Tifone
-; :Project: MISHA RIT
-; :Copyright: MIT
-; :Date: July 29 2025
+; :Arguments:
+;   raster: bidirectional, required, any
+;     Placeholder docs for argument, keyword, or property
+;   target_matrix: bidirectional, required, any
+;     Placeholder docs for argument, keyword, or property
 ;
-; PURPOSE:
-;   Implements the Target Classification Process (TCP) from the ATDCA
-;   using Orthogonal Subspace Projection (OSP) per target.
+; :Keywords:
+;   class_images: bidirectional, optional, any
+;     Placeholder docs for argument, keyword, or property
 ;
-; CALLING SEQUENCE:
-;   TCP, raster, target_matrix, CLASS_IMAGES=score_cube
+; :Project:
+;   MISHA RIT
 ;
-; INPUTS:
-;   raster        - ENVI raster object with expanded bands
-;   target_matrix - [n_bands, n_targets] matrix of target vectors (from TGP)
+; :Copyright:
+;   MIT
 ;
-; KEYWORDS:
-;   CLASS_IMAGES - Hold the classification score results for all targets: [rows, cols, n_targets]
-;                  For each target t_k, the TCP procedure computes a score image of size [rows, cols]
-;                  indicating how well each pixel matches that target.
+; :Date:
+;   July 29 2025
+;
+;    PURPOSE:
+;      Implements the Target Classification Process (TCP) from the ATDCA
+;      using Orthogonal Subspace Projection (OSP) per target.
+;
+;    CALLING SEQUENCE:
+;      TCP, raster, target_matrix, CLASS_IMAGES=score_cube
+;
+;    INPUTS:
+;      raster        - ENVI raster object with expanded bands
+;      target_matrix - [n_bands, n_targets] matrix of target vectors (from TGP)
+;
+;    KEYWORDS:
+;      CLASS_IMAGES - Hold the classification score results for all targets: [rows, cols, n_targets]
+;                     For each target t_k, the TCP procedure computes a score image of size [rows, cols]
+;                     indicating how well each pixel matches that target.
+;
+; :Author:
+;   Gian-Mateo (GM) Tifone
 ;
 ;-
-
 pro TCP, raster, target_matrix, class_images = score_cube
   compile_opt idl2
 
