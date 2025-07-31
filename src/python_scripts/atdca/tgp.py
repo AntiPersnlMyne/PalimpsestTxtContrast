@@ -15,26 +15,31 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 
 import numpy as np
 from tqdm import tqdm 
+from typing import Callable, Tuple
 
-def target_generation_process(image_reader, block_shape=(512, 512)):
-    """
-    Stage 1 of the Target Generation Process (TGP).
-    Finds initial target T0: the pixel vector with the maximum L2 norm.
+# Define window tuple
+ImageWindow = Tuple[Tuple[int, int], Tuple[int, int]]
+
+def target_generation_process(
     
-    Parameters:
-    -----------
-    image_reader : Callable[[tuple], np.ndarray]
-        A function that accepts a window tuple ((row_off, col_off), (height, width))
-        and returns a 3D NumPy array of shape (height, width, bands).
-    block_shape : tuple
-        Shape of blocks to read (height, width).
+    # image_reader:Callable[ [str|ImageWindow], np.ndarray|Tuple[int,int] ], 
+    image_reader,
+    block_shape=(512, 512)
+    ):
+    """
+    Generates up to `max_targets` target vectors using OSP and OPCI stopping rule.
+
+    Args:
+        image_reader (Callable): A function serves as an interface to read image data. It supports two modes:
+            - image_reader("shape"): Returns (height, width) of the full image.
+            - image_reader(window): Returns a block of shape (H, W, B) where `window` is a tuple of the form ((row_offset, col_offset), (height, width)).
+        
+        block_shape (tuple, optional): Shape of blocks to read (height, width). Defaults to (512, 512).
 
     Returns:
-    --------
-    t0_vector : np.ndarray
-        The spectral vector (shape: [bands]) of the initial target.
-    t0_coords : tuple
-        The (row, col) coordinates of the target pixel in the full image.
+        (np.ndarray, tuple): (t0_vector, t0_coords).\n 
+            t0-vector: Spectral vector of the initial target (shape: [bands]).
+            t0_coords: (row, col) coordinates of the pixel with the maximum spectral norm.
     """
 
     max_norm = -np.inf
