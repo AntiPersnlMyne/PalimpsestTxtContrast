@@ -12,3 +12,4 @@ __status__ = "Development" # "Development", or "Production".
 
 from .improc_lib import *
 from .imdisplay import *
+from ..utils.improc_utils import *

@@ -13,15 +13,16 @@ __status__ = "Development" # "Development", or "Production", or "Prototype".
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
+# Python imports
 import numpy as np
 import cv2 as cv
 import warnings
 from typing import Sequence, List
 
-# Custom helper functions
-from python_scripts.improc_utils import _read_files, _write_files, _normalize_image, _normalize_image_range, _return_cv_dtype, _clip_or_norm
+# Helper functions
+from ..utils.improc_utils import _read_files, _write_files, _normalize_image, _normalize_image_range, _clip_or_norm, _return_cv_img_dtype
 # ENUM
-from python_scripts.improc_utils import BitwiseOperation, SharpenMethod
+from ..utils.improc_utils import *
 
 
 # --------------------------------------------------------------------------------------------
@@ -663,7 +664,7 @@ def linear_stretch(
         alpha=out_min,
         beta=out_max,
         norm_type=cv.NORM_MINMAX,
-        dtype=_return_cv_dtype(img=img)
+        dtype=_return_cv_img_dtype(img=img)
     )
 
     return img_stretched
@@ -702,7 +703,7 @@ def log_stretch(img: np.ndarray) -> np.ndarray:
         alpha=out_min,
         beta=out_max,
         norm_type=cv.NORM_MINMAX,
-        dtype=_return_cv_dtype(img=img)
+        dtype=_return_cv_img_dtype(img=img)
     )
 
     return img_stretched
@@ -755,7 +756,7 @@ def percentile_stretch(
         alpha=out_min,
         beta=out_max,
         norm_type=cv.NORM_MINMAX,
-        dtype=_return_cv_dtype(img=img)
+        dtype=_return_cv_img_dtype(img=img)
     )
 
     return stretched

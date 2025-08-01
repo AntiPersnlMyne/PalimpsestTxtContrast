@@ -19,18 +19,20 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Imports
 # --------------------------------------------------------------------------------------------
 # Import pipeline modules
-from python_scripts.atdca import *
-from python_scripts.utils.fileio import *
+from .bgp import *
+from .tgp import *
+from .tcp import *
+from .rastio import *
+from ..utils.fileio import *
 
 # Pyhton Modules
 import numpy as np
-from typing import Tuple, Union
 import os
-from glob import glob
 
 
-
-
+# --------------------------------------------------------------------------------------------
+# ATDCA Pipeline
+# --------------------------------------------------------------------------------------------
 def ATDCA(
     input_dir:str, 
     output_dir:str, 
@@ -121,5 +123,5 @@ def ATDCA(
 
 
 
-
+print("Compilation world")
 
