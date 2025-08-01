@@ -16,11 +16,13 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 from typing import Callable, List, Tuple, Union
 import numpy as np
 from tqdm import tqdm
+from os.path import join
 from ..utils.math_utils import (
     compute_orthogonal_projection_matrix,
     project_block_onto_subspace,
     compute_opci
 )
+from .rastio import get_block_writer
 
 
 # --------------------------------------------------------------------------------------------
@@ -29,6 +31,38 @@ from ..utils.math_utils import (
 ImageReader = Callable[[Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]], Union[np.ndarray, Tuple[int, int], None]]
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
 SpectralVectors = Tuple[List[np.ndarray], List[Tuple[int, int]]]
+
+
+# --------------------------------------------------------------------------------------------
+# Helper Functions
+# --------------------------------------------------------------------------------------------
+def make_tcp_writer_factory(output_dir: str, output_filename: str, image_shape: Tuple[int, int], one_file: bool):
+    """
+    Internal writer factory that returns a writer function per target.
+
+    Args:
+        output_dir (str): Directory where output will be saved.
+        output_filename (str): Base filename.
+        image_shape (Tuple[int, int]): Shape of the output image.
+        one_file (bool): Whether all targets are stored in one file.
+
+    Returns:
+        Callable: Function(target_index) → writer_function
+    """
+    def factory(target_index: int):
+        if one_file:
+            output_path = join(output_dir, f"{output_filename}.tif")
+        else:
+            output_path = join(output_dir, f"{output_filename}_{target_index}.tif")
+
+        return get_block_writer(
+            output_path=output_path,
+            image_shape=image_shape,
+            num_output_bands=1,
+            dtype=np.float32
+        )
+
+    return factory
 
 
 # --------------------------------------------------------------------------------------------
@@ -140,4 +174,6 @@ def target_generation_process(
         projection_matrix = compute_orthogonal_projection_matrix(targets)
 
     return targets, coords
+
+
 

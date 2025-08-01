@@ -34,7 +34,7 @@ ImageWriter = Callable[[WindowType, ImageBlock], None]
 # --------------------------------------------------------------------------------------------
 # BGP Functions
 # --------------------------------------------------------------------------------------------
-def _band_generation_process_to_block(
+def band_generation_process_to_block(
     block, 
     use_sqrt=True,
     use_log=False
@@ -95,7 +95,7 @@ def band_generation_process(
     block_shape: Tuple[int, int] = (512, 512),
     use_sqrt: bool = True,
     use_log: bool = False
-) -> None:
+    ) -> None:
     """
     Applies band generation across the full image block by block.
 
@@ -136,7 +136,7 @@ def band_generation_process(
             if input_block is None:
                 continue
 
-            output_block = _band_generation_process_to_block(
+            output_block = band_generation_process_to_block(
                 block=input_block,
                 use_sqrt=use_sqrt,
                 use_log=use_log
