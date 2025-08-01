@@ -1,28 +1,35 @@
 ;+
-; :Author: Gian-Mateo (GM) Tifone
-; :Project: MISHA RIT
-; :Copyright: MIT
-; :Date: July 29 2025
+; :Project:
+;   MISHA RIT
 ;
-; PURPOSE:
-;   Main driver for Generalized Orthogonal Subspace Projection (gOSP)
-;   using the Automatic Target Detection and Classification Algorithm (ATDCA).
+; :Copyright:
+;   MIT
 ;
-; USAGE:
-;   .run ATDCA.run
+; :Date:
+;   July 29 2025
 ;
-; DESCRIPTION:
-;   This script orchestrates the gOSP process using:
-;     1.   BGP (Band Generation Process)
-;     2.1. TGP (Target Generation Process)
-;     2.2. TCP (Target Classification Process)
+;    PURPOSE:
+;      Main driver for Generalized Orthogonal Subspace Projection (gOSP)
+;      using the Automatic Target Detection and Classification Algorithm (ATDCA).
 ;
-; REQUIRED FILES:
-;   - BGP.pro
-;   - TGP.pro
-;   - TCP.pro
+;    USAGE:
+;      .run ATDCA.run
+;
+;    DESCRIPTION:
+;      This script orchestrates the gOSP process using:
+;        1.   BGP (Band Generation Process)
+;        2.1. TGP (Target Generation Process)
+;        2.2. TCP (Target Classification Process)
+;
+;    REQUIRED FILES:
+;      - BGP.pro
+;      - TGP.pro
+;      - TCP.pro
+;
+; :Author:
+;   Gian-Mateo (GM) Tifone
+;
 ;-
-
 pro ATDCA
   compile_opt idl2
 
@@ -30,25 +37,25 @@ pro ATDCA
   ; Initialize ENVI session
   ; -------------------------------------------------------------------
   e = envi(/headless)
-  if ~isa(e, 'ENVI') then begin
-    print, 'ENVI must be initialized.'
+  if ~isa(e, "ENVI") then begin
+    print, "ENVI must be initialized."
     RETURN
   endif
 
   ; -------------------------------------------------------------------
   ; Prompt user to select multiple raster files (one-band each)
   ; -------------------------------------------------------------------
-  start_dir = 'C:\Users\General Motors\Desktop\Projects\Palimpsest_OSP_Added\PalimpsestTxtContrast\data\input' ; GETENV('USERPROFILE') + '/Desktop' ; Suggested starting point
+  start_dir = "C:\Users\General Motors\Desktop\Projects\Palimpsest_OSP_Added\PalimpsestTxtContrast\data\input" ; GETENV('USERPROFILE') + '/Desktop' ; Suggested starting point
   filepaths = dialog_pickfile(/multiple_files, $
-    filter = '*.dat;*.tif;*.tiff', $
+    filter = "*.dat;*.tif;*.tiff", $
     path = start_dir, $
-    title = 'Select single-band raster files')
-  if filepaths[0] eq '' then RETURN
+    title = "Select single-band raster files")
+  if filepaths[0] eq "" then RETURN
 
   ; Check if 2+ rasters to create band combinations
   nBands = n_elements(filepaths)
   if nBands lt 2 then begin
-    print, 'At least two rasters are required.'
+    print, "At least two rasters are required."
     RETURN
   endif
 
@@ -59,7 +66,7 @@ pro ATDCA
   for i = 0, nBands - 1 do begin
     raster = e.openRaster(filepaths[i])
     if raster.nBands ne 1 then begin
-      print, 'All inputs must be single-band rasters.'
+      print, "All inputs must be single-band rasters."
       RETURN
     endif
     rasters.add, raster
@@ -67,7 +74,7 @@ pro ATDCA
 
   ; Matrix operations more efficient than raster-by-raster
   ; Build bandstack
-  buildstack_task = ENVITask('BuildBandStack')
+  buildstack_task = ENVITask("BuildBandStack")
   buildstack_task.input_rasters = rasters
   buildstack_task.execute
 
@@ -78,7 +85,7 @@ pro ATDCA
   generated_raster = BGP(buildstack_task.output_raster)
 
   ; Target Generation Process (TGP)
-  target_matrix = TGP(generated_raster, opci_threshold = 0.01, max_targets = 10)
+  target_matrix = TGP(generated_raster, opci_threshold = 0.05, max_targets = 5)
 
   ; Target Classification Process (TCP)
   TCP, generated_raster, target_matrix, class_images = class_outputs
@@ -86,10 +93,10 @@ pro ATDCA
   ; -------------------------------------------------------------------
   ; Save results as multi-band raster (.dat)
   ; -------------------------------------------------------------------
-  output_file = dialog_pickfile(/write, filter = '*.dat', $
-    title = 'Save ATDCA classification results')
+  output_file = dialog_pickfile(/write, filter = "*.dat", $
+    title = "Save ATDCA classification results")
 
-  if output_file ne '' then begin
+  if output_file ne "" then begin
     ; Determine number of bands
     if size(class_outputs, /n_dimensions) eq 3 then begin
       dims = size(class_outputs, /dimensions)
@@ -107,7 +114,7 @@ pro ATDCA
     result_raster = e.createRaster(output_file, class_outputs, $
       spatialref = generated_raster.spatialRef, $
       data_type = 4, $ ; 4 = float
-      interleave = 'bsq', $
+      interleave = "bsq", $
       nrows = nRows, $
       ncolumns = nColumns, $
       nbands = nBands)
@@ -116,9 +123,9 @@ pro ATDCA
     result_raster.save
 
     ; Print exit success or exit failure
-    print, 'Classification results saved to: ', output_file
+    print, "Classification results saved to: ", output_file
   endif else begin
-    print, 'No output file selected. Classification results not saved.'
+    print, "No output file selected. Classification results not saved."
   endelse
 end
 

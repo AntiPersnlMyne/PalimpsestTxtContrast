@@ -15,48 +15,14 @@ from typing import Any
 # Magic string
 idl_exe = r"C:\Program Files\NV5\ENVI61\IDL91\bin\bin.x86_64\idl.exe"
 
+arg_1 = "TEST123"
+pipes = subprocess.Popen('bash -c idl -e \'PCA_bandstack.pro,' \
+                         + arg_1 + ', config_file="path/to/config.ini"\'',
+                         stdout=subprocess.PIPE, 
+                         stderr=subprocess.PIPE)
+std_out, std_err = pipes.communicate()
+pipes.wait()
+
 def run_idl_script(idl_script: str, src_dir: str, dst_dir: str, args: list[Any] = []):
-    """
-    Run an IDL .pro script with required source and destination directories,
-    and optional extra arguments.
-
-    Parameters:
-        idl_script (str): Name of the IDL script (without .pro extension).
-        src_dir (str): Source directory path (passed as first arg).
-        dst_dir (str): Destination directory path (passed as second arg).
-        args (List[Any]): Any additional arguments required by the IDL script.
-                          Order matters and is the user's responsibility.
-    """
+    pass
     
-    # Build argument string
-    all_args = [str(src_dir), str(dst_dir)] + [str(arg) for arg in args]
-    arg_str = ' '.join([f'"{str(arg)}"' for arg in all_args])
-
-    
-    # Format the IDL command, compiles dynamically
-    idl_command = (
-        f'"{idl_exe}" '
-        f'-IDL_PATH src/IDL_scripts '
-        f'-e {idl_script} '
-        f'-args {arg_str}'
-    )
-
-
-    try:
-        result = subprocess.run(
-            idl_command,
-            shell=True,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-
-    except subprocess.CalledProcessError as e:
-        print(f"-- Error calling IDL script: '{idl_script}'")
-        print("- STDOUT -\n", e.stdout)
-        print("- STDERR -\n", e.stderr)
-        raise
-    except Exception as e:
-        print(f"-- Misc Error calling IDL script: {idl_script}\n{e}")
-        
