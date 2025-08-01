@@ -37,7 +37,7 @@ def _glob_import(filepath: str, extension: str | List[str] | None = None) -> dic
     elif isinstance(extension, str):
         exts = ['.' + extension.lower()] # convert to extension - jpg -> .jpg
     else:
-        exts = [e.lower() for e in extension] # imports user specificed types, that match supported
+        exts = ['.' + e.lower() for e in extension] # imports user specificed types, that match supported
 
     for filename in os.listdir(filepath):
         _, ext = os.path.splitext(filename)
@@ -47,6 +47,7 @@ def _glob_import(filepath: str, extension: str | List[str] | None = None) -> dic
             if image is not None:
                 images[filename] = image
     return images
+
 
 # --------------------------------------------------------------------------------------------
 # Input
