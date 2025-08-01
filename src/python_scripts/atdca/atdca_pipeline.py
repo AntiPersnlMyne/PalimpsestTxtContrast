@@ -66,23 +66,34 @@ def ATDCA(
         input_image_type (str | tuple[str, ...], optional): File extension of image type without the `.` (e.g. tif, png, jpg). If set to tuple (i.e. list of types), will read all images of those types. Defaults to "tif".
     """
     
-    # Configuration
-    output_bgp_path = "data/output/image_bgp.tif"
-    output_tcp_template = "data/output/class_target_{:02}.tif"
+    os.makedirs(output_dir, exist_ok=True)
 
-    # Load input bands
-    band_paths = []
-    imread_folder(input_dir, ".tif")
+    # Discover input files
+    if isinstance(input_image_type, str):
+        input_image_type = (input_image_type,)
+    input_files = []
+    for ext in input_image_type:
+        input_files += sorted(glob(os.path.join(input_dir, f"*.{ext}")))
 
-    print(f"[ATDCA] Using {len(band_paths)} input bands...")
-    reader = get_virtual_multiband_reader(band_paths)
+    if not input_files:
+        raise FileNotFoundError(f"No input images found in {input_dir} with extensions: {input_image_type}")
 
-    # Run BGP
-    input_shape = reader("shape")
-    sample_block = reader(((0, 0), (256, 256)))
+    print(f"[ATDCA] Found {len(input_files)} input band(s). Initializing reader...")
+    reader = get_virtual_multiband_reader(input_files)
+
+    # Prepare BGP output
+    shape = reader("shape")
+    sample_block = reader(((0, 0), (min(256, shape[0]), min(256, shape[1]))))
     bgp_block = apply_bgp_to_block(sample_block)
-    num_output_bands = bgp_block.shape[2]
-    writer = get_block_writer(output_bgp_path, input_shape, num_output_bands)
+    num_bgp_bands = bgp_block.shape[2]
+
+    bgp_output_path = os.path.join(output_dir, f"{output_filename}_bgp.tif")
+    writer = get_block_writer(
+        output_path=bgp_output_path,
+        image_shape=shape,
+        num_output_bands=num_bgp_bands,
+        dtype=np.float32
+    )
 
     print("[ATDCA] Running Band Generation Process (BGP)...")
     band_generation_process(
@@ -91,22 +102,23 @@ def ATDCA(
         block_shape=block_shape
     )
 
-    # Use the BGP image for TGP and TCP
-    bgp_reader = get_virtual_multiband_reader([output_bgp_path])
-
     print("[ATDCA] Running Target Generation Process (TGP)...")
+    bgp_reader = get_virtual_multiband_reader([bgp_output_path])
     targets, coords = target_generation_process(
         image_reader=bgp_reader,
         max_targets=max_targets,
-        opci_threshold=opci_threshold,
+        opci_threshold=ocpi_threshold,
         block_shape=block_shape
     )
-
-    print(f"[ATDCA] {len(targets)} targets detected.")
+    print(f"[ATDCA] TGP detected {len(targets)} target(s).")
 
     print("[ATDCA] Running Target Classification Process (TCP)...")
-    writer_factory = _make_tcp_writer_factory(output_tcp_template, input_shape)
-
+    writer_factory = make_tcp_writer_factory(
+        output_dir=output_dir,
+        output_filename=output_filename,
+        image_shape=shape,
+        one_file=one_file
+    )
     run_tcp_classification(
         image_reader=bgp_reader,
         targets=targets,
@@ -114,8 +126,7 @@ def ATDCA(
         block_shape=block_shape
     )
 
-    print("[ATDCA] Classification complete. Output saved to 'data/output/'.")
-
+    print(f"[ATDCA] Complete. Results written to: {output_dir}")
 
 
 

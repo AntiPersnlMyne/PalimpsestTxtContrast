@@ -14,20 +14,16 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
-from numpy import transpose, float32
+from numpy import transpose, float32, newaxis, ndarray, float32, concatenate
 from warnings import warn
 from rasterio import open
 from rasterio.windows import Window
+from typing import List, Union, Tuple
 
 
 # --------------------------------------------------------------------------------------------
 # Reader (Input)
 # --------------------------------------------------------------------------------------------
-import rasterio
-import numpy as np
-from rasterio.windows import Window
-from typing import List, Union, Tuple
-
 def get_virtual_multiband_reader(band_paths: List[str]):
     """
     Returns a reader that stacks multiple single-band images into a virtual multiband image.
@@ -38,7 +34,7 @@ def get_virtual_multiband_reader(band_paths: List[str]):
     Returns:
         Callable: image_reader(window) -> Tuple|Array|None
     """
-    datasets = [rasterio.open(p) for p in band_paths]
+    datasets = [open(p) for p in band_paths]
 
     # Check all bands must match shape
     ref_shape = (datasets[0].height, datasets[0].width)
@@ -46,7 +42,7 @@ def get_virtual_multiband_reader(band_paths: List[str]):
         if (dataset.height, dataset.width) != ref_shape:
             raise ValueError("-- Error in get_virtual_multiband_reader:\nAll bands must have the same dimensions --")
 
-    def _image_reader(window: Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]) -> Union[np.ndarray, Tuple[int, int], None]:
+    def _image_reader(window: Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]) -> Union[ndarray, Tuple[int, int], None]:
         if window == "shape":
             return ref_shape
 
@@ -57,10 +53,10 @@ def get_virtual_multiband_reader(band_paths: List[str]):
             block_list = []
             for ds in datasets:
                 data = ds.read(1, window=Window(col_off, row_off, width, height))  # type:ignore
-                block_list.append(data[:, :, np.newaxis])  # Expand to (H, W, 1)
+                block_list.append(data[:, :, newaxis])  # Expand to (H, W, 1)
 
-            stacked = np.concatenate(block_list, axis=2)  # Shape: (H, W, B)
-            return stacked.astype(np.float32)
+            stacked = concatenate(block_list, axis=2)  # Shape: (H, W, B)
+            return stacked.astype(float32)
 
         except Exception as e:
             warn(f"[Warning] Failed to read window {window}: {e}")
