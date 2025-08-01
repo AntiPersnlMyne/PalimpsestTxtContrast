@@ -10,7 +10,9 @@ __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
 
 
-
+# --------------------------------------------------------------------------------------------
+# Imports
+# --------------------------------------------------------------------------------------------
 from typing import Callable, List, Tuple, Union
 import numpy as np
 from tqdm import tqdm
@@ -20,9 +22,17 @@ from ..utils.math_utils import (
     compute_opci
 )
 
+
+# --------------------------------------------------------------------------------------------
+# Custom Datatypes
+# --------------------------------------------------------------------------------------------
 ImageReader = Callable[[Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]], Union[np.ndarray, Tuple[int, int], None]]
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
 
+
+# --------------------------------------------------------------------------------------------
+# TGP Function
+# --------------------------------------------------------------------------------------------
 def target_generation_process(
     image_reader: ImageReader,
     max_targets: int = 10,

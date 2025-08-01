@@ -10,13 +10,19 @@ __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
 
 
+
+# --------------------------------------------------------------------------------------------
+# Imports
+# --------------------------------------------------------------------------------------------
 import numpy as np
 from itertools import combinations
 from tqdm import tqdm
 from typing import Callable, Union, Tuple
 
-# Window, Reader, and Writer datatypes
-# Keeps function signatures clean
+
+# --------------------------------------------------------------------------------------------
+# Custom Datatypes
+# --------------------------------------------------------------------------------------------
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
 ImageBlock = np.ndarray
 ImageShape = Tuple[int, int]
@@ -25,6 +31,9 @@ ImageReader = Callable[[Union[str, WindowType]], Union[ImageBlock, ImageShape, N
 ImageWriter = Callable[[WindowType, ImageBlock], None]
 
 
+# --------------------------------------------------------------------------------------------
+# BGP Functions
+# --------------------------------------------------------------------------------------------
 def _band_generation_process_to_block(
     block, 
     use_sqrt=True,
