@@ -12,7 +12,6 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 
 from .atdca_pipeline import *
 from .bgp import *
-from .config import *
 from .rastio import *
 from .tcp import *
 from .tgp import *

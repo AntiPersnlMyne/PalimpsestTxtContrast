@@ -20,12 +20,13 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 # Import pipeline modules
 from python_scripts.atdca import *
-from python_scripts.utils.fileio import imread_folder
+from python_scripts.utils.fileio import *
 
 # Pyhton Modules
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Union
 import os
+from glob import glob
 
 
 # --------------------------------------------------------------------------------------------
@@ -65,26 +66,21 @@ def ATDCA(
         ocpi_threshold (float, optional): Target purity score. The lower the value (e.g., 0.001), the more pure the target categories. The larger the value (e.g., 0.1), the less pure the target categories. Larger values capture more noise, but are more forgiving to slight target variations. Defaults to 0.01.
         input_image_type (str | tuple[str, ...], optional): File extension of image type without the `.` (e.g. tif, png, jpg). If set to tuple (i.e. list of types), will read all images of those types. Defaults to "tif".
     """
+    # Locate all image files of user-specified type in input directory
+    input_files = discover_image_files(input_dir, input_image_type)
     
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Discover input files
-    if isinstance(input_image_type, str):
-        input_image_type = (input_image_type,)
-    input_files = []
-    for ext in input_image_type:
-        input_files += sorted(glob(os.path.join(input_dir, f"*.{ext}")))
-
+    # Check if no images found
     if not input_files:
         raise FileNotFoundError(f"No input images found in {input_dir} with extensions: {input_image_type}")
 
     print(f"[ATDCA] Found {len(input_files)} input band(s). Initializing reader...")
+    
     reader = get_virtual_multiband_reader(input_files)
 
     # Prepare BGP output
     shape = reader("shape")
     sample_block = reader(((0, 0), (min(256, shape[0]), min(256, shape[1]))))
-    bgp_block = apply_bgp_to_block(sample_block)
+    bgp_block = _band_generation_process_to_block(sample_block)
     num_bgp_bands = bgp_block.shape[2]
 
     bgp_output_path = os.path.join(output_dir, f"{output_filename}_bgp.tif")

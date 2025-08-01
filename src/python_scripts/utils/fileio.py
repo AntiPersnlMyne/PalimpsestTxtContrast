@@ -16,9 +16,8 @@ __status__ = "Prototype" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 import cv2 as cv
 import numpy as np
-import rasterio
-import warnings
-from typing import List
+from typing import List, Tuple
+from glob import glob
 import os
 
 
@@ -26,7 +25,7 @@ import os
 # --------------------------------------------------------------------------------------------
 # Helper function
 # --------------------------------------------------------------------------------------------
-def _glob_import(filepath: str, extension: str | List[str] | None = None) -> dict:
+def _glob_imread(filepath: str, extension: str | List[str] | None = None) -> dict:
     """
     Helper to import images from a directory with optional extension filtering.
     """
@@ -89,7 +88,7 @@ def imread_folder(filepath:str, extension:str|List[str]|None = None) -> dict:
 
     Args:
         filepath (str): Filepath to folder, including the folder-name, to import images from.
-        extension (str or List[str], Optional): Suffix added to the name of a computer file, e.g. ".jpg". If None, imports all supported image types.
+        extension (str or List[str], Optional): Suffix added to the name of a computer file, e.g. "jpg". If None, imports all supported image types.
 
     """
     # Filepath check
@@ -97,9 +96,33 @@ def imread_folder(filepath:str, extension:str|List[str]|None = None) -> dict:
         raise Exception(f"[FILEIO] Directory not found: {filepath}")
 
     # Import images from directory
-    images = _glob_import(filepath, extension)
+    images = _glob_imread(filepath, extension)
     return images
 
+
+def discover_image_files(
+    input_dir: str,
+    input_image_type: str|Tuple[str, ...] = "tif"
+    ) -> List[str]:
+    """
+    Discovers and returns a list of image files in a directory matching the given type(s).
+
+    Args:
+        input_dir (str): Directory to search for input images.
+        input_image_type (str | tuple[str, ...]): File extension(s) to include (e.g. "tif" or ("tif", "png"))
+
+    Returns:
+        List[str]: Sorted list of full paths to input image files.
+    """
+    if isinstance(input_image_type, str):
+        input_image_type = (input_image_type,)
+
+    input_files = []
+    for ext in input_image_type:
+        input_files.extend(glob(os.path.join(input_dir, f"*.{ext}")))
+
+    input_files.sort()
+    return input_files
 
 
 # --------------------------------------------------------------------------------------------
