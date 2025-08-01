@@ -25,7 +25,11 @@ ImageReader = Callable[[Union[str, WindowType]], Union[ImageBlock, ImageShape, N
 ImageWriter = Callable[[WindowType, ImageBlock], None]
 
 
-def _band_generation_process_to_block(block, use_sqrt=True, use_log=False) -> np.ndarray:
+def _band_generation_process_to_block(
+    block, 
+    use_sqrt=True,
+    use_log=False
+) -> np.ndarray:
     """
     Applies the Band Generation Process (BGP) to raster block. Optional flags align with Cheng and Ren (2000)'s implementation.
 

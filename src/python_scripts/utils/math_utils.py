@@ -69,6 +69,25 @@ def project_block_onto_subspace(
     return projected_block.astype(np.float32)
 
 
+def compute_opci(
+    projection_matrix: np.ndarray,
+    candidate_target: np.ndarray
+) -> float:
+    """
+    Computes the Orthogonal Projection Correlation Index (OPCI) for a candidate target vector.
+    If OPCI is small (e.g., < 0.01), then T is almost already spanned by the previous targets, 
+    and should be discarded or used to stop iteration
 
+    Args:
+        projection_matrix (np.ndarray): Orthogonal projection matrix (shape: [bands, bands])
+        candidate_target (np.ndarray): Target candidate vector (shape: [bands])
+
+    Returns:
+        float: OPCI value, representing the residual norm after projection
+    """
+    projected = projection_matrix @ candidate_target
+    opci_value = np.linalg.norm(projected)
+
+    return float(opci_value)
 
 

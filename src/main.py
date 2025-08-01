@@ -68,7 +68,10 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 
 
 # Import pipeline modules
-from python_scripts import utils
+from python_scripts.utils import *
+from python_scripts.atdca import *
+from typing import Union, Tuple
+
 
 # Pyhton Modules
 import numpy as np
@@ -78,31 +81,56 @@ import numpy as np
 input_dir = r"data\input\test"
 output_path = r"data\output\image_bgp.tif"
 
+ImageReader = Callable[[Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]], Union[np.ndarray, Tuple[int, int], None]]
+
+def test_tgp_synthetic():
+    height, width, bands = 64, 64, 3
+    synthetic_image = np.zeros((height, width, bands), dtype=np.float32)
+
+    # Inject synthetic targets
+    synthetic_image[5, 5] = np.array([10, 0, 0])     # T0
+    synthetic_image[10, 10] = np.array([0, 10, 0])   # T1
+    synthetic_image[20, 20] = np.array([0, 0, 10])   # T2
+
+    # Mock image_reader
+    def mock_reader(window: Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]):
+        if window == "shape":
+            return (height, width)
+        (row_off, col_off), (h, w) = window
+        if isinstance(row_off, int) and isinstance(col_off, int) and isinstance(h, int) and isinstance(w, int):
+            return synthetic_image[row_off:row_off+h, col_off:col_off+w]
+
+    # Run TGP
+    targets, coords = target_generation_process(
+        image_reader=mock_reader,
+        max_targets=3,
+        opci_threshold=0.001,
+        block_shape=(32, 32)
+    )
+
+    print("[TEST] Detected coordinates:", coords)
+    print("[TEST] Target vectors:")
+    for vec in targets:
+        print(vec)
+
+    # Assert known target coordinates
+    expected_coords = [(5, 5), (10, 10), (20, 20)]
+    for actual, expected in zip(coords, expected_coords):
+        assert actual == expected, f"Expected target at {expected}, got {actual}"
+
+    # Assert target values are roughly correct
+    expected_vectors = [
+        np.array([10, 0, 0], dtype=np.float32),
+        np.array([0, 10, 0], dtype=np.float32),
+        np.array([0, 0, 10], dtype=np.float32),
+    ]
+    for vec, expected in zip(targets, expected_vectors):
+        error = np.linalg.norm(vec - expected)
+        assert error < 1e-3, f"Target mismatch: expected {expected}, got {vec}"
+
+    print("✅ TGP synthetic test passed.")
 
 
-test_block = np.array([
-    [[1, 2, 3], [4, 5, 6]],
-    [[7, 8, 9], [1, 1, 1]]
-], dtype=np.float32)  # shape (2, 2, 3)
-
-T0 = np.array([1, 0, 0], dtype=np.float32)
-P = utils.compute_orthogonal_projection_matrix([T0])
-
-projected = utils.project_block_onto_subspace(test_block, P)
-
-            # Extract the first component from all projected pixels
-first_components = projected[:, :, 0]
-
-print("First components after projection:\n", first_components)
-
-# Assert that they're (almost) zero
-tolerance = 1e-6
-if np.all(np.abs(first_components) < tolerance):
-    print("✅ All first components successfully removed by projection.")
-else:
-    print("❌ Some components were not projected out.")
-
-
-
-
+if __name__ == "__main__":
+    test_tgp_synthetic()
 

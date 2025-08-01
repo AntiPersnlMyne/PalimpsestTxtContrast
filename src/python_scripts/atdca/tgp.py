@@ -11,65 +11,122 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 
 
 
-# src/python_scripts/tgp.py
-
+from typing import Callable, List, Tuple, Union
 import numpy as np
-from tqdm import tqdm 
-from typing import Callable, Tuple
+from tqdm import tqdm
+from ..utils.math_utils import (
+    compute_orthogonal_projection_matrix,
+    project_block_onto_subspace,
+    compute_opci
+)
 
-# Define window tuple
-ImageWindow = Tuple[Tuple[int, int], Tuple[int, int]]
+ImageReader = Callable[[Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]], Union[np.ndarray, Tuple[int, int], None]]
+WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
 
 def target_generation_process(
-    
-    # image_reader:Callable[ [str|ImageWindow], np.ndarray|Tuple[int,int] ], 
-    image_reader,
-    block_shape=(512, 512)
-    ):
+    image_reader: ImageReader,
+    max_targets: int = 10,
+    opci_threshold: float = 0.01,
+    block_shape: Tuple[int, int] = (512, 512)
+) -> Tuple[List[np.ndarray], List[Tuple[int, int]]]:
     """
-    Generates up to `max_targets` target vectors using OSP and OPCI stopping rule.
+    Target Generation Process (TGP).
+
+    Iteratively projects image into orthogonal subspace and extracts new target vectors
+    until OPCI falls below a threshold or a max target count is reached.
 
     Args:
-        image_reader (Callable): A function serves as an interface to read image data. It supports two modes:
-            - image_reader("shape"): Returns (height, width) of the full image.
-            - image_reader(window): Returns a block of shape (H, W, B) where `window` is a tuple of the form ((row_offset, col_offset), (height, width)).
-        
-        block_shape (tuple, optional): Shape of blocks to read (height, width). Defaults to (512, 512).
+        image_reader (ImageReader): Function to stream image data by window or query shape.
+        max_targets (int, optional): Max number of targets to extract. Defaults to 10.
+        opci_threshold (float, optional): Stop if OPCI falls below this. Defaults to 0.01.
+                                          Higher threshold (e.g. 0.1) creates less pure targets.
+                                          Lower threshold (e.g. 0.001) creates more pure targets.
+        block_shape (Tuple[int, int], optional): Size of image blocks to process. Defaults to (512, 512).
+                                                 More blocks is easier on PC's memory, but slower overall.
 
     Returns:
-        (np.ndarray, tuple): (t0_vector, t0_coords).\n 
-            t0-vector: Spectral vector of the initial target (shape: [bands]).
-            t0_coords: (row, col) coordinates of the pixel with the maximum spectral norm.
+        Tuple[List[np.ndarray], List[Tuple[int, int]]]:
+            List of target spectral vectors, and their (row, col) coordinates.
     """
-
-    max_norm = -np.inf
-    t0_vector = None
-    t0_coords = None
-
-    image_height, image_width = image_reader("shape")  # special mode to get metadata
+    # Get image reader and block data
+    image_shape = image_reader("shape")
+    if image_shape is None:
+        raise ValueError("image_reader returned None, cannot determine image dimensions.")
+    
+    # Get block size
+    image_height, image_width = image_shape
     block_height, block_width = block_shape
 
-    for row_off in tqdm(range(0, image_height, block_height), desc="Scanning rows"):
-        for col_off in range(0, image_width, block_width):
-            window = ((row_off, col_off), (block_height, block_width))
-            block = image_reader(window)  # shape: (H, W, B)
+    targets = []
+    coords = []
 
-            if block is None:
-                continue
+    # Get a small valid sample block to infer band count
+    sample_block = image_reader(((0, 0), (1, 1)))
+    if not isinstance(sample_block, np.ndarray):
+        raise ValueError("-- Error: tgp's image_reader did not return a valid data block --")
 
-            # Flatten to 2D: (H*W, B)
-            h, w, b = block.shape
-            reshaped = block.reshape(-1, b)
-            norms = np.linalg.norm(reshaped, axis=1)
+    # At iteration = 0, this means no projection; identity matrix = no filtering.
+    num_bands = sample_block.shape[2]
+    projection_matrix = np.eye(num_bands, dtype=np.float32)
+    
+    for iteration in tqdm(range(max_targets), desc="Processing TGP", colour='00ff80'):
+        # Initalize local-best variables
+        max_norm = -np.inf
+        best_vector = None
+        best_coords = None
 
-            local_max_idx = np.argmax(norms)
-            local_max_val = norms[local_max_idx]
+        # Iterate through entire image
+        for row_off in range(0, image_height, block_height):
+            for col_off in range(0, image_width, block_width):
+                # Check: block boundary being out-of-bounds
+                actual_height = min(block_height, image_height - row_off)
+                actual_width = min(block_width, image_width - col_off)
 
-            if local_max_val > max_norm:
-                max_norm = local_max_val
-                t0_vector = reshaped[local_max_idx]
-                local_row = local_max_idx // w
-                local_col = local_max_idx % w
-                t0_coords = (row_off + local_row, col_off + local_col)
+                # Get next block to process
+                window = ((row_off, col_off), (actual_height, actual_width))
+                block = image_reader(window)
+                
+                # Check: Block isn't empty or returning window shape
+                if not isinstance(block, np.ndarray): 
+                    continue
+                
+                # Project block 
+                projected = project_block_onto_subspace(block, projection_matrix)
+                
+                # Check: projected data is 3D image
+                if projected.ndim != 3: raise ValueError(f"Expected 3D block, got shape {projected.shape}")
+                
+                # Reshpe data and normalize
+                reshaped = projected.reshape(-1, projected.shape[2])
+                norms = np.linalg.norm(reshaped, axis=1)
 
-    return t0_vector, t0_coords
+                # Find local maximum per-block (i.e. best target per block)
+                local_max_idx = np.argmax(norms)
+                local_max_val = norms[local_max_idx]
+
+                # Replace target If local target is best found so far
+                if local_max_val > max_norm:
+                    max_norm = local_max_val
+                    best_vector = reshaped[local_max_idx]
+                    row_in_block = local_max_idx // actual_width
+                    col_in_block = local_max_idx % actual_width
+                    best_coords = (row_off + row_in_block, col_off + col_in_block)
+
+        if best_vector is None:
+            print(f"[TGP] No more valid blocks to evaluate.")
+            break
+
+        if iteration > 0:
+            opci_val = compute_opci(projection_matrix, best_vector)
+            if opci_val < opci_threshold:
+                print(f"[TGP] Stopping: OPCI ({opci_val:.5f}) < threshold ({opci_threshold})")
+                break
+
+        targets.append(best_vector)
+        coords.append(best_coords)
+
+        # Update projection space
+        projection_matrix = compute_orthogonal_projection_matrix(targets)
+
+    return targets, coords
+
