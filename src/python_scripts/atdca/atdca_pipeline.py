@@ -123,5 +123,3 @@ def ATDCA(
 
 
 
-print("Compilation world")
-
