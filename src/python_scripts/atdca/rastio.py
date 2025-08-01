@@ -40,7 +40,7 @@ def get_virtual_multiband_reader(band_paths: List[str]):
     """
     datasets = [rasterio.open(p) for p in band_paths]
 
-    # Sanity check: all bands must match shape
+    # Check all bands must match shape
     ref_shape = (datasets[0].height, datasets[0].width)
     for dataset in datasets:
         if (dataset.height, dataset.width) != ref_shape:

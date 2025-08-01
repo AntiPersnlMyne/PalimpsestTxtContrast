@@ -21,16 +21,16 @@ import os
 import numpy as np
 
 # Assumes single-band TIFF
-input_dir = r"data\input"
+input_dir = r"data\input\test"
 output_path = r"data\output\image_bgp.tif"
 
-# Import all band paths from folder
+# Import all TIFF files from "input_dir" folder
 band_paths = []
 for filename in os.listdir(input_dir):
-    if filename.endswith('.tif'):
-        band_paths.append("data/input/" + filename)
+    if filename.endswith(('.tif', '.tiff')):
+        band_paths.append(input_dir + '\\' + filename)
             
-
+# Debug: Print number of bands (images) found
 print(f"[INFO] Using {len(band_paths)} input bands...")
 reader = rastio.get_virtual_multiband_reader(band_paths)
 
@@ -41,7 +41,12 @@ print(f"T0 found at {t0_coords} with vector: {t0_vector}")
 # Step 3: Prepare to run BGP
 input_shape = reader("shape")
 sample_block = reader(((0, 0), (256, 256)))
-bgp_block = bgp._band_generation_process_to_block(sample_block, use_sqrt=True, use_log=False)
+bgp_block = bgp._band_generation_process_to_block(
+    sample_block,
+    use_sqrt=True,
+    use_log=False
+)
+
 num_output_bands = bgp_block.shape[2]
 
 # Step 4: Create writer and run BGP
