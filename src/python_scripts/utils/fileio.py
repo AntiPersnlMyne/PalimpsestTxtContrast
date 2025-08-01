@@ -33,11 +33,11 @@ def _glob_import(filepath: str, extension: str | List[str] | None = None) -> dic
     images = {}
     supported_exts = ['.bmp', '.dib', '.jpeg', '.jpg', '.jpe', '.jp2', '.png', '.webp', '.pbm', '.pgm', '.ppm', '.sr', '.ras', '.tiff', '.tif']
     if extension is None:
-        exts = supported_exts
+        exts = supported_exts # set to default list, will import any support types
     elif isinstance(extension, str):
-        exts = [extension.lower()]
+        exts = ['.' + extension.lower()] # convert to extension - jpg -> .jpg
     else:
-        exts = [e.lower() for e in extension]
+        exts = [e.lower() for e in extension] # imports user specificed types, that match supported
 
     for filename in os.listdir(filepath):
         _, ext = os.path.splitext(filename)
@@ -47,8 +47,6 @@ def _glob_import(filepath: str, extension: str | List[str] | None = None) -> dic
             if image is not None:
                 images[filename] = image
     return images
-
-
 
 # --------------------------------------------------------------------------------------------
 # Input
@@ -71,18 +69,18 @@ def imread(filepath:str) -> np.ndarray:
     
     # Check filepath validity
     if filepath is None:
-        raise ValueError("-- Error: Filepath cannot be None")
+        raise ValueError("[FILEIO] Filepath cannot be None")
     if not isinstance(filepath, str):
-        raise TypeError("-- Error: Provide absolute (e.g. C:Users/.../image.png) or relative (e.g. ../data/image.png) \
+        raise TypeError("[FILEIO] Provide absolute (e.g. C:Users/.../image.png) or relative (e.g. ../data/image.png) \
                         path to image location on your drive. \
-                        Ensure you include the image name and its extension (e.g. /<MyPathWithoutBracket>/image.png --")
+                        Ensure you include the image name and its extension (e.g. /<MyPathWithoutBracket>/image.png")
     image = cv.imread(filepath, cv.IMREAD_UNCHANGED)
     
     # Check image validity
     if image is not None:
         return image
     else:
-        raise FileNotFoundError("-- Error: Imread file not found --")
+        raise FileNotFoundError("[FILEIO] Imread file not found")
      
     
 def imread_folder(filepath:str, extension:str|List[str]|None = None) -> dict:
@@ -95,7 +93,7 @@ def imread_folder(filepath:str, extension:str|List[str]|None = None) -> dict:
     """
     # Filepath check
     if not os.path.exists(filepath):
-        raise Exception(f"-- Error: Directory not found: {filepath} --")
+        raise Exception(f"[FILEIO] Directory not found: {filepath}")
 
     # Import images from directory
     images = _glob_import(filepath, extension)
@@ -109,9 +107,9 @@ def imread_folder(filepath:str, extension:str|List[str]|None = None) -> dict:
 def imwrite(filepath:str, image:np.ndarray) -> None:
         # Check filepath validity
     if filepath is None:
-        raise ValueError("-- Error: Filepath cannot be None")
+        raise ValueError("[FILEIO] Filepath cannot be None")
     if not isinstance(filepath, str):
-        raise TypeError("-- Error: Provide absolute (e.g. C:Users/.../) or relative (e.g. ../data/) \
+        raise TypeError("[FILEIO] Provide absolute (e.g. C:Users/.../) or relative (e.g. ../data/) \
                         path to image location on your drive.")
     
     cv.imwrite(filepath, image)

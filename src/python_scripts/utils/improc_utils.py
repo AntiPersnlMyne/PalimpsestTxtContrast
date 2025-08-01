@@ -152,7 +152,7 @@ def _normalize_image_range(
         alpha=dtype_min,
         beta=dtype_max,
         norm_type=cv.NORM_MINMAX,
-        dtype=_return_cv_dtype(img=img)
+        dtype=_return_cv_img_dtype(img=img)
     )
     
     return normalize_image
@@ -179,7 +179,7 @@ def _clip_or_norm(
         return np.clip(img, 0, np.iinfo(dtype).max).astype(dtype)
 
 
-def _return_cv_dtype(img:np.ndarray|None = None, np_dtype:np.dtype|None = None) -> int:
+def _return_cv_img_dtype(img:np.ndarray|None = None, np_dtype:np.dtype|None = None) -> int:
     """Converts np.dtype to cv.dtype. Pass in one parameter to return the dtype. If both parameters are passed (not None), np_dtype is ignored.
     Args:
         img (np.ndarray | None, optional): Returns the dtype of image as cv.dtype. If None, assumes np.dtype parameter was passed instead. Defaults to None.
