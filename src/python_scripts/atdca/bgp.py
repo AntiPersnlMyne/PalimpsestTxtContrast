@@ -115,7 +115,7 @@ def band_generation_process(
     # Get image reader and block data
     reader = image_reader("shape")
     if reader is None:
-        raise ValueError("image_reader returned None, cannot determine image dimensions.")
+        raise ValueError("[BGP] image_reader returned None, cannot determine image dimensions.")
     
     # Get block size
     image_height, image_width = reader

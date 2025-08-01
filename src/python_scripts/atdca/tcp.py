@@ -17,7 +17,7 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 from typing import Callable, List, Union, Tuple
 import numpy as np
 from tqdm import tqdm
-from python_scripts.math_utils import compute_orthogonal_projection_matrix
+from ...python_scripts.utils.math_utils import compute_orthogonal_projection_matrix
 
 
 # --------------------------------------------------------------------------------------------
@@ -25,6 +25,7 @@ from python_scripts.math_utils import compute_orthogonal_projection_matrix
 # --------------------------------------------------------------------------------------------
 ImageReader = Callable[[Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]], Union[np.ndarray, Tuple[int, int], None]]
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
+ImageWriter = Callable[[int], Callable[[WindowType, np.ndarray], None]]
 
 
 # --------------------------------------------------------------------------------------------
@@ -33,9 +34,9 @@ WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
 def run_tcp_classification(
     image_reader: ImageReader,
     targets: List[np.ndarray],
-    image_writer_factory: Callable[[int], Callable[[WindowType, np.ndarray], None]],
+    image_writer_factory: ImageWriter,
     block_shape: Tuple[int, int] = (512, 512)
-) -> None:
+    ) -> None:
     """
     Runs the Target Classification Process (TCP) for each target.
 
@@ -48,7 +49,13 @@ def run_tcp_classification(
     Returns:
         None
     """
-    image_height, image_width = image_reader("shape")
+    # Get image reader and block data
+    reader = image_reader("shape")
+    if reader is None:
+        raise ValueError("[TCP] image_reader returned None, cannot determine image dimensions.")
+    
+    # Get block size
+    image_height, image_width = reader
     block_height, block_width = block_shape
 
     for target_idx, target_vector in enumerate(targets):

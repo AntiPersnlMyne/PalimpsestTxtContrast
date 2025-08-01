@@ -28,6 +28,7 @@ from ..utils.math_utils import (
 # --------------------------------------------------------------------------------------------
 ImageReader = Callable[[Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]], Union[np.ndarray, Tuple[int, int], None]]
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
+SpectralVectors = Tuple[List[np.ndarray], List[Tuple[int, int]]]
 
 
 # --------------------------------------------------------------------------------------------
@@ -38,7 +39,7 @@ def target_generation_process(
     max_targets: int = 10,
     opci_threshold: float = 0.01,
     block_shape: Tuple[int, int] = (512, 512)
-) -> Tuple[List[np.ndarray], List[Tuple[int, int]]]:
+) -> SpectralVectors:
     """
     Target Generation Process (TGP).
 
@@ -55,7 +56,7 @@ def target_generation_process(
                                                  More blocks is easier on PC's memory, but slower overall.
 
     Returns:
-        Tuple[List[np.ndarray], List[Tuple[int, int]]]:
+        SpectralVectors:
             List of target spectral vectors, and their (row, col) coordinates.
     """
     # Get image reader and block data
