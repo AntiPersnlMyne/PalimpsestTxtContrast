@@ -13,60 +13,45 @@ __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
 
+
+
 # Import pipeline modules
 import bgp, tgp, tcp, rastio, config
+from python_scripts import utils
 
-# Other imports
-import os
+# Pyhton Modules
 import numpy as np
 
-# Assumes single-band TIFF
+
+# IO Paths
 input_dir = r"data\input\test"
 output_path = r"data\output\image_bgp.tif"
 
-# Import all TIFF files from "input_dir" folder
-band_paths = []
-for filename in os.listdir(input_dir):
-    if filename.endswith(('.tif', '.tiff')):
-        band_paths.append(input_dir + '\\' + filename)
+
+
+# Target vector along x-axis
+t0 = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+
+# Input vector
+v = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+
+# Expected result: v projected orthogonally to x-axis → [0, 2, 3]
+expected = np.array([0.0, 2.0, 3.0], dtype=np.float32)
+
+# Compute projection matrix
+P = utils.compute_orthogonal_projection_matrix([t0])
+
+# Apply projection: P @ v
+projected = P @ v
+
+print("Original vector     :", v)
+print("Expected projection :", expected)
+print("Actual projection   :", projected)
+
+# Check error
+error = np.linalg.norm(projected - expected)
+print("Projection error    :", error)
             
-# Debug: Print number of bands (images) found
-print(f"[INFO] Using {len(band_paths)} input bands...")
-reader = rastio.get_virtual_multiband_reader(band_paths)
-
-# Step 2: Find initial target T0
-t0_vector, t0_coords = tgp.target_generation_process(reader)
-print(f"T0 found at {t0_coords} with vector: {t0_vector}")
-
-# Step 3: Prepare to run BGP
-input_shape = reader("shape")
-sample_block = reader(((0, 0), (256, 256)))
-bgp_block = bgp._band_generation_process_to_block(
-    sample_block,
-    use_sqrt=True,
-    use_log=False
-)
-
-num_output_bands = bgp_block.shape[2]
-
-# Step 4: Create writer and run BGP
-writer = rastio.get_block_writer(
-    output_path=output_path,
-    image_shape=input_shape,
-    num_output_bands=num_output_bands,
-    dtype=np.float32
-)
-
-bgp.band_generation_process(
-    image_reader=reader,
-    image_writer=writer,
-    block_shape=(512, 512),
-    use_sqrt=True,
-    use_log=False
-)
-
-print(f"[INFO] Band generation completed: {output_path}")
-
 
 
 

@@ -9,6 +9,11 @@ __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Development", or "Production", or "Prototype". 
 
+
+
+# --------------------------------------------------------------------------------------------
+# Imports
+# --------------------------------------------------------------------------------------------
 # Image processing
 import numpy as np
 import cv2 as cv
@@ -21,6 +26,10 @@ import warnings
 from typing import Any, Optional, Callable, List, Tuple, Sequence
 from enum import IntEnum
 
+
+# --------------------------------------------------------------------------------------------
+# Enumerations (custom datatype flags)
+# --------------------------------------------------------------------------------------------
 # Sharpen constant aliases
 class SharpenMethod(IntEnum):
     KERNEL2D = 0
