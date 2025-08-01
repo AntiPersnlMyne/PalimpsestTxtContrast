@@ -19,6 +19,8 @@ from warnings import warn
 from rasterio import open
 from rasterio.windows import Window
 from typing import List, Union, Tuple
+from os.path import exists
+from os import makedirs
 
 
 # --------------------------------------------------------------------------------------------
@@ -84,12 +86,16 @@ def get_block_writer(output_path, image_shape, num_output_bands, dtype=float32, 
         Callable: writer(window: tuple, block: np.ndarray) -> None
     """
     
+    # Make output path if it doesn't exist
+    if not exists(output_path):
+        makedirs(output_path)
+    
     # Image data
     image_height, image_width = image_shape
 
     # TIFF profile ("structure") 
     profile = {
-        "driver": "GTiff",
+        "driver": "GTiff", # GeoTIFF supports 4+ GB TIFF files
         "height": image_height,
         "width": image_width,
         "count": num_output_bands,
