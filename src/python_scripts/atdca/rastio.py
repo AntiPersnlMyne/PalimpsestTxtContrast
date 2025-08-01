@@ -19,7 +19,7 @@ from warnings import warn
 from rasterio import open
 from rasterio.windows import Window
 from typing import List, Union, Tuple
-from os.path import exists
+from os.path import exists, dirname
 from os import makedirs
 
 
@@ -88,7 +88,7 @@ def get_block_writer(output_path, image_shape, num_output_bands, dtype=float32, 
     
     # Make output path if it doesn't exist
     if not exists(output_path):
-        makedirs(output_path)
+        makedirs(dirname(output_path), exist_ok=True)
     
     # Image data
     image_height, image_width = image_shape
