@@ -17,7 +17,7 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 from typing import Callable, List, Union, Tuple
 import numpy as np
 from tqdm import tqdm
-from ...python_scripts.utils.math_utils import compute_orthogonal_projection_matrix
+from ..utils.math_utils import compute_orthogonal_projection_matrix
 
 
 # --------------------------------------------------------------------------------------------
@@ -31,19 +31,19 @@ ImageWriter = Callable[[int], Callable[[WindowType, np.ndarray], None]]
 # --------------------------------------------------------------------------------------------
 # TCP Function
 # --------------------------------------------------------------------------------------------
-def run_tcp_classification(
+def target_classification_process(
     image_reader: ImageReader,
     targets: List[np.ndarray],
     image_writer_factory: ImageWriter,
     block_shape: Tuple[int, int] = (512, 512)
     ) -> None:
     """
-    Runs the Target Classification Process (TCP) for each target.
+    Runs the Target Classification Process (TCP).
 
     Args:
         image_reader (ImageReader): Function to stream image blocks.
         targets (List[np.ndarray]): List of target vectors (each shape: [bands]).
-        image_writer_factory (Callable): Returns a writer for target index (i.e., per-target writer).
+        image_writer_factory (Callable): Returns an image writer for a target index (i.e., per-target writer).
         block_shape (Tuple[int, int], optional): Processing block size. Defaults to (512, 512).
 
     Returns:
@@ -59,28 +59,32 @@ def run_tcp_classification(
     block_height, block_width = block_shape
 
     for target_idx, target_vector in enumerate(targets):
-        print(f"[TCP] Classifying target {target_idx}...")
-
-        # Create P that nulls all *other* targets
+        # Create P that projects out ("nulls") all other targets
         other_targets = [t for i, t in enumerate(targets) if i != target_idx]
         if other_targets:
-            P = compute_orthogonal_projection_matrix(other_targets)
+            P_target_mat = compute_orthogonal_projection_matrix(other_targets)
         else:
-            P = np.eye(target_vector.shape[0], dtype=np.float32)
+            P_target_mat = np.eye(target_vector.shape[0], dtype=np.float32)
 
+        # Get image writer
         writer = image_writer_factory(target_idx)
 
-        for row_off in tqdm(range(0, image_height, block_height), desc=f"[TCP] Target {target_idx}"):
+        for row_off in tqdm(range(0, image_height, block_height), desc=f"[TCP] Target {target_idx}", colour="YELLOW"):
             for col_off in range(0, image_width, block_width):
+                # Check: block boundary being out-of-bounds
                 actual_height = min(block_height, image_height - row_off)
                 actual_width = min(block_width, image_width - col_off)
 
+                # Get next block to process
                 window = ((row_off, col_off), (actual_height, actual_width))
                 block = image_reader(window)
+                
+                # Check: Block isn't empty or returning window shape
                 if not isinstance(block, np.ndarray):
                     continue
 
-                projected = block @ P.T  # shape: (H, W, B)
+                # Project block onto P targets
+                projected = block @ P_target_mat.T  # shape: (H, W, B)
                 response = np.tensordot(projected, target_vector, axes=([2], [0]))  # shape: (H, W)
 
                 writer(window, response.astype(np.float32))

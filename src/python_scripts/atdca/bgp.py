@@ -122,7 +122,7 @@ def band_generation_process(
     block_height, block_width = block_shape
 
     # Progress bar
-    for row_off in tqdm(range(0, image_height, block_height), desc="Processing BGP", colour='00ff80'):
+    for row_off in tqdm(range(0, image_height, block_height), desc="Processing BGP", colour='CYAN'):
         for col_off in range(0, image_width, block_width):
             # Catch/prevent out-of-bounds
             actual_height = min(block_height, image_height - row_off)

@@ -74,13 +74,13 @@ def target_generation_process(
     # Get a small valid sample block to infer band count
     sample_block = image_reader(((0, 0), (1, 1)))
     if not isinstance(sample_block, np.ndarray):
-        raise ValueError("-- Error: tgp's image_reader did not return a valid data block --")
+        raise ValueError("[TGP] image_reader did not return a valid data block")
 
     # At iteration = 0, this means no projection; identity matrix = no filtering.
     num_bands = sample_block.shape[2]
     projection_matrix = np.eye(num_bands, dtype=np.float32)
     
-    for iteration in tqdm(range(max_targets), desc="Processing TGP", colour='00ff80'):
+    for iteration in tqdm(range(max_targets), desc="Processing TGP", colour="MAGENTA"):
         # Initalize local-best variables
         max_norm = -np.inf
         best_vector = None

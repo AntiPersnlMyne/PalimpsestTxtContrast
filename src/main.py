@@ -1,74 +1,19 @@
-# #!/usr/bin/env python3
+#!/usr/bin/env python3
 
-# """main.py: Main driver file for image processing on manuscript"""
+"""main.py: Main driver file for image processing on manuscript"""
 
-# __author__ = "Gian-Mateo (GM) Tifone and Douglas Tavolette"
-# __copyright__ = "2025, RIT MISHA"
-# __credits__ = ["Gian-Mateo Tifone", "Douglas Tavolette", "Roger Easton Jr.", "David Messinger"]
-# __license__ = "MIT"
-# __version__ = "1.3"
-# __maintainer__ = "MISHA Team"
-# __email__ = "mt9485@rit.edu"
-# __status__ = "Prototype" # "Development", or "Production". 
-
-
-# # Image processing library and helpers
-# from python_scripts.utils import *          # Helper functions
-# from python_scripts.improc import *         # Image processing
-
-# def main():
-#     # Directories for "process_images"
-#     src_dir = "data/input/"
-#     dst_dir = "data/output/"
-
-#     # Logarithmic stretch
-#     process_images(src_dir, dst_dir, "", log_stretch)
-    
-#     # Bilateral filter
-#     process_images(src_dir, dst_dir, "", bilateral_filter, 
-#                     {"diameter": 3,
-#                     "sigma_color": 50,
-#                     "sigma_space": 100})
-    
-
-#     # Close windows and exit
-#     close_windows()
-
-
-
-    
-    
-    
-    
-    
-
-
-# if __name__ == "__main__":
-#     print("Hello main!")
-#     main()
-#     print("Goodbye main!")
-
-
-
-"""atdca_pipeline.py: Wraps BGP + TGP + TCP workflow into a pipeline.
-                      ATDCA: Automatic Target Detection Classification Algorithm
-                      Does: Automatically finds N likely targets in image and 
-                            classififes all pixels
-"""
-
-__author__ = "Gian-Mateo (GM) Tifone"
+__author__ = "Gian-Mateo (GM) Tifone and Douglas Tavolette"
 __copyright__ = "2025, RIT MISHA"
-__credits__ = ["Gian-Mateo Tifone"]
+__credits__ = ["Gian-Mateo Tifone", "Douglas Tavolette", "Roger Easton Jr.", "David Messinger"]
 __license__ = "MIT"
-__version__ = "1.0.0"
+__version__ = "1.3"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Development" # "Prototype", "Development", "Production"
+__status__ = "Prototype" # "Development", or "Production". 
 
 
 
 # Import pipeline modules
-from python_scripts.utils import *
 from python_scripts.atdca import *
 from typing import Union, Tuple
 
@@ -77,60 +22,65 @@ from typing import Union, Tuple
 import numpy as np
 
 
-# IO Paths
-input_dir = r"data\input\test"
-output_path = r"data\output\image_bgp.tif"
 
+# Simulate a 3-target synthetic image
 ImageReader = Callable[[Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]], Union[np.ndarray, Tuple[int, int], None]]
 
-def test_tgp_synthetic():
-    height, width, bands = 64, 64, 3
+def test_tcp_synthetic():
+    height, width, bands = 32, 32, 3
     synthetic_image = np.zeros((height, width, bands), dtype=np.float32)
 
-    # Inject synthetic targets
-    synthetic_image[5, 5] = np.array([10, 0, 0])     # T0
-    synthetic_image[10, 10] = np.array([0, 10, 0])   # T1
-    synthetic_image[20, 20] = np.array([0, 0, 10])   # T2
+    # Inject target matches
+    synthetic_image[5, 5] = np.array([10, 0, 0])   # Target 0
+    synthetic_image[10, 10] = np.array([0, 10, 0]) # Target 1
+    synthetic_image[15, 15] = np.array([0, 0, 10]) # Target 2
+
+    targets = [
+        np.array([10, 0, 0], dtype=np.float32),
+        np.array([0, 10, 0], dtype=np.float32),
+        np.array([0, 0, 10], dtype=np.float32)
+    ]
+
+    image_shape = (height, width)
 
     # Mock image_reader
-    def mock_reader(window: Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]):
+    def reader(window: Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]):
         if window == "shape":
-            return (height, width)
+            return image_shape
         (row_off, col_off), (h, w) = window
         if isinstance(row_off, int) and isinstance(col_off, int) and isinstance(h, int) and isinstance(w, int):
             return synthetic_image[row_off:row_off+h, col_off:col_off+w]
 
-    # Run TGP
-    targets, coords = target_generation_process(
-        image_reader=mock_reader,
-        max_targets=3,
-        opci_threshold=0.001,
-        block_shape=(32, 32)
+    # Writer factory — stores output in memory
+    result_images = {}
+
+    def make_writer_factory():
+        def writer_factory(target_idx: int):
+            result_images[target_idx] = np.zeros((height, width), dtype=np.float32)
+
+            def writer(window, block):
+                (row_off, col_off), (h, w) = window
+                result_images[target_idx][row_off:row_off+h, col_off:col_off+w] = block
+            return writer
+        return writer_factory
+
+    target_classification_process(
+        image_reader=reader,
+        targets=targets,
+        image_writer_factory=make_writer_factory(),
+        block_shape=(16, 16)
     )
 
-    print("[TEST] Detected coordinates:", coords)
-    print("[TEST] Target vectors:")
-    for vec in targets:
-        print(vec)
+    # Check that classification maps highlight correct pixels
+    for idx, expected_pos in enumerate([(5, 5), (10, 10), (15, 15)]):
+        classified_map = result_images[idx]
+        response = classified_map[expected_pos]
+        print(f"[TEST] Target {idx} classified value at {expected_pos}: {response:.3f}")
+        assert response > 5.0, f"Expected strong response at {expected_pos}, got {response}"
 
-    # Assert known target coordinates
-    expected_coords = [(5, 5), (10, 10), (20, 20)]
-    for actual, expected in zip(coords, expected_coords):
-        assert actual == expected, f"Expected target at {expected}, got {actual}"
-
-    # Assert target values are roughly correct
-    expected_vectors = [
-        np.array([10, 0, 0], dtype=np.float32),
-        np.array([0, 10, 0], dtype=np.float32),
-        np.array([0, 0, 10], dtype=np.float32),
-    ]
-    for vec, expected in zip(targets, expected_vectors):
-        error = np.linalg.norm(vec - expected)
-        assert error < 1e-3, f"Target mismatch: expected {expected}, got {vec}"
-
-    print("✅ TGP synthetic test passed.")
-
+    print("✅ TCP synthetic test passed.")
 
 if __name__ == "__main__":
-    test_tgp_synthetic()
+    test_tcp_synthetic()
+
 
