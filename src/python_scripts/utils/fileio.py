@@ -118,8 +118,8 @@ def discover_image_files(
         input_image_type = (input_image_type,)
 
     input_files = []
-    for ext in input_image_type:
-        input_files.extend(glob(os.path.join(input_dir, f"*.{ext}")))
+    for file_extension in input_image_type:
+        input_files.extend(glob(os.path.join(input_dir, f"*.{file_extension}")))
 
     input_files.sort()
     return input_files

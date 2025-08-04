@@ -40,6 +40,8 @@ def ATDCA(
     one_file:bool = False,
     block_shape:tuple = (512,512),
     max_targets:int = 10,
+    use_sqrt:bool = True,
+    use_log:bool = False,
     ocpi_threshold:float = 0.01,
     input_image_type:str|tuple[str, ...] = "tif"
     ) -> None:
@@ -73,9 +75,10 @@ def ATDCA(
         raise ValueError("[ATDCA] Reader could not determine shape of window")
     
     # Run small test-block before potentially failing midway through heavy computation
-    sample_block = reader(
-        ( (0, 0), (min(256, shape[0]), min(256, shape[1])) )
-        )
+    sample_block = reader(((0, 0), (min(256, shape[0]), min(256, shape[1]))))
+    if not isinstance(sample_block, np.ndarray):
+        raise ValueError("Expected sample block as np.ndarray, got invalid type.")
+    
     bgp_block = band_generation_process_to_block(sample_block)
     num_bgp_bands = bgp_block.shape[2]
 
@@ -91,7 +94,9 @@ def ATDCA(
     band_generation_process(
         image_reader=reader,
         image_writer=writer,
-        block_shape=block_shape
+        block_shape=block_shape,
+        use_sqrt=use_sqrt,
+        use_log=use_log
     )
 
     print("[ATDCA] Running Target Generation Process (TGP)...")

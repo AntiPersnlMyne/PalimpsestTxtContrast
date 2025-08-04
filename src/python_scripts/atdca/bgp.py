@@ -18,6 +18,7 @@ import numpy as np
 from itertools import combinations
 from tqdm import tqdm
 from typing import Callable, Union, Tuple
+from numba import njit
 
 
 # --------------------------------------------------------------------------------------------
@@ -34,6 +35,29 @@ ImageWriter = Callable[[WindowType, ImageBlock], None]
 # --------------------------------------------------------------------------------------------
 # BGP Functions
 # --------------------------------------------------------------------------------------------
+@njit(cache=True, fastmath=True)
+def compute_cross_bands(block: np.ndarray) -> np.ndarray:
+    """
+    Computes cross-correlated bands (i < j) for input block using Numba.
+
+    Args:
+        block (np.ndarray): Input block of shape (H, W, B)
+
+    Returns:
+        np.ndarray: Cross bands of shape (H, W, C), where C = (B * (B - 1)) / 2
+    """
+    H, W, B = block.shape
+    num_cross = B * (B - 1) // 2
+    result = np.empty((H, W, num_cross), dtype=np.float32)
+
+    idx = 0
+    for i in range(B):
+        for j in range(i + 1, B):
+            result[:, :, idx] = block[:, :, i] * block[:, :, j]
+            idx += 1
+    return result
+
+
 def band_generation_process_to_block(
     block, 
     use_sqrt=True,
@@ -48,30 +72,16 @@ def band_generation_process_to_block(
         use_log (bool, optional): If True, includes logarithmic bands ( log(1 + B) ). Defaults to False.
 
     Returns:
-        np.ndarray:  Augmented block of shape (H, W, B').
-        Includes:
-        - Original bands
-        - Auto-correlated bands
-        - Cross-correlated bands
-        - Optional: square-root and/or log bands
+        np.ndarray:  Augmented (added bands) block of shape (H, W, B').
     """
     
-    _, _, block_bands = block.shape
-    output_bands = []
-
-    # Original bands
-    output_bands.append(block)
+    output_bands = [block]
 
     # Auto-correlated bands (bi * bi)
-    auto_bands = block ** 2
-    output_bands.append(auto_bands)
-
+    output_bands.append(block ** 2)
+    
     # Cross-correlated bands (i < j) (b1 * bj)
-    cross_band_list = []
-    for i, j in combinations(range(block_bands), 2):
-        cross = block[:, :, i] * block[:, :, j]
-        cross_band_list.append(cross[:, :, np.newaxis])
-    cross_bands = np.concatenate(cross_band_list, axis=2)
+    cross_bands = compute_cross_bands(block)
     output_bands.append(cross_bands)
 
     # Square-root bands
@@ -79,14 +89,13 @@ def band_generation_process_to_block(
         sqrt_bands = np.sqrt(np.clip(block, 0, None))
         output_bands.append(sqrt_bands)
 
-    # Logarithmic bands (optional)
+    # Logarithmic bands
     if use_log:
         log_bands = np.log1p(np.clip(block, 0, None))  # log(1 + x)
         output_bands.append(log_bands)
 
     # Concat (combine) new bands into block
-    bgp_block = np.concatenate(output_bands, axis=2).astype(np.float32)
-    return bgp_block
+    return np.concatenate(output_bands, axis=2).astype(np.float32)
 
 
 def band_generation_process(

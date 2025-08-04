@@ -110,28 +110,23 @@ def get_block_writer(output_path, image_shape, num_output_bands, dtype=float32, 
 
     # Update metadata if provided
     if profile_template:
-        profile.update({k: v for k, v in profile_template.items() if k in profile})
+        profile.update({key: value for key, value in profile_template.items() if key in profile})
 
-    # Import raster
+    # Import raster with optional profile data
     dataset = open(output_path, "w", **profile)
 
     def _block_writer(window, block):
-        """
-        Writes a block to the output raster.
-
-        Args:
-            window (tuple): ((row_off, col_off), (height, width))
-            block (np.ndarray): Block data of shape (height, width, bands)
-        
-        Returns: 
-            Callable: Funtion to write blocks onto the raster image
-        """
-        
-        # Window data
         (row_off, col_off), (height, width) = window
+
+        if block.ndim == 2:
+            data = block[newaxis, :, :]
+        elif block.ndim == 3 and block.shape[2] == 1:
+            data = transpose(block, (2, 0, 1))  # Single-band
+        elif block.ndim == 3:
+            data = transpose(block, (2, 0, 1)) # Multi-band
+        else:
+            raise ValueError(f"[Writer] Unexpected block dimensions: {block.shape}")
         
-        # Rasterio expects shape: (bands, height, width)
-        data = transpose(block, (2, 0, 1))
         dataset.write(data, window=Window(col_off, row_off, width, height)) #type:ignore
 
     return _block_writer

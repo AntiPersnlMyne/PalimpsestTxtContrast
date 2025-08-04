@@ -36,7 +36,7 @@ SpectralVectors = Tuple[List[np.ndarray], List[Tuple[int, int]]]
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
-def make_tcp_writer_factory(output_dir: str, output_filename: str, image_shape: Tuple[int, int], one_file: bool):
+def make_tcp_writer_factory(output_dir:str, output_filename:str, image_shape:Tuple[int, int], one_file:bool):
     """
     Internal writer factory that returns a writer function per target.
 
@@ -44,7 +44,7 @@ def make_tcp_writer_factory(output_dir: str, output_filename: str, image_shape: 
         output_dir (str): Directory where output will be saved.
         output_filename (str): Base filename.
         image_shape (Tuple[int, int]): Shape of the output image.
-        one_file (bool): Whether all targets are stored in one file.
+        one_file (bool): Whether all targets are stored as one file.
 
     Returns:
         Callable: Function(target_index) → writer_function
@@ -156,6 +156,11 @@ def target_generation_process(
                     row_in_block = local_max_idx // actual_width
                     col_in_block = local_max_idx % actual_width
                     best_coords = (row_off + row_in_block, col_off + col_in_block)
+                    
+
+                # if isinstance(best_vector, np.ndarray):
+                #     print(f"[TGP] T0 vector norm: {np.linalg.norm(best_vector):.6f}")
+                #     print(f"[TGP] T0 coordinates: {best_coords}")
 
         if best_vector is None:
             print(f"[TGP] No more valid blocks to evaluate.")

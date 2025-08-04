@@ -71,7 +71,7 @@ def project_block_onto_subspace(
 
 def compute_opci(
     projection_matrix: np.ndarray,
-    candidate_target: np.ndarray
+    target_vector: np.ndarray
 ) -> float:
     """
     Computes the Orthogonal Projection Correlation Index (OPCI) for a candidate target vector.
@@ -85,9 +85,15 @@ def compute_opci(
     Returns:
         float: OPCI value, representing the residual norm after projection
     """
-    projected = projection_matrix @ candidate_target
-    opci_value = np.linalg.norm(projected)
+    # projected = projection_matrix @ target_vector
+    # opci_value = np.linalg.norm(projected)
 
-    return float(opci_value)
+    # return float(opci_value)
+    
+    projected = projection_matrix @ target_vector
+    numerator = np.linalg.norm(projected) ** 2
+    denominator = np.linalg.norm(target_vector) ** 2
+    return float(numerator / denominator)
+
 
 
