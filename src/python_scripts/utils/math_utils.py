@@ -4,7 +4,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -18,9 +18,9 @@ import numpy as np
 
 
 # --------------------------------------------------------------------------------------------
-# Normalization Helper Functions
+# Helper Functions
 # --------------------------------------------------------------------------------------------
-def normalize_data(data: np.ndarray) -> np.ndarray:
+def normalize_data(data: np.ndarray, min_val:float|None = None, max_val:float|None= None) -> np.ndarray:
     """
     Normalizes a numpy array to the range [0, 1] using min-max scaling.
     This function scales the data to a common range, which is essential
@@ -28,22 +28,32 @@ def normalize_data(data: np.ndarray) -> np.ndarray:
 
     Args:
         data (np.ndarray): The input array to be normalized.
+        min_val (float, optional): The global minimum value to use for scaling.
+                                   If not provided, the local min of 'data' is used.
+        max_val (float, optional): The global maximum value to use for scaling.
+                                   If not provided, the local max of 'data' is used.
 
     Returns:
         np.ndarray: The normalized array, with values in the range [0, 1].
     """
-    # Calculate the minimum and maximum values of the input data
-    min_val = np.min(data)
-    max_val = np.max(data)
+    # If global min/max are not provided, use the local min/max from the data
+    if min_val is None:
+        min_val = np.min(data)
+    if max_val is None:
+        max_val = np.max(data)
 
     # Check for division by zero, which would happen if min_val equals max_val
-    # This means the data is constant, so normalization is not needed.
-    if max_val - min_val == 0:
-        return data
+    if max_val and min_val is not None:
+        data_range = max_val - min_val
+        if  data_range == 0:
+            # Return zeros if all values are the same, indicating no variation
+            return np.zeros_like(data)
 
-    # Apply the min-max normalization formula
-    normalized_data = (data - min_val) / (max_val - min_val)
-    return normalized_data
+    # Apply the min-max normalization formula using the provided or local min/max
+    normalized_data = (data - min_val) / (data_range)
+    
+    # Ensure all normalized values are within the [0, 1] range due to floating point inaccuracies
+    return np.clip(normalized_data, 0, 1)
 
 
 # --------------------------------------------------------------------------------------------
@@ -89,7 +99,7 @@ def project_block_onto_subspace(
     Returns:
         np.ndarray: Projected block of same shape as block (height, width, bands)
     """
-    height, width, num_bands = block.shape
+    num_bands, height, width  = block.shape
     reshaped = block.reshape(-1, num_bands)  # shape: (num_pixels, bands)
 
     projected = reshaped @ projection_matrix.T  # apply projection

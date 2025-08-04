@@ -50,7 +50,7 @@ def target_classification_process(
         None
     """
     # Get image reader and block data
-    reader = image_reader("shape")
+    reader = image_reader("window_shape")
     if reader is None:
         raise ValueError("[TCP] image_reader returned None, cannot determine image dimensions.")
     

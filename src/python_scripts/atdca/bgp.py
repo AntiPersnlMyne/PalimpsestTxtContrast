@@ -4,7 +4,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -36,8 +36,12 @@ ImageWriter = Callable[[WindowType, ImageBlock], None]
 # --------------------------------------------------------------------------------------------
 # Band Generation Process (BGP)
 # --------------------------------------------------------------------------------------------
-@njit(cache=True, fastmath=True)
-def compute_correlated_bands(image_block:np.ndarray) -> np.ndarray:
+# @njit(fastmath=True, cache=True)
+def create_bands_from_block(
+    image_block: ImageBlock,
+    use_sqrt: bool,
+    use_log: bool
+) -> np.ndarray:
     """
     Creates new, non-linear bands from existing bands for the ATDCA algorithm.
     This process is based on the GOSP paper (Cheng and Ren).
@@ -45,16 +49,19 @@ def compute_correlated_bands(image_block:np.ndarray) -> np.ndarray:
     Args:
         image_block (np.ndarray): A 3D numpy array representing a block of the image,
                                   with shape (bands, height, width).
+        use_sqrt (bool): Flag to indicate if sqrt bands should be generated.
+        use_log (bool): Flag to indicate if log bands should be generated.
 
     Returns:
         np.ndarray: A 3D numpy array containing the newly generated correlated bands,
                     with shape (new_bands, height, width).
     """
+    num_bands, _, _ = image_block.shape
     
-    # channels-first, band-centric approach
-    num_bands, height, width = image_block.shape
-        # Calculate all unique cross-correlations
-    new_bands = []
+    # List to hold all new bands
+    new_bands_list: list[np.ndarray] = []
+
+    # Calculate all unique cross-correlations
     # Use combinations to avoid duplicating pairs (e.g., band_1, band_2 and band_2, band_1)
     for band_a_idx, band_b_idx in combinations(range(num_bands), 2):
         band_a = image_block[band_a_idx]
@@ -62,57 +69,70 @@ def compute_correlated_bands(image_block:np.ndarray) -> np.ndarray:
         
         # Element-wise multiplication to create the new band (cross-correlation)
         new_band = band_a * band_b
-        new_bands.append(new_band)
+        new_bands_list.append(new_band)
+
+    # --- NEW CODE: Add sqrt and log bands ---
+    if use_sqrt:
+        # np.sqrt is applied to each band individually
+        sqrt_bands = np.sqrt(image_block)
+        for band in sqrt_bands:
+            new_bands_list.append(band)
+
+    if use_log:
+        # np.log is applied to each band. We add a small constant (1e-6)
+        # to avoid taking the logarithm of zero, which would result in -inf.
+        log_bands = np.log(image_block + 1e-6)
+        for band in log_bands:
+            new_bands_list.append(band)
         
     # Stack the new bands into a single numpy array
-    new_bands = np.stack(new_bands, axis=0)
-
-    # Apply min-max normalization to the new bands to scale their values
-    # to the range [0, 1]. This is crucial for keeping values in a manageable
-    # range for subsequent steps of the algorithm.
-    new_bands = normalize_data(new_bands)
-    
-    return new_bands
+    return np.stack(new_bands_list, axis=0)
 
 
-def band_generation_process_to_block(
-    block, 
-    use_sqrt=True,
-    use_log=False
-) -> np.ndarray:
+def get_global_min_max(
+    image_reader: ImageReader,
+    image_shape: ImageShape,
+    block_shape: ImageShape,
+    use_sqrt: bool,
+    use_log: bool
+) -> Tuple[float, float]:
     """
-    Applies the Band Generation Process (BGP) to raster block. Optional flags align with Cheng and Ren (2000)'s implementation.
+    Performs a first pass over the image to find the global minimum and maximum values
+    for the newly generated bands.
 
     Args:
-        block (np.ndarray|Tuple[int,int]): Input block of shape (H, W, B) with float32 pixel values.
-        use_sqrt (bool, optional): If True, includes square-root bands.. Defaults to True.
-        use_log (bool, optional): If True, includes logarithmic bands ( log(1 + B) ). Defaults to False.
+        image_reader (ImageReader): Reader function for the input image.
+        image_shape (ImageShape): The dimensions of the entire image.
+        block_shape (Tuple[int, int]): The size of the processing blocks.
+        use_sqrt (bool): Flag to indicate if sqrt bands were generated.
+        use_log (bool): Flag to indicate if log bands were generated.
 
     Returns:
-        np.ndarray:  Augmented (added bands) block of shape (H, W, B').
+        Tuple[float, float]: A tuple containing the global minimum and maximum values.
     """
-    
-    output_bands = [block]
+    global_min = np.inf
+    global_max = -np.inf
+    image_height, image_width = image_shape
+    block_height, block_width = block_shape
 
-    # Auto-correlated bands (bi * bi)
-    output_bands.append(block ** 2)
-    
-    # Cross-correlated bands (i < j) (b1 * bj)
-    cross_bands = compute_cross_bands(block)
-    output_bands.append(cross_bands)
+    print("[BGP] First pass: Gathering global statistics...")
+    for row_off in tqdm(range(0, image_height, block_height), desc="[BGP] First pass", colour='CYAN'):
+        for col_off in range(0, image_width, block_width):
+            actual_height = min(block_height, image_height - row_off)
+            actual_width = min(block_width, image_width - col_off)
+            window = ((row_off, col_off), (actual_height, actual_width))
+            input_block = image_reader(window)
+            
+            # Check if the block is a valid numpy array before processing
+            if isinstance(input_block, np.ndarray):
+                new_bands = create_bands_from_block(input_block, use_sqrt, use_log)
+                
+                # Update global min/max
+                global_min = min(global_min, np.min(new_bands))
+                global_max = max(global_max, np.max(new_bands))
+            
+    return global_min, global_max
 
-    # Square-root bands
-    if use_sqrt:
-        sqrt_bands = np.sqrt(np.clip(block, 0, None))
-        output_bands.append(sqrt_bands)
-
-    # Logarithmic bands
-    if use_log:
-        log_bands = np.log1p(np.clip(block, 0, None))  # log(1 + x)
-        output_bands.append(log_bands)
-
-    # Concat (combine) new bands into block
-    return np.concatenate(output_bands, axis=2).astype(np.float32)
 
 
 def band_generation_process(
@@ -121,58 +141,43 @@ def band_generation_process(
     block_shape: Tuple[int, int] = (512, 512),
     use_sqrt: bool = True,
     use_log: bool = False
-    ) -> None:
+):
     """
-    Applies band generation across the full image block by block.
-
-    Args:
-        image_reader (Callable): Function to read a block or get shape. Accepts:
-                                - "shape": returns (height, width)
-                                - window: returns block (H, W, B) or None on failure
-        image_writer (Callable): Function to write a processed block to output image.
-        block_shape (Tuple[int, int], optional): Processing block shape. Defaults to (512, 512).
-        use_sqrt (bool, optional): Include square-root bands. Defaults to True.
-        use_log (bool, optional): Include log bands. Defaults to False.
-
-    Returns:
-        None
+    The main Band Generation Process function, now implementing a two-pass approach
+    for global normalization and supporting additional non-linear bands.
     """
-    
     # Get image reader and block data
-    image_shape = image_reader("shape")
+    image_shape = image_reader("window_shape")
     if image_shape is None:
         raise ValueError("[BGP] image_reader returned None, cannot determine image dimensions.")
     
-    # Get block size
     image_height, image_width = image_shape
     block_height, block_width = block_shape
 
-    # Progress bar
-    for row_off in tqdm(range(0, image_height, block_height), desc="Processing BGP", colour='CYAN'):
+    # First Pass: Find global min/max
+    if isinstance(image_shape, tuple): # Check if image_shape is type ImageShape
+        global_min, global_max = get_global_min_max(image_reader, image_shape, block_shape, use_sqrt, use_log)
+    
+    # Second Pass: Normalize and write
+    print("[BGP] Second pass: Normalizing and writing blocks...")
+    for row_off in tqdm(range(0, image_height, block_height), desc="[BGP] Second pass", colour='CYAN'):
         for col_off in range(0, image_width, block_width):
-            # Catch/prevent out-of-bounds
             actual_height = min(block_height, image_height - row_off)
             actual_width = min(block_width, image_width - col_off)
             
-            # Extract window and input as block
             window = ((row_off, col_off), (actual_height, actual_width))
             input_block = image_reader(window)
 
-            # Ignore empty/bad blocks
-            if input_block is None:
-                continue
+            # Check if the block is a valid numpy array before processing
+            if isinstance(input_block, np.ndarray):
+                # Create the bands from the block
+                output_block = create_bands_from_block(input_block, use_sqrt, use_log)
 
-            output_block = band_generation_process_to_block(
-                block=input_block,
-                use_sqrt=use_sqrt,
-                use_log=use_log
-            )
+                # Apply global normalization
+                output_block = normalize_data(output_block, min_val=global_min, max_val=global_max)
 
-            image_writer(window, output_block)
-
-
-
-
+                # Write the normalized block
+                image_writer(window, output_block)
 
 
 

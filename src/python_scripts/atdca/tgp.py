@@ -58,7 +58,6 @@ def make_tcp_writer_factory(output_dir:str, output_filename:str, image_shape:Tup
         return get_block_writer(
             output_path=output_path,
             image_shape=image_shape,
-            num_output_bands=1,
             dtype=np.float32
         )
 
@@ -94,7 +93,7 @@ def target_generation_process(
             List of target spectral vectors, and their (row, col) coordinates.
     """
     # Get image reader and block data
-    image_shape = image_reader("shape")
+    image_shape = image_reader("window_shape")
     if image_shape is None:
         raise ValueError("image_reader returned None, cannot determine image dimensions.")
     

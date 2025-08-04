@@ -70,27 +70,21 @@ def ATDCA(
     reader = get_virtual_multiband_reader(input_files)
 
     # Get shape of window
-    shape = reader("shape")
+    shape = reader("window_shape")
     if shape is None:
         raise ValueError("[ATDCA] Reader could not determine shape of window")
     
-    # Run small test-block before potentially failing midway through heavy computation
-    sample_block = reader(((0, 0), (min(256, shape[0]), min(256, shape[1]))))
-    if not isinstance(sample_block, np.ndarray):
-        raise ValueError("Expected sample block as np.ndarray, got invalid type.")
-    
-    bgp_block = band_generation_process_to_block(sample_block)
-    num_bgp_bands = bgp_block.shape[2]
-
+    # Output path for generated bands file. Bands saved to disc to free working memory.
     bgp_output_path = os.path.join(output_dir, f"{output_filename}_bgp.tif")
+    
+    print("[ATDCA] Running Band Generation Process (BGP)...")
+    
     writer = get_block_writer(
         output_path=bgp_output_path,
         image_shape=shape,
-        num_output_bands=num_bgp_bands,
         dtype=np.float32
     )
 
-    print("[ATDCA] Running Band Generation Process (BGP)...")
     band_generation_process(
         image_reader=reader,
         image_writer=writer,
@@ -117,6 +111,7 @@ def ATDCA(
             image_shape=shape,
             one_file=one_file
         )
+        
     target_classification_process(
         image_reader=bgp_reader,
         targets=targets,

@@ -14,11 +14,11 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
-from numpy import transpose, float32, newaxis, ndarray, float32, concatenate
+from numpy import transpose, newaxis, ndarray, float32, concatenate, dtype
 from warnings import warn
 from rasterio import open
 from rasterio.windows import Window
-from typing import List, Union, Tuple
+from typing import List, Tuple, Callable
 from os.path import exists, dirname
 from os import makedirs
 
@@ -26,7 +26,7 @@ from os import makedirs
 # --------------------------------------------------------------------------------------------
 # Reader (Input)
 # --------------------------------------------------------------------------------------------
-def get_virtual_multiband_reader(band_paths: List[str]):
+def get_virtual_multiband_reader(band_paths: List[str]) -> Callable:
     """
     Returns a reader that stacks multiple single-band images into a virtual multiband image.
 
@@ -34,102 +34,120 @@ def get_virtual_multiband_reader(band_paths: List[str]):
         band_paths (List[str]): List of paths to single-band TIFF files.
 
     Returns:
-        Callable: image_reader(window) -> Tuple|Array|None
+        Callable: Callable image data reader function. Reader returns -> Tuple|Array|None
     """
     datasets = [open(p) for p in band_paths]
 
-    # Check all bands must match shape
-    ref_shape = (datasets[0].height, datasets[0].width)
-    for dataset in datasets:
-        if (dataset.height, dataset.width) != ref_shape:
-            raise ValueError("-- Error in get_virtual_multiband_reader:\nAll bands must have the same dimensions --")
+    def _multiband_reader_func(window:str|List[tuple]) -> Tuple|ndarray|None:
+        """
+        Returns one of two outputs, dependent on input.
+        Returns the shape of the reader if passed "window_shape" i.e. (height, width)
+        Returns a block of data in a given window if passed 
 
-    def _image_reader(window: Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]) -> Union[ndarray, Tuple[int, int], None]:
-        if window == "shape":
-            return ref_shape
+        Args:
+            window (str | List[tuple]): "window_shape" or current window of processing image.
 
-        # Window dimensions
+        Returns:
+            tuple|np.ndarray|None: Image shape: (height, width) 
+                                   Block of data: (bands, height, width) 
+                                   Error: None
+        """
+        if window == "window_shape":
+            return datasets[0].shape
+
         (row_off, col_off), (height, width) = window
+        full_window = Window(col_off, row_off, width, height) #type:ignore
         
-        try:
-            block_list = []
-            for ds in datasets:
-                data = ds.read(1, window=Window(col_off, row_off, width, height))  # type:ignore
-                block_list.append(data[:, :, newaxis])  # Expand to (H, W, 1)
+        blocks = []
+        for dataset in datasets:
+            try:
+                blocks.append(dataset.read(1, window=full_window))
+            except Exception:
+                warn("Failed to read window, returning None.")
+                return None
 
-            stacked = concatenate(block_list, axis=2)  # Shape: (H, W, B)
-            return stacked.astype(float32)
-
-        except Exception as e:
-            warn(f"[Warning] Failed to read window {window}: {e}")
+        # Check for invalid blocks and return None
+        if not all(isinstance(block, ndarray) and block.size > 0 for block in blocks):
             return None
 
-    return _image_reader
-
+        # Stack the bands and transpose to (bands, height, width)
+        return transpose(
+                    concatenate([block[newaxis, :, :] for block in blocks], axis=0), 
+                    (0, 1, 2)
+                ).astype(float32)
+        
+    return _multiband_reader_func
 
 
 # --------------------------------------------------------------------------------------------
 # Writer (Output)
 # --------------------------------------------------------------------------------------------
-def get_block_writer(output_path, image_shape, num_output_bands, dtype=float32, profile_template=None):
+def get_block_writer(
+    output_path: str,
+    image_shape: Tuple[int, int],
+    dtype:type = float32,
+    profile_template: dict|None = None
+):
     """
-    Returns a function to write blocks to a raster image.
+    Returns a writer that handles writing blocks to an output raster file.
+    This version dynamically determines the number of output bands from the first block
+    it receives, creating a more robust and flexible pipeline.
 
     Args:
-        output_path (str): Path to output GeoTIFF.
-        image_shape (tuple): (height, width) of full image.
-        num_output_bands (int): Number of bands in the output image.
-        dtype (np.dtype): Data type of output image.
-        profile_template (dict, optional): Optional rasterio profile to inherit metadata.
+        output_path (str): The path to the output raster file.
+        image_shape (Tuple[int, int]): The dimensions of the entire image.
+        dtype (type, optional): The data type of the output raster. Defaults to float32.
+        profile_template (dict, optional): A rasterio profile to use for metadata. Defaults to None.
 
     Returns:
-        Callable: writer(window: tuple, block: np.ndarray) -> None
+        Callable: A function that writes a block of data to the output raster.
     """
-    
-    # Make output path if it doesn't exist
+    # Ensure output path is valid, creating the directory if it doesn't exist
     if not exists(output_path):
         makedirs(dirname(output_path), exist_ok=True)
     
-    # Image data
-    image_height, image_width = image_shape
+    # Close this file after the writer is done
+    dataset = None
 
-    # TIFF profile ("structure") 
-    profile = {
-        "driver": "GTiff", # GeoTIFF supports 4+ GB TIFF files
-        "height": image_height,
-        "width": image_width,
-        "count": num_output_bands,
-        "dtype": dtype,
-        "compress": "deflate",
-        "tiled": True,
-        "blockxsize": 256,
-        "blockysize": 256,
-        "interleave": "band",
-        "BIGTIFF": "YES"  # Enables 4+ GB filesize
-    }
-
-    # Update metadata if provided
-    if profile_template:
-        profile.update({key: value for key, value in profile_template.items() if key in profile})
-
-    # Import raster with optional profile data
-    dataset = open(output_path, "w", **profile)
-
-    def _block_writer(window, block):
-        (row_off, col_off), (height, width) = window
-
-        if block.ndim == 2:
-            data = block[newaxis, :, :]
-        elif block.ndim == 3 and block.shape[2] == 1:
-            data = transpose(block, (2, 0, 1))  # Single-band
-        elif block.ndim == 3:
-            data = transpose(block, (2, 0, 1)) # Multi-band
-        else:
-            raise ValueError(f"[Writer] Unexpected block dimensions: {block.shape}")
+    def _block_writer_with_setup(window, block):
+        nonlocal dataset
         
-        dataset.write(data, window=Window(col_off, row_off, width, height)) #type:ignore
+        # This will only run on the very first call.
+        if dataset is None:
+            # Determine the number of bands from the block shape
+            num_bands, _, _ = block.shape
+            
+            # Image data
+            image_height, image_width = image_shape
+        
+            # TIFF profile ("structure") 
+            profile = {
+                "driver": "GTiff", # GeoTIFF supports 4+ GB TIFF files
+                "height": image_height,
+                "width": image_width,
+                "count": num_bands,  # Determined from the block
+                "dtype": dtype,
+                "compress": "deflate",
+                "tiled": True,
+                "blockxsize": 256,
+                "blockysize": 256,
+                "interleave": "band",
+                "BIGTIFF": "YES"  # Enables 4+ GB filesize
+            }
+        
+            # Update metadata if provided
+            if profile_template:
+                profile.update({key: value for key, value in profile_template.items() if key in profile})
+        
+            # Import raster with optional profile data
+            dataset = open(output_path, "w", **profile)
 
-    return _block_writer
+        (row_off, col_off), (height, width) = window
+        
+        # We assume the incoming block is of shape (bands, height, width)
+        dataset.write(block, window=Window(col_off, row_off, width, height)) #type:ignore
+
+    return _block_writer_with_setup
 
 
 
