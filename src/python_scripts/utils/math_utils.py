@@ -15,60 +15,62 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Imports
 # --------------------------------------------------------------------------------------------
 import numpy as np
+from numba import njit
+from numpy import linalg as LA
+from numpy.typing import NDArray
+from typing import List, Tuple
+from itertools import combinations
+
+
+# --------------------------------------------------------------------------------------------
+# Custom Datatypes
+# --------------------------------------------------------------------------------------------
+SpectralVector = NDArray[np.float32]
+SpectralVectors = Tuple[List[SpectralVector], List[Tuple[int, int]]]
 
 
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
-def normalize_data(data: np.ndarray, min_val:float|None = None, max_val:float|None= None) -> np.ndarray:
+@njit(fastmath=True, cache=True)
+def normalize_data(
+    data: np.ndarray, 
+    min_val:float, 
+    max_val:float
+    ) -> np.ndarray:
     """
     Normalizes a numpy array to the range [0, 1] using min-max scaling.
-    This function scales the data to a common range, which is essential
-    for algorithms sensitive to the magnitude of input features.
 
     Args:
         data (np.ndarray): The input array to be normalized.
-        min_val (float, optional): The global minimum value to use for scaling.
-                                   If not provided, the local min of 'data' is used.
-        max_val (float, optional): The global maximum value to use for scaling.
-                                   If not provided, the local max of 'data' is used.
+        min_val (float): The global minimum value to use for scaling.
+        max_val (float): The global maximum value to use for scaling.
 
     Returns:
         np.ndarray: The normalized array, with values in the range [0, 1].
     """
-    # If global min/max are not provided, use the local min/max from the data
-    if min_val is None:
-        min_val = np.min(data)
-    if max_val is None:
-        max_val = np.max(data)
-
-    # Check for division by zero, which would happen if min_val equals max_val
-    if max_val and min_val is not None:
-        data_range = max_val - min_val
-        if  data_range == 0:
-            # Return zeros if all values are the same, indicating no variation
-            return np.zeros_like(data)
-
-    # Apply the min-max normalization formula using the provided or local min/max
-    normalized_data = (data - min_val) / (data_range)
-    
-    # Ensure all normalized values are within the [0, 1] range due to floating point inaccuracies
-    return np.clip(normalized_data, 0, 1)
+    # Check for division by zero, return 0's array
+    if max_val - min_val == 0:
+        return np.zeros_like(data)
+    return (data - min_val) / (max_val - min_val)
 
 
 # --------------------------------------------------------------------------------------------
 # Matrix Operand Functions
 # --------------------------------------------------------------------------------------------
-def compute_orthogonal_projection_matrix(target_vectors:list[np.ndarray]) -> np.ndarray:
+# @njit(fastmath=True, cache=True)
+def compute_orthogonal_projection_matrix(
+    target_vectors:list[SpectralVector]
+    ) -> np.ndarray:
     """
-    Computes the orthogonal projection matrix for the subspace spanned by target vectors.
+    Computes the orthogonal projection matrix for a given list of spectral vectors.
     This is used to project pixel vectors orthogonally away from known targets.
 
     Args:
-        target_vectors (list[np.ndarray]): List of 1D target vectors (each shape: [bands])
+        target_vectors (list[np.ndarray]): List of 1D target spectral vectors (each shape: [bands])
 
     Returns:
-        np.ndarray: Type=Float32. Orthogonal projection matrix of shape (bands, bands)
+        np.ndarray[float32]: Orthogonal projection matrix.
     """
     if len(target_vectors) == 0:
         raise ValueError("Must provide at least one target vector")
@@ -85,6 +87,7 @@ def compute_orthogonal_projection_matrix(target_vectors:list[np.ndarray]) -> np.
     return projection_matrix.astype(np.float32)
 
 
+@njit(fastmath=True, cache=True)
 def project_block_onto_subspace(
     block: np.ndarray,
     projection_matrix: np.ndarray
@@ -99,18 +102,23 @@ def project_block_onto_subspace(
     Returns:
         np.ndarray: Projected block of same shape as block (height, width, bands)
     """
-    num_bands, height, width  = block.shape
-    reshaped = block.reshape(-1, num_bands)  # shape: (num_pixels, bands)
+    num_bands, height, width = block.shape
 
-    projected = reshaped @ projection_matrix.T  # apply projection
-    projected_block = projected.reshape(height, width, num_bands)
+    # Reshape block from (bands, height, width) to (pixels, bands)
+    # The transpose is needed to correctly align the dimensions
+    reshaped = block.reshape(num_bands, height * width).T
 
-    return projected_block.astype(np.float32)
+    # Apply the projection matrix
+    projected = reshaped @ projection_matrix
+    
+    # Reshape the projected block back to the original shape
+    return projected.T.reshape(num_bands, height, width)
 
 
+@njit(fastmath=True, cache=True)
 def compute_opci(
     projection_matrix: np.ndarray,
-    target_vector: np.ndarray
+    target_vector: SpectralVector
 ) -> float:
     """
     Computes the Orthogonal Projection Correlation Index (OPCI) for a candidate target vector.
@@ -118,21 +126,15 @@ def compute_opci(
     and should be discarded or used to stop iteration
 
     Args:
-        projection_matrix (np.ndarray): Orthogonal projection matrix (shape: [bands, bands])
-        candidate_target (np.ndarray): Target candidate vector (shape: [bands])
+        projection_matrix (np.ndarray): Orthogonal projection matrix.
+        candidate_target (np.ndarray): Target candidate vector.
 
     Returns:
         float: OPCI value, representing the residual norm after projection
     """
-    # projected = projection_matrix @ target_vector
-    # opci_value = np.linalg.norm(projected)
 
-    # return float(opci_value)
+    numerator = target_vector.T @ projection_matrix @ target_vector
+    denominator = target_vector.T @ target_vector
     
-    projected = projection_matrix @ target_vector
-    numerator = np.linalg.norm(projected) ** 2
-    denominator = np.linalg.norm(target_vector) ** 2
-    return float(numerator / denominator)
-
-
-
+    # We use .item() to extract the single float value from the resulting NumPy arrays.
+    return float( (numerator / denominator).item() ) # float ( [#]-># )

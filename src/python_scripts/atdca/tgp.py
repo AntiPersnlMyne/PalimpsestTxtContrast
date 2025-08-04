@@ -13,10 +13,11 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
-from typing import Callable, List, Tuple, Union
 import numpy as np
+from typing import Callable, List, Tuple, Union
 from tqdm import tqdm
 from os.path import join
+
 from ..utils.math_utils import (
     compute_orthogonal_projection_matrix,
     project_block_onto_subspace,
@@ -28,9 +29,15 @@ from .rastio import get_block_writer
 # --------------------------------------------------------------------------------------------
 # Custom Datatypes
 # --------------------------------------------------------------------------------------------
-ImageReader = Callable[[Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]], Union[np.ndarray, Tuple[int, int], None]]
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
-SpectralVectors = Tuple[List[np.ndarray], List[Tuple[int, int]]]
+SpectralVector = np.typing.NDArray[np.float32]
+SpectralVectors = Tuple[List[SpectralVector], List[Tuple[int, int]]]
+
+ImageBlock = np.ndarray
+ImageShape = Tuple[int, int]
+
+ImageReader = Callable[[Union[str, WindowType]], Union[ImageBlock, ImageShape, None]]
+ImageWriter = Callable[[WindowType, ImageBlock], None]
 
 
 # --------------------------------------------------------------------------------------------
@@ -68,9 +75,9 @@ def make_tcp_writer_factory(output_dir:str, output_filename:str, image_shape:Tup
 # TGP Function
 # --------------------------------------------------------------------------------------------
 def target_generation_process(
-    image_reader: ImageReader,
-    max_targets: int = 10,
-    opci_threshold: float = 0.01,
+    image_reader:ImageReader,
+    max_targets:int = 10,
+    opci_threshold:float = 0.01,
     block_shape: Tuple[int, int] = (512, 512)
 ) -> SpectralVectors:
     """
@@ -109,8 +116,9 @@ def target_generation_process(
     if not isinstance(sample_block, np.ndarray):
         raise ValueError("[TGP] image_reader did not return a valid data block")
 
+    # The reader returns in (bands, height, width) format, so the number of bands is the first dimension.
+    num_bands = sample_block.shape[0]
     # At iteration = 0, this means no projection; identity matrix = no filtering.
-    num_bands = sample_block.shape[2]
     projection_matrix = np.eye(num_bands, dtype=np.float32)
     
     for iteration in tqdm(range(max_targets), desc="Processing TGP", colour="MAGENTA"):
