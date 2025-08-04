@@ -34,29 +34,45 @@ ImageWriter = Callable[[WindowType, ImageBlock], None]
 
 
 # --------------------------------------------------------------------------------------------
-# Core Computation
+# Band Generation Process (BGP)
 # --------------------------------------------------------------------------------------------
 @njit(cache=True, fastmath=True)
-def compute_cross_bands(block: np.ndarray) -> np.ndarray:
+def compute_correlated_bands(image_block:np.ndarray) -> np.ndarray:
     """
-    Computes cross-correlated bands (i < j) for input block using Numba.
+    Creates new, non-linear bands from existing bands for the ATDCA algorithm.
+    This process is based on the GOSP paper (Cheng and Ren).
 
     Args:
-        block (np.ndarray): Input block of shape (height, width, bands)
+        image_block (np.ndarray): A 3D numpy array representing a block of the image,
+                                  with shape (bands, height, width).
 
     Returns:
-        np.ndarray: Cross bands of shape (height, width, C), where C = (bands * (bands - 1)) / 2
+        np.ndarray: A 3D numpy array containing the newly generated correlated bands,
+                    with shape (new_bands, height, width).
     """
-    height, width, bands = block.shape
-    num_cross = bands * (bands - 1) // 2
-    result = np.empty((height, width, num_cross), dtype=np.float32)
+    
+    # channels-first, band-centric approach
+    num_bands, height, width = image_block.shape
+        # Calculate all unique cross-correlations
+    new_bands = []
+    # Use combinations to avoid duplicating pairs (e.g., band_1, band_2 and band_2, band_1)
+    for band_a_idx, band_b_idx in combinations(range(num_bands), 2):
+        band_a = image_block[band_a_idx]
+        band_b = image_block[band_b_idx]
+        
+        # Element-wise multiplication to create the new band (cross-correlation)
+        new_band = band_a * band_b
+        new_bands.append(new_band)
+        
+    # Stack the new bands into a single numpy array
+    new_bands = np.stack(new_bands, axis=0)
 
-    idx = 0
-    for i in range(bands):
-        for j in range(i + 1, bands):
-            result[:, :, idx] = block[:, :, i] * block[:, :, j]
-            idx += 1
-    return result
+    # Apply min-max normalization to the new bands to scale their values
+    # to the range [0, 1]. This is crucial for keeping values in a manageable
+    # range for subsequent steps of the algorithm.
+    new_bands = normalize_data(new_bands)
+    
+    return new_bands
 
 
 def band_generation_process_to_block(
