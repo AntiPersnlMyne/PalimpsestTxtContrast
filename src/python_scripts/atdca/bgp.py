@@ -19,6 +19,7 @@ from itertools import combinations
 from tqdm import tqdm
 from typing import Callable, Union, Tuple
 from numba import njit
+from ..utils.math_utils import normalize_data 
 
 
 # --------------------------------------------------------------------------------------------
@@ -33,7 +34,7 @@ ImageWriter = Callable[[WindowType, ImageBlock], None]
 
 
 # --------------------------------------------------------------------------------------------
-# BGP Functions
+# Core Computation
 # --------------------------------------------------------------------------------------------
 @njit(cache=True, fastmath=True)
 def compute_cross_bands(block: np.ndarray) -> np.ndarray:
@@ -41,18 +42,18 @@ def compute_cross_bands(block: np.ndarray) -> np.ndarray:
     Computes cross-correlated bands (i < j) for input block using Numba.
 
     Args:
-        block (np.ndarray): Input block of shape (H, W, B)
+        block (np.ndarray): Input block of shape (height, width, bands)
 
     Returns:
-        np.ndarray: Cross bands of shape (H, W, C), where C = (B * (B - 1)) / 2
+        np.ndarray: Cross bands of shape (height, width, C), where C = (bands * (bands - 1)) / 2
     """
-    H, W, B = block.shape
-    num_cross = B * (B - 1) // 2
-    result = np.empty((H, W, num_cross), dtype=np.float32)
+    height, width, bands = block.shape
+    num_cross = bands * (bands - 1) // 2
+    result = np.empty((height, width, num_cross), dtype=np.float32)
 
     idx = 0
-    for i in range(B):
-        for j in range(i + 1, B):
+    for i in range(bands):
+        for j in range(i + 1, bands):
             result[:, :, idx] = block[:, :, i] * block[:, :, j]
             idx += 1
     return result
@@ -122,12 +123,12 @@ def band_generation_process(
     """
     
     # Get image reader and block data
-    reader = image_reader("shape")
-    if reader is None:
+    image_shape = image_reader("shape")
+    if image_shape is None:
         raise ValueError("[BGP] image_reader returned None, cannot determine image dimensions.")
     
     # Get block size
-    image_height, image_width = reader
+    image_height, image_width = image_shape
     block_height, block_width = block_shape
 
     # Progress bar

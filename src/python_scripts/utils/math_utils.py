@@ -18,6 +18,35 @@ import numpy as np
 
 
 # --------------------------------------------------------------------------------------------
+# Normalization Helper Functions
+# --------------------------------------------------------------------------------------------
+def normalize_data(data: np.ndarray) -> np.ndarray:
+    """
+    Normalizes a numpy array to the range [0, 1] using min-max scaling.
+    This function scales the data to a common range, which is essential
+    for algorithms sensitive to the magnitude of input features.
+
+    Args:
+        data (np.ndarray): The input array to be normalized.
+
+    Returns:
+        np.ndarray: The normalized array, with values in the range [0, 1].
+    """
+    # Calculate the minimum and maximum values of the input data
+    min_val = np.min(data)
+    max_val = np.max(data)
+
+    # Check for division by zero, which would happen if min_val equals max_val
+    # This means the data is constant, so normalization is not needed.
+    if max_val - min_val == 0:
+        return data
+
+    # Apply the min-max normalization formula
+    normalized_data = (data - min_val) / (max_val - min_val)
+    return normalized_data
+
+
+# --------------------------------------------------------------------------------------------
 # Matrix Operand Functions
 # --------------------------------------------------------------------------------------------
 def compute_orthogonal_projection_matrix(target_vectors:list[np.ndarray]) -> np.ndarray:
