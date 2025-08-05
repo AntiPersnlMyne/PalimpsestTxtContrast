@@ -18,10 +18,11 @@ from numpy import transpose, newaxis, ndarray, float32, concatenate, dtype
 from warnings import warn
 from rasterio import open
 from rasterio.windows import Window
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, Union
 from os.path import exists, dirname
 from os import makedirs
 
+WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
 
 # --------------------------------------------------------------------------------------------
 # Reader (Input)
@@ -77,6 +78,41 @@ def get_virtual_multiband_reader(band_paths: List[str]) -> Callable:
                 ).astype(float32)
         
     return _multiband_reader_func
+
+
+def get_single_multiband_reader(file_path: str):
+    """
+    Returns a reader function for a single multi-band image file.
+
+    Args:
+        file_path (str): Path to the multi-band image file.
+
+    Returns:
+        ImageReader: A function that reads blocks from the image.
+    """
+    image = open(file_path)
+    num_bands = image.count
+
+    def _reader_func(query: Union[str, WindowType]):
+        if query == "shape":
+            return image.height, image.width
+        if query == "num_bands":
+            return num_bands
+        
+        window = query
+        ((row_off, col_off), (actual_height, actual_width)) = window
+        try:
+            return image.read(
+                out_shape=(num_bands, actual_height, actual_width),
+                window=Window(col_off, row_off, actual_width, actual_height), #type:ignore
+                dtype='float32'
+            )
+        except Exception as e:
+            print(f"Error reading window {window}: {e}")
+            return None
+    
+    return _reader_func
+
 
 
 # --------------------------------------------------------------------------------------------

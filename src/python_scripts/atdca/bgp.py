@@ -17,7 +17,7 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 import numpy as np
 from itertools import combinations
 from tqdm import tqdm
-from typing import Callable, Union, Tuple
+from typing import Callable, Union, Tuple, List
 from numba import njit
 from ..utils.math_utils import normalize_data 
 
@@ -41,7 +41,7 @@ def create_bands_from_block(
     image_block: ImageBlock,
     use_sqrt: bool,
     use_log: bool
-) -> np.ndarray:
+) -> List[np.ndarray]:
     """
     Creates new, non-linear bands from existing bands for the ATDCA algorithm.
     This process is based on the GOSP paper (Cheng and Ren).
@@ -56,37 +56,26 @@ def create_bands_from_block(
         np.ndarray: A 3D numpy array containing the newly generated correlated bands,
                     with shape (new_bands, height, width).
     """
-    num_bands, _, _ = image_block.shape
-    
-    # List to hold all new bands
-    new_bands_list: list[np.ndarray] = []
+    num_bands, height, width = image_block.shape
+    new_bands = []
 
-    # Calculate all unique cross-correlations
-    # Use combinations to avoid duplicating pairs (e.g., band_1, band_2 and band_2, band_1)
-    for band_a_idx, band_b_idx in combinations(range(num_bands), 2):
-        band_a = image_block[band_a_idx]
-        band_b = image_block[band_b_idx]
-        
-        # Element-wise multiplication to create the new band (cross-correlation)
-        new_band = band_a * band_b
-        new_bands_list.append(new_band)
+    # Get the original bands
+    original_bands = [image_block[i] for i in range(num_bands)]
+    new_bands.extend(original_bands)
 
-    # --- NEW CODE: Add sqrt and log bands ---
+    # Cross-correlation bands
+    if num_bands >= 2:
+        for band_a_idx, band_b_idx in combinations(range(num_bands), 2):
+            cross_correlation_band = image_block[band_a_idx] * image_block[band_b_idx]
+            new_bands.append(cross_correlation_band)
+
+    # Sqrt-transformed bands
     if use_sqrt:
-        # np.sqrt is applied to each band individually
-        sqrt_bands = np.sqrt(image_block)
-        for band in sqrt_bands:
-            new_bands_list.append(band)
+        for band in original_bands:
+            sqrt_band = np.sqrt(band)
+            new_bands.append(sqrt_band)
 
-    if use_log:
-        # np.log is applied to each band. We add a small constant (1e-6)
-        # to avoid taking the logarithm of zero, which would result in -inf.
-        log_bands = np.log(image_block + 1e-6)
-        for band in log_bands:
-            new_bands_list.append(band)
-        
-    # Stack the new bands into a single numpy array
-    return np.stack(new_bands_list, axis=0)
+    return new_bands
 
 
 def get_global_min_max(

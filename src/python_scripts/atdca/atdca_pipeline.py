@@ -94,7 +94,7 @@ def ATDCA(
     )
 
     print("[ATDCA] Running Target Generation Process (TGP)...")
-    bgp_reader = get_virtual_multiband_reader([bgp_output_path])
+    bgp_reader = get_single_multiband_reader(bgp_output_path)
     targets, _ = target_generation_process(
         image_reader=bgp_reader,
         max_targets=max_targets,

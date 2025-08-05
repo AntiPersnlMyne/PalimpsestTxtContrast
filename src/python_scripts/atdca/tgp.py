@@ -164,11 +164,11 @@ def target_generation_process(
                     col_in_block = local_max_idx % actual_width
                     best_coords = (row_off + row_in_block, col_off + col_in_block)
                     
-
-                # if isinstance(best_vector, np.ndarray):
-                #     print(f"[TGP] T0 vector norm: {np.linalg.norm(best_vector):.6f}")
-                #     print(f"[TGP] T0 coordinates: {best_coords}")
-
+                # --- ADD THIS PRINT STATEMENT ---
+                print(f"DEBUG: TGP received a block with shape: {block.shape}")
+                print(f"DEBUG: Initial projection matrix shape: {projection_matrix.shape}")
+                
+                
         if best_vector is None:
             print(f"[TGP] No more valid blocks to evaluate.")
             break
