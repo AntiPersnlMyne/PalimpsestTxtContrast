@@ -40,7 +40,7 @@ ImageWriter = Callable[[WindowType, ImageBlock], None]
 # Band Generation Process (BGP)
 # --------------------------------------------------------------------------------------------
 # @njit(fastmath=True, cache=True)
-def create_bands_from_block(
+def _create_bands_from_block(
     image_block: ImageBlock,
     use_sqrt: bool,
     use_log: bool
@@ -114,13 +114,13 @@ def band_generation_process(
         use_sqrt (bool, optional): If True, generate bands using square root. Defaults to False.
         use_log (bool, optional): If True, generate bands using log base 10. Defaults to False.
     """
-    # Create dataset from input data
-    # NOTE: Assumes few enough bands to store on RAM
-    # NOTE: Conversion of data to band-major is handles by read_window_data
-    input_dataset = create_dataset_from_bands(input_image_paths)
+    
+    # Create input dataset
+    input_dataset = MultibandBlockReader(input_image_paths, window_shape)
+    # block = input_dataset.read_multiband_block(row_start=100, col_start=150)
     
     # Get image and window dimensions
-    input_shape = input_dataset[0].shape
+    input_shape = input_dataset.image_shape()
     input_img_height, input_img_width = input_shape
     window_height, window_width = window_shape
     
@@ -128,10 +128,9 @@ def band_generation_process(
     global_min = np.inf
     global_max = -np.inf
     
-
     # Create (un normalized) output dataset
     output_unorm_filename = "gen_band_unorm.tif"
-    output_unorm_dataset = BlockWriterDataset(output_path=output_dir, 
+    output_unorm_dataset = BlockWriter(output_path=output_dir, 
                                                output_image_shape=input_shape, 
                                                output_image_name=output_unorm_filename,
                                                output_datatype=np.float32)
@@ -154,7 +153,7 @@ def band_generation_process(
                     window=window)
                 
                 # Create new bands
-                new_bands = create_bands_from_block(
+                new_bands = _create_bands_from_block(
                     image_block=input_block, 
                     use_sqrt=use_sqrt, 
                     use_log=use_log)
@@ -170,10 +169,10 @@ def band_generation_process(
         
         # Create output dataset
         output_norm_filename = "gen_band_norm.tif"
-        output_norm_dataset = BlockWriterDataset(output_path=output_dir, 
-                                                output_image_shape=input_shape, 
-                                                output_image_name=output_norm_filename,
-                                                output_datatype=np.float32)
+        output_norm_dataset = BlockWriter(output_path=output_dir, 
+                                          output_image_shape=input_shape, 
+                                          output_image_name=output_norm_filename,
+                                          output_datatype=np.float32)
     
     # Free memory
     del input_dataset
