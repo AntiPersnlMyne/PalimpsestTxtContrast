@@ -20,9 +20,9 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 # Import pipeline modules
 from .bgp import *
-from .tgp import *
-from .tcp import *
-from .rastio import *
+# from .tgp import *
+# from .tcp import *
+# from .rastio import *
 from ..utils.fileio import *
 
 # Pyhton Modules
@@ -36,11 +36,10 @@ import os
 def ATDCA(
     input_dir:str, 
     output_dir:str, 
-    output_filename:str = "targets", 
     one_file:bool = False,
-    block_shape:tuple = (512,512),
+    window_shape:tuple = (512,512),
     max_targets:int = 10,
-    use_sqrt:bool = True,
+    use_sqrt:bool = False,
     use_log:bool = False,
     ocpi_threshold:float = 0.01,
     input_image_type:str|tuple[str, ...] = "tif"
@@ -51,10 +50,11 @@ def ATDCA(
     Args:
         input_dir (str): Directory containing multiple **single-band** (sb) images, OR one **multi-band** (mb) image.
         output_dir (str): Output directory for processed image(s).
-        output_filename (str, optional): Filename for processed image. If `one_image` is set to True, sets name to that file. If `one_file` is set to False, creates sequenced outputs with `output_filename` as base, appending a number corresponding to which target each image belongs to. E.g., if `output_filename` is "processed", then the resultings names would be: "processed_0", "processed_1". '_1' refers to Target 1, '_2' to Target 2 etc.. Defaults to "targets".
         one_file (bool, optional): If True, concatenates outputs images into one file. If False, outputs separate files for each target. Defaults to False.
-        block_shape (tuple, optional): Size of block to process each image, in a tile-wise operation. The larger the tile, the *faster* the operation, but the heavier the load on your PC's memory. May cause program to crash -- via unsufficient memory -- if set too large. Defaults to (512,512).
+        window_shape (tuple, optional): Size of block to process each image, in a tile-wise operation. The larger the tile, the *faster* the operation, but the heavier the load on your PC's memory. May cause program to crash -- via unsufficient memory -- if set too large. Defaults to (512,512).
         max_targets (int, optional): Maximum number of targets for the algorithm to find. Program may end prematurely (i.e. before number of max_targets is reached) if ocpi is set too low. Defaults to 10.
+        use_sqrt (bool, optional): Use square root when creating sythetic bands. May give algorithm better results if True. Defaults to False.
+        use_log (bool, optional): Use logarithm when compute synthetic bands. May give algorithm better results if True. Defaults to False.
         ocpi_threshold (float, optional): Target purity score. The lower the value (e.g., 0.001), the more pure the target categories. The larger the value (e.g., 0.1), the less pure the target categories. Larger values capture more noise, but are more forgiving to slight target variations. Defaults to 0.01.
         input_image_type (str | tuple[str, ...], optional): File extension of image type without the `.` (e.g. tif, png, jpg). If set to tuple (i.e. list of types), will read all images of those types. Defaults to "tif".
     """
@@ -72,13 +72,12 @@ def ATDCA(
     
 
     # Output path for generated bands file. Bands saved to disc to free working memory.
-    bgp_output_path = os.path.join(output_dir, f"{output_filename}_bgp.tif")
     
     print("[ATDCA] Running Band Generation Process (BGP)...")
     band_generation_process(
-        image_reader=reader,
-        image_writer=writer,
-        block_shape=block_shape,
+        input_image_paths=input_files,
+        output_dir=output_dir,
+        window_shape=window_shape,
         use_sqrt=use_sqrt,
         use_log=use_log
     )
@@ -89,33 +88,33 @@ def ATDCA(
 
 
 
-    print("[ATDCA] Running Target Generation Process (TGP)...")
-    bgp_reader = get_single_multiband_reader(bgp_output_path)
-    targets, _ = target_generation_process(
-        image_reader=bgp_reader,
-        max_targets=max_targets,
-        opci_threshold=ocpi_threshold,
-        block_shape=block_shape
-    )
-    print(f"[ATDCA] TGP detected {len(targets)} target(s).")
+    # print("[ATDCA] Running Target Generation Process (TGP)...")
+    # bgp_reader = get_single_multiband_reader(bgp_output_path)
+    # targets, _ = target_generation_process(
+    #     image_reader=bgp_reader,
+    #     max_targets=max_targets,
+    #     opci_threshold=ocpi_threshold,
+    #     block_shape=block_shape
+    # )
+    # print(f"[ATDCA] TGP detected {len(targets)} target(s).")
 
-    print("[ATDCA] Running Target Classification Process (TCP)...")
-    if isinstance(shape, tuple): # Check shape returns window size
-        writer_factory = make_tcp_writer_factory(
-            output_dir=output_dir,
-            output_filename=output_filename,
-            image_shape=shape,
-            one_file=one_file
-        )
+    # print("[ATDCA] Running Target Classification Process (TCP)...")
+    # if isinstance(shape, tuple): # Check shape returns window size
+    #     writer_factory = make_tcp_writer_factory(
+    #         output_dir=output_dir,
+    #         output_filename=output_filename,
+    #         image_shape=shape,
+    #         one_file=one_file
+    #     )
         
-    target_classification_process(
-        image_reader=bgp_reader,
-        targets=targets,
-        image_writer_factory=writer_factory,
-        block_shape=block_shape
-    )
+    # target_classification_process(
+    #     image_reader=bgp_reader,
+    #     targets=targets,
+    #     image_writer_factory=writer_factory,
+    #     block_shape=block_shape
+    # )
 
-    print(f"[ATDCA] Complete. Results written to: {output_dir}")
+    # print(f"[ATDCA] Complete. Results written to: {output_dir}")
 
 
 

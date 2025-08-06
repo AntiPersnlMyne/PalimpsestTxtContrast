@@ -20,7 +20,7 @@ from tqdm import tqdm
 from typing import Callable, Union, Tuple, List, Any
 from numba import njit
 from ..utils.math_utils import normalize_data 
-import rastio
+from .rastio import *
 from ..utils.fileio import rm
 
 
@@ -63,7 +63,7 @@ def create_bands_from_block(
     assert image_block.shape[0] == image_block.shape[1], ("[BGP] Data into create_bands_from_block is expected to be band-major")
     
     # Band-major has bands as first dimension
-    num_bands, _, _ = image_block.shape
+    _, _, num_bands = image_block.shape
 
     # Get the original bands
     original_bands = [image_block[i] for i in range(num_bands)]
@@ -92,7 +92,7 @@ def create_bands_from_block(
 
 def band_generation_process(
     input_image_paths:List[str],
-    dst_dir:str,
+    output_dir:str,
     window_shape:Tuple[int,int] = (512,512),
     use_sqrt:bool = False,
     use_log:bool = False
@@ -117,7 +117,7 @@ def band_generation_process(
     # Create dataset from input data
     # NOTE: Assumes few enough bands to store on RAM
     # NOTE: Conversion of data to band-major is handles by read_window_data
-    input_dataset = rastio.create_dataset_from_bands(input_image_paths)
+    input_dataset = create_dataset_from_bands(input_image_paths)
     
     # Get image and window dimensions
     input_shape = input_dataset[0].shape
@@ -131,7 +131,7 @@ def band_generation_process(
 
     # Create (un normalized) output dataset
     output_unorm_filename = "gen_band_unorm.tif"
-    output_unorm_dataset = rastio.BlockWriterDataset(output_path=dst_dir, 
+    output_unorm_dataset = BlockWriterDataset(output_path=output_dir, 
                                                output_image_shape=input_shape, 
                                                output_image_name=output_unorm_filename,
                                                output_datatype=np.float32)
@@ -149,12 +149,9 @@ def band_generation_process(
                 window = ((row_off, col_off), (actual_height, actual_width))
         
                 # Set block of input data to process
-                input_block = rastio.read_window_data(
+                input_block = read_window_data(
                     dataset=input_dataset, 
                     window=window)
-                
-                # Reorder data to band-major i.e. bands as first dim: (height, width, bands) -> (bands, height, width)
-                np.transpose(input_block, (2, 0, 1))
                 
                 # Create new bands
                 new_bands = create_bands_from_block(
@@ -167,17 +164,13 @@ def band_generation_process(
                 global_min = min(local_min, global_min)
                 global_max = max(local_max, global_max)
                 
-                # Reorder data to row-major i.e. heigh as first dim: (bands, height, width) -> (height, width, bands)
-                np.transpose(new_bands, (1, 2, 0))
-                np.transpose(input_block, (1, 2, 0))
-                
                 # Concatenate old and new data to output
                 dst.write(np.concatenate((input_block, new_bands), axis=2))
         
         
         # Create output dataset
         output_norm_filename = "gen_band_norm.tif"
-        output_norm_dataset = rastio.BlockWriterDataset(output_path=dst_dir, 
+        output_norm_dataset = BlockWriterDataset(output_path=output_dir, 
                                                 output_image_shape=input_shape, 
                                                 output_image_name=output_norm_filename,
                                                 output_datatype=np.float32)
@@ -199,7 +192,7 @@ def band_generation_process(
                 window = ((row_off, col_off), (actual_height, actual_width))
         
                 # Set block of input data to process
-                unnorm_block = rastio.read_window_data(
+                unnorm_block = read_window_data(
                     dataset=output_unorm_dataset, 
                     window=window)
                 
@@ -211,7 +204,7 @@ def band_generation_process(
                 
                 
     # Cleanup temporary data
-    rm(dst_dir + '/' + output_unorm_filename)
+    rm(output_dir + '/' + output_unorm_filename)
         
         
         

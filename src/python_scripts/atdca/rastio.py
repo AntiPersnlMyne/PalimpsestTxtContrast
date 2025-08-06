@@ -49,7 +49,7 @@ def create_dataset_from_bands(input_bands:List[str]) -> List[np.ndarray]:
 
 
 def read_window_data(
-    dataset, 
+    dataset:List, 
     window:rasterio.windows.Window, #type:ignore
     bands:List[int]|None = None, 
     dtype:np.dtype|None = None
@@ -142,7 +142,7 @@ class BlockWriterDataset:
         
         # Check for valid output path - otherwise create it
         f_len = len(self.output_name)
-        makedirs(self.output_path[-f_len], exist_ok=True)
+        makedirs(self.output_path, exist_ok=True)
         
         self.dataset = rasterio.open(self.output_path + '/' + self.output_name, "w", **self.profile)
         return self.dataset 

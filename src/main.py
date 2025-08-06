@@ -29,8 +29,8 @@ warnings.filterwarnings("ignore", category=UserWarning, message="Dataset has no 
 # --------------------------------------------------------------------------------------------
 def main():
     # Automatic Target Detection w/ OSP input parameters
-    INPUT_DIR:str = r"data\input\test"
-    OUTPUT_DIR:str = r"data\output"
+    INPUT_DIR:str = r"data/input/test"
+    OUTPUT_DIR:str = r"data/output"
     ONE_FILE:bool = False
     BLOCK_SHAPE:tuple = (512,512)
     MAX_TARGETS:int = 10
@@ -42,7 +42,7 @@ def main():
     ATDCA(input_dir=INPUT_DIR,              # Directory of input images
           output_dir=OUTPUT_DIR,            # Directory for output
           one_file=ONE_FILE,                # Output as one file or individual bands
-          block_shape=BLOCK_SHAPE,          # Breaks image into tiles for memory-safe processing
+          window_shape=BLOCK_SHAPE,          # Breaks image into tiles for memory-safe processing
           max_targets=MAX_TARGETS,          # Number of targets for algorithm to find
           use_sqrt=USE_SQRT,                # Generate synthetic bands with sqrt  
           use_log=USE_LOG,                  # Generate synthetic bands with log
