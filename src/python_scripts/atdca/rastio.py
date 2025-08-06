@@ -37,8 +37,7 @@ class MultibandBlockReader:
     Attributes:
         filenames (List[str]): A list of paths to the raster file.
         tile_size (Tuple[int, int]): The size of each block to read.  Defaults to (256, 256).
-        srcs (List[rasterio.Dataset]): Dataset objects (images), one for each input file. 
-        Opened in the constructor and kept open for efficient reading. One for each file.
+        srcs (List[rasterio.DatasetReader]): Dataset objects (images), one for each input file. 
     """
     
     def __init__(self, filenames: List[str], tile_size: Tuple[int, int] = (256, 256)):
@@ -54,7 +53,7 @@ class MultibandBlockReader:
         self.srcs = []
         for filename in self.filenames:
             try:
-                src = rasterio.open(filename)
+                src = rasterio.open(filename, 'r')
                 self.srcs.append(src)
             except rasterio.RasterioIOError as e:
                 raise Exception(f"Error opening {filename}: {e}") # Re-raise the exception to halt execution
@@ -87,18 +86,17 @@ class MultibandBlockReader:
             
     def read_multiband_block(
         self,
-        row_start:int,
-        col_start:int
+        window:WindowType
         ) -> np.ndarray:
         """
         Reads a block of data from each raster file and combines them into a single multi-band array.
 
         Args:
-            row_start (int): The starting row of the block.
-            col_start (int): The starting column of the block.
+            window (WindowType): Region of input raster to pull data.
 
         Returns:
-            np.ndarray: A multi-band NumPy array representing the block of data.
+            np.ndarray: A multiband Numpy array representing the block of data 
+            with shape (height, width, bands), where (height, width) defined by window.
         """
         
         # Block dimensions
@@ -110,68 +108,12 @@ class MultibandBlockReader:
 
         for i, src in enumerate(self.srcs):
             try:
-                block = src.read(1, window=((row_start, row_start + block_height), (col_start, col_start + block_width)))
-                multi_band_block[:, :, i] = block
+                block = src.read(1, window=window)
+                multi_band_block[:, :, i] = block # assumes row-major
             except Exception as e:
                 raise Exception(f"[rastio] Error reading band {i}:\n{e}")
 
         return multi_band_block
-
-
-# def create_dataset_from_bands(input_bands:List[str]) -> List[np.ndarray]:
-#     """
-#     Creates dataset from list of input bands.
-#     A dataset is just a multi-channel image of all the data. 
-
-#     Args:
-#         input_bands (List[str]): List of paths to input band directories.
-
-#     Returns:
-#         List: Dataset.
-#     """
-#     # Optional efficiency:
-#     # chunk_size: 500 * 1024 * 1024
-#     # rasterio.open(path, chunked=True, block_size=chunk_size)
-    
-#     # Keywords for rasterio.open() are supplied by the incomming data
-#     return [rasterio.open(path) for path in input_bands]
-
-
-# def read_window_data(
-#     dataset, 
-#     window:rasterio.windows.Window, #type:ignore
-#     bands:List[int]|None = None, 
-#     dtype:np.dtype|None = None
-#     ) -> np.ndarray:
-#     """
-#     Reads a block of data, from a given window, of a dataset. Returned data is row-major order.
-
-#     Parameters:
-#         dataset (rasterio.Dataset): The input dataset to read from.
-#         window (rasterio.Window): The window ("slice") of the dataset to read.
-#         bands (list, optional): Which bands to read. Indexing begins at 1. 
-#             E.x., with a 4 band image, `[1,3]` reads bands 1, 2 and omits 3, 4. 
-#             If None, reads all bands. 
-#             Defaults to None.
-#         dtype (numpy.dtype, optional): The numpy data type for the read window. 
-#             If None, defaults to float32. 
-#             Defaults to None.
-
-#     Returns:
-#         numpy.ndarray: The read window of data in row-major order (height, width, bands).
-
-#     Raises:
-#         Exception: If there is an error reading the raster data.
-#     """
-
-#     try:
-#         # Read the data from the dataset within the specified window and band indices
-#         return dataset.read(indexes=bands, window=window, out_dtype=dtype)
-
-#     except rasterio.RasterioIOError as e:
-#         raise Exception(f"[rastio] Error reading raster data:\n{e}")
-#     except Exception as e:
-#         raise Exception(f"[rastio] Error in read_window_data:\n{e}")
 
 
 
@@ -184,13 +126,7 @@ def _block_writer(window, block, dataset):
     dataset.write(block, window=Window(col_off, row_off, width, height), indexes=0) #type:ignore
 
 
-# Example Usage:
-'''
-with BlockWriterDataset('/example.tif', block, np.float32) as dst:
-    data = np.ones((150, 250), dtype=np.float32)
-    dst.write(data)
-'''
-class BlockWriter:
+class MultibandBlockWriter:
     """
     A class that handles writing blocks of data to an output raster file.
 
