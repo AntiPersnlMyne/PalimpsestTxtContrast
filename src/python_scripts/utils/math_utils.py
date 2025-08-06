@@ -19,7 +19,7 @@ from numba import njit
 from numpy import linalg as LA
 from numpy.typing import NDArray
 from typing import List, Tuple
-from itertools import combinations
+from warnings import warn
 
 
 # --------------------------------------------------------------------------------------------
@@ -32,10 +32,10 @@ SpectralVectors = Tuple[List[SpectralVector], List[Tuple[int, int]]]
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
-@njit(fastmath=True, cache=True)
+# @njit(fastmath=True, cache=True)
 def normalize_data(
-    data: np.ndarray, 
-    min_val:float, 
+    data: np.ndarray,
+    min_val:float,
     max_val:float
     ) -> np.ndarray:
     """
@@ -43,16 +43,25 @@ def normalize_data(
 
     Args:
         data (np.ndarray): The input array to be normalized.
-        min_val (float): The global minimum value to use for scaling.
-        max_val (float): The global maximum value to use for scaling.
 
     Returns:
         np.ndarray: The normalized array, with values in the range [0, 1].
     """
-    # Check for division by zero, return 0's array
-    if max_val - min_val == 0:
-        return np.zeros_like(data)
-    return (data - min_val) / (max_val - min_val)
+    
+    # Check datatype
+    if not np.issubdtype(data.dtype, np.floating):
+        data = data.astype(float)
+        
+    # Flatten data
+    orig_shape = data.shape
+    data = data.flatten()
+    
+    # Normalize data to range [0,1]
+    data = (data - min_val) / (max_val - min_val)
+
+    # Restore data in original shape
+    return data.reshape(orig_shape)
+    
 
 
 # --------------------------------------------------------------------------------------------
@@ -133,7 +142,7 @@ def project_block_onto_subspace(
     return projected.T.reshape(num_bands, height, width)
 
 
-@njit(fastmath=True, cache=True)
+# @njit(fastmath=True, cache=True)
 def compute_opci(
     projection_matrix: np.ndarray,
     target_vector: SpectralVector

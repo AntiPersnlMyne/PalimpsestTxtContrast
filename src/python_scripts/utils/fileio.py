@@ -19,6 +19,7 @@ import numpy as np
 from typing import List, Tuple
 from glob import glob
 import os
+from shutil import rmtree
 
 
 
@@ -47,6 +48,11 @@ def _glob_imread(filepath: str, extension: str | List[str] | None = None) -> dic
                 images[filename] = image
     return images
 
+
+def rm(directory:str):
+    """Deletes a directory and all of its contents"""
+    rmtree(directory)
+    
 
 # --------------------------------------------------------------------------------------------
 # Input

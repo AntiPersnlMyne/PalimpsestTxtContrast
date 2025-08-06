@@ -58,33 +58,23 @@ def ATDCA(
         ocpi_threshold (float, optional): Target purity score. The lower the value (e.g., 0.001), the more pure the target categories. The larger the value (e.g., 0.1), the less pure the target categories. Larger values capture more noise, but are more forgiving to slight target variations. Defaults to 0.01.
         input_image_type (str | tuple[str, ...], optional): File extension of image type without the `.` (e.g. tif, png, jpg). If set to tuple (i.e. list of types), will read all images of those types. Defaults to "tif".
     """
+    
+    # --------------------------------------------------------------------------------------------
+    # Get input data
+    # --------------------------------------------------------------------------------------------
     # Locate all image files of user-specified type in input directory
     input_files = discover_image_files(input_dir, input_image_type)
     
     if not input_files:
-        raise FileNotFoundError(f"No input images found in {input_dir} with extensions: {input_image_type}")
+        raise FileNotFoundError(f"No input images found in {input_dir} with extension(s): {'.'.join(input_image_type)}")
 
-    print(f"[ATDCA] Found {len(input_files)} input band(s). Initializing reader...")
+    print(f"[ATDCA] Found {len(input_files)} input band(s).")
     
-    # Get reader which stacks multiple single-band images into a virtual multiband image
-    reader = get_virtual_multiband_reader(input_files)
 
-    # Get shape of window
-    shape = reader("window_shape")
-    if shape is None:
-        raise ValueError("[ATDCA] Reader could not determine shape of window")
-    
     # Output path for generated bands file. Bands saved to disc to free working memory.
     bgp_output_path = os.path.join(output_dir, f"{output_filename}_bgp.tif")
     
     print("[ATDCA] Running Band Generation Process (BGP)...")
-    
-    writer = get_block_writer(
-        output_path=bgp_output_path,
-        image_shape=shape,
-        dtype=np.float32
-    )
-
     band_generation_process(
         image_reader=reader,
         image_writer=writer,
@@ -92,6 +82,12 @@ def ATDCA(
         use_sqrt=use_sqrt,
         use_log=use_log
     )
+
+
+
+
+
+
 
     print("[ATDCA] Running Target Generation Process (TGP)...")
     bgp_reader = get_single_multiband_reader(bgp_output_path)
