@@ -32,7 +32,7 @@ def main():
     INPUT_DIR:str = r"data/input/test"
     OUTPUT_DIR:str = r"data/output"
     ONE_FILE:bool = False
-    BLOCK_SHAPE:tuple = (128,128)
+    BLOCK_SHAPE:tuple = (512,512)
     MAX_TARGETS:int = 10
     USE_SQRT:bool = True
     USE_LOG:bool = False    
@@ -42,7 +42,7 @@ def main():
     ATDCA(input_dir=INPUT_DIR,              # Directory of input images
           output_dir=OUTPUT_DIR,            # Directory for output
           one_file=ONE_FILE,                # Output as one file or individual bands
-          window_shape=BLOCK_SHAPE,          # Breaks image into tiles for memory-safe processing
+          window_shape=BLOCK_SHAPE,         # Breaks image into tiles for memory-safe processing
           max_targets=MAX_TARGETS,          # Number of targets for algorithm to find
           use_sqrt=USE_SQRT,                # Generate synthetic bands with sqrt  
           use_log=USE_LOG,                  # Generate synthetic bands with log
@@ -62,10 +62,8 @@ if __name__ == "__main__":
     print(f"\n-- Execution finished --\nNJIT, 11 bands. Runtime = {(time() - start):.2f}")
 
 # TEST 3-band Timing results
-# NJIT: 177 s
-#       193 s
-#       167 s
-#
+# BGP,128: 145
+# BGP,256: 144
 #
 
 
