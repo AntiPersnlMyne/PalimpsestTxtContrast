@@ -55,7 +55,7 @@ def _create_bands_from_block(
                     with shape (new_bands, height, width) where (height, width) are
                     determined by the original image_block.
     """
-    
+        
     # extract bands into list
     num_bands, _, _ = image_block.shape 
     original_bands = [image_block[band_idx,:,:] for band_idx in range(num_bands)]
@@ -99,16 +99,13 @@ def band_generation_process(
     input_dataset = MultibandBlockReader(input_image_paths)
     input_shape = input_dataset.image_shape()
     src_height, src_width = input_shape
-    win_height, win_width = window_shape
+    win_height, win_width = window_shape    
     
     # Determine number of bands up front by using a preview block
     preview_block = input_dataset.read_multiband_block(((0, 0), window_shape))
     sample_bands = _create_bands_from_block(preview_block, use_sqrt, use_log)
     num_output_bands = sample_bands.shape[0]
     del preview_block, sample_bands # free memory
-    
-    # # Reload dataset after reading preview (some readers may be errored)
-    # input_dataset = MultibandBlockReader(input_image_paths, window_shape)
     
     # initalize band-wise norm variables
     band_mins = np.full(num_output_bands, np.inf, dtype=np.float32)
@@ -149,6 +146,8 @@ def band_generation_process(
                     # write block
                     writer.write_block(window=window, block=new_bands)
                     del block, new_bands  # free memory
+                
+                if row_off == 0: system("clear||clc") # clear warnings
 
     
     # --------------------------------------------------------------------------------------------

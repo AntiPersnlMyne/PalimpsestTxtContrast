@@ -66,7 +66,7 @@ def ATDCA(
     input_files = discover_image_files(input_dir, input_image_type)
     
     if not input_files:
-        raise FileNotFoundError(f"No input images found in {input_dir} with extension(s): {'.'.join(input_image_type)}")
+        raise FileNotFoundError(f"No input images found in {input_dir} with extension(s): {input_image_type}")
 
     print(f"[ATDCA] Found {len(input_files)} input band(s).")
     

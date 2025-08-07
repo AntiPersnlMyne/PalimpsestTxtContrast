@@ -29,10 +29,10 @@ warnings.filterwarnings("ignore", category=UserWarning, message="Dataset has no 
 # --------------------------------------------------------------------------------------------
 def main():
     # Automatic Target Detection w/ OSP input parameters
-    INPUT_DIR:str = r"data/input/test"
-    OUTPUT_DIR:str = r"data/output"
+    INPUT_DIR:str = "data/input/arch_165_sb"
+    OUTPUT_DIR:str = "data/output"
     ONE_FILE:bool = False
-    BLOCK_SHAPE:tuple = (512,512)
+    BLOCK_SHAPE:tuple = (256,256)
     MAX_TARGETS:int = 10
     USE_SQRT:bool = True
     USE_LOG:bool = False    
