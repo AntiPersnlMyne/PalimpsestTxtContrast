@@ -123,6 +123,7 @@ def band_generation_process(
             output_image_shape = input_shape, 
             output_image_name =  output_unorm_filename, 
             num_bands =          num_output_bands, 
+            window_shape =       window_shape,
             output_datatype =    np.float32
         ) as writer:
             print("[BGP] Generating new bands (pass 1) ...")

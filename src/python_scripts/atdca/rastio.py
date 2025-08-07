@@ -126,18 +126,16 @@ class MultibandBlockWriter:
         output_dtype (type, optional): The data type of the output raster. Defaults to float32.
     """
     
-    def __init__(self, output_path, output_image_shape, output_image_name, num_bands: int|None = None, output_datatype=np.float32):
+    def __init__(self, output_path, output_image_shape, output_image_name, window_shape:Tuple[int,int] = (512,512), num_bands: int|None = None, output_datatype=np.float32):
         self.output_path = output_path
         self.output_shape = output_image_shape
         self.output_name = output_image_name
         self.output_dtype = output_datatype
+        self.window_shape = window_shape
         self.dataset = None 
         self.num_bands = num_bands or 1
 
-    def __enter__(self):
-        blockxsize = 256        # Size of each window by default
-        blockysize = blockxsize # chosen arbitrarily
-        
+    def __enter__(self):      
         self.profile = {
             "driver": "GTiff", # Supports 4+ GB TIFF files
             "height": self.output_shape[0],
@@ -146,8 +144,8 @@ class MultibandBlockWriter:
             "dtype": self.output_dtype,
             "compress": "deflate",
             "tiled": True,
-            "blockxsize": blockxsize, 
-            "blockysize": blockysize,
+            "blockxsize": self.window_shape[1], 
+            "blockysize": self.window_shape[0],
             "interleave": "band",
             "BIGTIFF": "YES" # Enables 4+ GB files
         }
@@ -169,8 +167,12 @@ class MultibandBlockWriter:
             window (WindowType): Section of output dataset to write block to. Size: ( (row_off, col_off), (win_height, win_width) )
             block (np.ndarray): Block of data to be written. Size: (bands, win_height, win_width).
         """
+        # Set write parameters
         (row_off, col_off), (height, width) = window
         expected_shape = (self.profile["count"], height, width)
+        self.profile["blockxsize"] = width
+        self.profile["blockxsize"] = height
+        
         assert block.shape == expected_shape, f"[rastio] Shape mismatch: {block.shape} vs expected: {expected_shape}"
 
         win = Window(col_off, row_off, width, height) #type:ignore
