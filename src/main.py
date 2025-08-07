@@ -59,11 +59,11 @@ def main():
 if __name__ == "__main__":
     start = time()
     main()
-    print(f"\n-- Execution finished --\nNJIT, 11 bands. Runtime = {(time() - start):.2f}")
+    print(f"\n[main] - Execution finished -\nRuntime = {(time() - start):.2f}")
 
 # Timing results
 # BGP, block=512, band=3: 215
-# BGP, block=512, band=3, @njit: 
+# BGP, block=512, band=3, @njit: 221
 
 # BGP, block=256, band=11: 1629
 #

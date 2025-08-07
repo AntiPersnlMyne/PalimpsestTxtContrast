@@ -18,10 +18,12 @@ import numpy as np
 from itertools import combinations
 from tqdm import tqdm
 from typing import Tuple, List
-from ..utils.math_utils import normalize_data 
+from os import system
+from numba import njit
+from ..utils.math_utils import normalize_data, normalize_block
 from .rastio import *
 from ..utils.fileio import rm
-from os import system
+
 
 
 # --------------------------------------------------------------------------------------------
@@ -34,6 +36,8 @@ ImageBlock = np.ndarray
 # --------------------------------------------------------------------------------------------
 # Band Generation Process (BGP)
 # --------------------------------------------------------------------------------------------
+# @njit(parallel=True, fastmath=True, cache=True)
+@njit
 def _create_bands_from_block(
     image_block: ImageBlock,
     use_sqrt: bool,
@@ -54,22 +58,43 @@ def _create_bands_from_block(
                     determined by the original image_block.
     """
         
-    # extract bands into list
-    num_bands, _, _ = image_block.shape 
-    original_bands = [image_block[band_idx,:,:] for band_idx in range(num_bands)]
-    new_bands = original_bands.copy() # new_bands also stores the original 
+    # Pre-allocate output size
+    num_bands, height, width = image_block.shape 
+    
+    tot_num_bands = num_bands                           # original
+    tot_num_bands += (num_bands * (num_bands - 1)) // 2 # correlation
+    if use_sqrt: tot_num_bands += num_bands             # sqrt
+    if use_log: tot_num_bands += num_bands              # log
+    
+    new_bands = np.empty((tot_num_bands, height, width), dtype=image_block.dtype) 
 
-    # cross-correlation bands
-    for band_a_idx, band_b_idx in combinations(range(num_bands), 2):
-        new_bands.append(image_block[band_a_idx,:,:] * image_block[band_b_idx,:,:])
+    idx = 0 # correctly stack new bands to output
+    
+    # original
+    for band in range(num_bands):
+        new_bands[idx,:,:] = image_block[band,:,:]
+        idx+=1
 
-    # optional, add sqrt and log bands
+    # correlation
+    for band_a_idx in range(num_bands):
+        for band_b_idx in range(band_a_idx + 1, num_bands): # avoids duplicate combinations
+            new_bands[idx,:,:] = image_block[band_a_idx,:,:] * image_block[band_b_idx,:,:]
+            idx+=1
+
+    # sqrt 
     if use_sqrt:
-        new_bands.extend([np.sqrt(band) for band in original_bands])
+        for band in range(num_bands):
+            new_bands[idx,:,:] = np.sqrt(image_block[band,:,:])
+            idx+=1
+            
+    # log
     if use_log:
-        new_bands.extend([np.log1p(band) for band in original_bands])
+        for band in range(num_bands):
+            new_bands[idx,:,:] = np.log1p(image_block[band,:,:])
+            idx+=1
 
-    return np.stack(new_bands, axis=0) # shape: (new_bands, height, width)
+    return new_bands
+
 
 def band_generation_process(
     input_image_paths:List[str],
@@ -171,10 +196,8 @@ def band_generation_process(
             
                     # get data block and normalize
                     block = reader.read_multiband_block(window=window)
-                    norm_block = np.empty_like(block)
-                    for i in range(block.shape[0]):
-                        norm_block[i] = normalize_data(block[i], min_val=band_mins[i], max_val=band_maxs[i])
-
+                    norm_block = normalize_block(block=block, band_mins=band_mins, band_maxs=band_maxs)
+                    
                     # write block
                     writer.write_block(window=window, block=norm_block)
                     del block, norm_block # free memory    

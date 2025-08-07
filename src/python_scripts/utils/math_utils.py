@@ -32,7 +32,7 @@ SpectralVectors = Tuple[List[SpectralVector], List[Tuple[int, int]]]
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
-# @njit(fastmath=True, cache=True)
+# @njit
 def normalize_data(
     data: np.ndarray,
     min_val:float,
@@ -62,6 +62,37 @@ def normalize_data(
     # Restore data in original shape
     return data.reshape(orig_shape)
     
+    
+@njit
+def normalize_block(
+    block:np.ndarray, 
+    band_mins:np.ndarray, 
+    band_maxs:np.ndarray
+    ) -> np.ndarray:
+    """
+    Normalize a block using min/max per band.
+    
+    Args:
+        block (np.ndarray): Block of data to normalize. Size: (bands, H, W)
+        band_mins (np.ndarray): Size: (bands,)
+        band_maxs (np.ndarray): Size: (bands,)
+    
+    Returns:
+        np.ndarray (bands, H, W) normalized to [0,1]
+    """
+    
+    num_bands, height, width = block.shape
+    norm_block = np.empty_like(block)
+
+    for band in range(num_bands):
+        min_val = band_mins[band]
+        max_val = band_maxs[band]
+        range_val = max_val - min_val if max_val > min_val else 1.0  # prevent div-by-zero
+        for i in range(height):
+            for j in range(width):
+                norm_block[band, i, j] = (block[band, i, j] - min_val) / range_val
+
+    return norm_block
 
 
 # --------------------------------------------------------------------------------------------
