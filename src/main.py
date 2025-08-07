@@ -32,7 +32,7 @@ def main():
     INPUT_DIR:str = r"data/input/test"
     OUTPUT_DIR:str = r"data/output"
     ONE_FILE:bool = False
-    BLOCK_SHAPE:tuple = (512,512)
+    BLOCK_SHAPE:tuple = (128,128)
     MAX_TARGETS:int = 10
     USE_SQRT:bool = True
     USE_LOG:bool = False    

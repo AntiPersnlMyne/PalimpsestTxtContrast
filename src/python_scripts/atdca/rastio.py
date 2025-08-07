@@ -27,7 +27,7 @@ WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
 
 
 # --------------------------------------------------------------------------------------------
-# Input
+# Reader (Input)
 # --------------------------------------------------------------------------------------------
 class MultibandBlockReader:
     """
@@ -40,7 +40,7 @@ class MultibandBlockReader:
         srcs (List[rasterio.DatasetReader]): Dataset objects (images), one for each input file. 
     """
     
-    def __init__(self, filenames: List[str], tile_size: Tuple[int, int] = (256, 256)):
+    def __init__(self, filenames: List[str], window_size: Tuple[int, int] = (256, 256)):
         """
         Initializes the MultiBandBlockReader object.
 
@@ -49,7 +49,7 @@ class MultibandBlockReader:
             tile_size (Tuple[int, int]): The size of each block to read.
         """
         self.filenames = filenames
-        self.tile_size = tile_size
+        self.tile_size = window_size
         self.srcs = []
         for filename in self.filenames:
             try:
@@ -72,7 +72,7 @@ class MultibandBlockReader:
             src.close()
             
 
-    def __del__(self, exc_type, exc_val, exc_tb):
+    def __del__(self):
         """
         Closes all open raster files when object is no longer referenced
         """
@@ -80,8 +80,8 @@ class MultibandBlockReader:
             src.close()
             
     
-    def image_shape(self) -> Tuple[int,int]:
-        return self.srcs[0].shape()
+    def image_shape(self) -> Tuple[int, int]:
+        return self.srcs[0].shape  # (height, width)
             
             
     def read_multiband_block(
@@ -101,31 +101,24 @@ class MultibandBlockReader:
         
         # Block dimensions
         num_bands = len(self.srcs)
-        block_height = self.tile_size[0]
-        block_width = self.tile_size[1]
+        (row_off, col_off), (block_height, block_width) = window
 
-        multi_band_block = np.empty((block_height, block_width, num_bands), dtype=np.float32) # Adjust data type as needed
+        multi_band_block = np.empty((num_bands, block_height, block_width), dtype=np.float32)
 
-        for i, src in enumerate(self.srcs):
+        for band_idx, src in enumerate(self.srcs):
             try:
-                block = src.read(1, window=window)
-                multi_band_block[:, :, i] = block # assumes row-major
+                block = src.read(1, window=Window(col_off, row_off, block_width, block_height)) #type:ignore
+                multi_band_block[band_idx,:,:] = block # assumes band-major
             except Exception as e:
-                raise Exception(f"[rastio] Error reading band {i}:\n{e}")
+                raise Exception(f"[rastio] Error reading band {band_idx}:\n{e}")
 
         return multi_band_block
 
 
 
 # --------------------------------------------------------------------------------------------
-# Output
+# Writer (Output)
 # --------------------------------------------------------------------------------------------
-def _block_writer(window, block, dataset):
-    """Writes a block of data to the raster dataset, at the specified window."""
-    (row_off, col_off), (height, width) = window
-    dataset.write(block, window=Window(col_off, row_off, width, height), indexes=0) #type:ignore
-
-
 class MultibandBlockWriter:
     """
     A class that handles writing blocks of data to an output raster file.
@@ -166,25 +159,33 @@ class MultibandBlockWriter:
         }
         
         # Check for valid output path - otherwise create it
-        f_len = len(self.output_name)
         makedirs(self.output_path, exist_ok=True)
         
         self.dataset = rasterio.open(self.output_path + '/' + self.output_name, "w", **self.profile)
-        return self.dataset 
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Closes dataset after finished writing to it"""
         if self.dataset:
             self.dataset.close() 
 
-    def write(self, block):
-        """Writes a block of data to the output raster ("dataset")"""
-        # (0,0) - Starting coordinate in output raster to begin writing
-        # block.shape - size of data blocks that will be written per call of `write`
-        window = (0, 0), block.shape
-        # win - Origin and size of window where block will be written
-        # bloc - block of data that will be written
-        _block_writer(window, block, self.dataset)  # Call block writer
+    def write_block(self, window: WindowType, block: np.ndarray) -> None:
+        (row_off, col_off), (height, width) = window
+        expected_shape = (block.shape[0], height, width)
+        if block.shape != expected_shape:
+            raise ValueError(f"Block shape {block.shape} does not match expected shape {expected_shape} for window {window}")
+        
+        if self.dataset:
+            # Check if expected band-count matches block's band-count
+            if self.dataset.count != block.shape[0]:
+                # Update band count in dataset metadata and reopen with correct count
+                self.dataset.close()
+                self.profile["count"] = block.shape[0] # ( [0] bands, [1] height, [2] width)
+                self.dataset = rasterio.open(self.output_path + '/' + self.output_name, "w", **self.profile)
+
+            win = Window(col_off, row_off, width, height) #type:ignore
+
+            self.dataset.write(block, window=win)
 
 
 

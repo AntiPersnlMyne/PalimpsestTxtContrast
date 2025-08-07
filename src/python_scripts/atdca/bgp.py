@@ -22,6 +22,7 @@ from numba import njit
 from ..utils.math_utils import normalize_data 
 from .rastio import *
 from ..utils.fileio import rm
+import copy
 
 
 # --------------------------------------------------------------------------------------------
@@ -44,7 +45,7 @@ def _create_bands_from_block(
     image_block: ImageBlock,
     use_sqrt: bool,
     use_log: bool
-) -> List[np.ndarray]:
+) -> np.ndarray:
     """
     Creates new, non-linear bands from existing bands for the ATDCA algorithm.
 
@@ -61,43 +62,29 @@ def _create_bands_from_block(
     """
     
     # row-major has bands as third dimension
-    height, width, num_bands = image_block.shape
-    
-    assert height == width, ("[BGP] Data into create_bands_from_block is expected to be row-major")
-    del height, width # unneeded 
+    num_bands, _, _ = image_block.shape
 
-    # Get the original bands
-    original_bands = [image_block[:, :, i] for i in range(num_bands)]
-    # new_bands also stores the original
-    new_bands = original_bands 
+    original_bands = [image_block[band_idx,:,:] for band_idx in range(num_bands)]
+    new_bands = original_bands.copy() # new_bands also stores the original 
 
     # Cross-correlation bands
-    # Uses `combinations` to prevent redundant cross-correlated bands
     for band_a_idx, band_b_idx in combinations(range(num_bands), 2):
-        cross_correlation_band = image_block[band_a_idx,:,:] * image_block[band_b_idx,:,:]
-        new_bands.append(cross_correlation_band)
+        new_bands.append(image_block[band_a_idx,:,:] * image_block[band_b_idx,:,:])
 
-    # Sqrt-transformed bands
     if use_sqrt:
-        for band in original_bands:
-            sqrt_band = np.sqrt(band)
-            new_bands.append(sqrt_band)
-            
-    # Log-transformed bands
+        new_bands.extend([np.sqrt(band) for band in original_bands])
     if use_log:
-        for band in original_bands:
-            sqrt_band = np.log1p(band)
-            new_bands.append(sqrt_band)
+        new_bands.extend([np.log1p(band) for band in original_bands])
 
-    return new_bands
+    return np.stack(new_bands, axis=0) # Shape: (new_bands, height, width)
 
 
 def band_generation_process(
     input_image_paths:List[str],
     output_dir:str,
-    window_shape:Tuple[int,int] = (512,512),
-    use_sqrt:bool = False,
-    use_log:bool = False
+    window_shape:Tuple[int,int],
+    use_sqrt:bool,
+    use_log:bool
     ) -> None:
     """
     The Band Generation Process. 
@@ -109,125 +96,91 @@ def band_generation_process(
     Args:
         input_image_paths (List[str]): List of paths to input images / multispectral data.
         dst_dir (str): Output directory of generated band image. 
-        window_shape (Tuple[int,int], optional): Shape of each block to process. 
+        window_shape (Tuple[int,int]): Shape of each block to process. 
             Larger blocks proceess faster and use more memory. 
             Smaller block process slower with a smaller memory footprint. 
-            Defaults to (512,512).
-        use_sqrt (bool, optional): If True, generate bands using square root. Defaults to False.
-        use_log (bool, optional): If True, generate bands using log base 10. Defaults to False.
+        use_sqrt (bool): If True, generate bands using square root.
+        use_log (bool): If True, generate bands using log base 10.
     """
     
 # --------------------------------------------------------------------------------------------
 # Pass 1: Generate new bands
 # --------------------------------------------------------------------------------------------
 
-    # Create input dataset
+    # create input dataset
     input_dataset = MultibandBlockReader(input_image_paths, window_shape)
     
-    # Get image and window dimensions
+    # get image and window dimensions
     input_shape = input_dataset.image_shape()
-    input_img_height, input_img_width = input_shape
-    window_height, window_width = window_shape
+    src_height, src_width = input_shape
+    win_height, win_width = window_shape
     
-    # Initalize normalization variables
+    # initalize normalization variables
     global_min = np.inf
     global_max = -np.inf
     
-    # Create (un normalized) output dataset
     output_unorm_filename = "gen_band_unorm.tif"
-    output_unorm_dataset = MultibandBlockWriter(output_path=output_dir, 
-                                               output_image_shape=input_shape, 
-                                               output_image_name=output_unorm_filename,
-                                               output_datatype=np.float32)
+    output_norm_filename = "gen_band_norm.tif"
     
-    # Create un-normalized bands
-    with output_unorm_dataset as dst:
-        print("[BGP] Generating new bands and calculating global min/max ...")
-        for row_off in tqdm(range(0, input_img_height, window_height), desc="[BGP] First pass", colour="CYAN"):
-            for col_off in range(0, input_img_width, window_width):
+    # create un-normalized bands
+    with MultibandBlockWriter(output_path=output_dir, output_image_shape=input_shape, output_image_name=output_unorm_filename, output_datatype=np.float32) as dst:
+        print("[BGP] Generating new bands (pass 1) ...")
+        for row_off in tqdm(range(0, src_height, win_height), desc="[BGP] First pass", colour="CYAN"):
+            for col_off in range(0, src_width, win_width):
                 
-                # Prevent block from accessing out-of-bounds
-                actual_height = min(window_height, input_img_height - row_off)
-                actual_width = min(window_width, input_img_width - col_off)
-        
-                # Set new window coordinates
+                # prevent block from accessing out-of-bounds
+                actual_height = min(win_height, src_height - row_off)
+                actual_width = min(win_width, src_width - col_off)
                 window = ((row_off, col_off), (actual_height, actual_width))
         
-                # Get data block
-                input_block = input_dataset.read_multiband_block(window=window)
+                # get data block
+                block = input_dataset.read_multiband_block(window=window)
                 
-                # Create new bands from data block
-                # new_bands also contains the original bands
-                new_bands = _create_bands_from_block(image_block=input_block, use_sqrt=use_sqrt, use_log=use_log)
+                # create new bands from data block
+                new_bands = _create_bands_from_block(image_block=block, use_sqrt=use_sqrt, use_log=use_log)
 
-                # Update global min/max 
-                local_min, local_max = np.min(new_bands), np.max(new_bands)
-                global_min = min(local_min, global_min)
-                global_max = max(local_max, global_max)
+                # update global min/max 
+                block_min, block_max = np.min(new_bands), np.max(new_bands)
+                global_min = min(block_min, global_min)
+                global_max = max(block_max, global_max)
                 
-                # Write block
-                dst.write(new_bands)
+                # write block
+                dst.write_block(window=window, block=new_bands)
+                del block, new_bands  # free memory
         
-        
-    # Free memory
+    # free memory
     del input_dataset
-    
     
     
 # --------------------------------------------------------------------------------------------
 # Pass 2: Normalize the bands
 # --------------------------------------------------------------------------------------------
 
-    # Create output dataset
-    output_norm_filename = "gen_band_norm.tif"
-    output_norm_dataset = MultibandBlockWriter(
-        output_path=output_dir, 
-        output_image_shape=input_shape, 
-        output_image_name=output_norm_filename,
-        output_datatype=np.float32)
+    unorm_path = f"{output_dir}/{output_unorm_filename}"
+    input_unorm_dataset = MultibandBlockReader([unorm_path], window_shape)
     
-    # Object to read un-normalized data
-    input_unorm_dataset = MultibandBlockReader(
-        filenames=[output_dir+'/'+output_unorm_filename],
-        tile_size=window_shape
-    )
 
-    # Normalize the bands 
-    with output_norm_dataset as dst:
-        print("[BGP] Normalizing the data ...") 
-        for row_off in tqdm(range(0, input_img_height, window_height), desc="[BGP] Second pass", colour="WHITE"):
-            for col_off in range(0, input_img_width, window_width):
+    # normalize the bands 
+    with MultibandBlockWriter(output_path=output_dir, output_image_shape=input_shape, output_image_name=output_norm_filename, output_datatype=np.float32) as dst:
+        print("[BGP] Normalizing bands (pass 2) ...") 
+        for row_off in tqdm(range(0, src_height, win_height), desc="[BGP] Second pass", colour="CYAN"):
+            for col_off in range(0, src_width, win_width):
                 
-                # Prevent block from accessing out-of-bounds
-                actual_height = min(window_height, input_img_height - row_off)
-                actual_width = min(window_width, input_img_width - col_off)
-        
-                # Set new window coordinates
+                # prevent block from accessing out-of-bounds
+                actual_height = min(win_height, src_height - row_off)
+                actual_width = min(win_width, src_width - col_off)
                 window = ((row_off, col_off), (actual_height, actual_width))
         
-                # Get data block
-                unnorm_block = input_unorm_dataset.read_multiband_block(window=window)
+                # get data block and normalize
+                block = input_unorm_dataset.read_multiband_block(window=window)
+                norm_block = normalize_data(data=block, min_val=global_min, max_val=global_max)
                 
-                # Normalize data block
-                norm_block = normalize_data(data=unnorm_block, min_val=global_min, max_val=global_max)
+                # write block
+                dst.write_block(window=window, block=norm_block)
+                del block, norm_block # free memory    
                 
-                # Write block
-                dst.write(norm_block)
-                
-                
-    # Delete un-normalized data
-    rm(output_dir + '/' + output_unorm_filename)
-        
-        
-        
-
-
-
-
-
-
-
-
+    rm(unorm_path)
+    
 
 
 
