@@ -17,8 +17,7 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 import numpy as np
 from itertools import combinations
 from tqdm import tqdm
-from typing import Callable, Union, Tuple, List
-from numba import njit
+from typing import Tuple, List
 from ..utils.math_utils import normalize_data 
 from .rastio import *
 from ..utils.fileio import rm
@@ -35,7 +34,6 @@ ImageBlock = np.ndarray
 # --------------------------------------------------------------------------------------------
 # Band Generation Process (BGP)
 # --------------------------------------------------------------------------------------------
-# @njit(fastmath=True, cache=True)
 def _create_bands_from_block(
     image_block: ImageBlock,
     use_sqrt: bool,
@@ -72,7 +70,6 @@ def _create_bands_from_block(
         new_bands.extend([np.log1p(band) for band in original_bands])
 
     return np.stack(new_bands, axis=0) # shape: (new_bands, height, width)
-
 
 def band_generation_process(
     input_image_paths:List[str],

@@ -29,10 +29,10 @@ warnings.filterwarnings("ignore", category=UserWarning, message="Dataset has no 
 # --------------------------------------------------------------------------------------------
 def main():
     # Automatic Target Detection w/ OSP input parameters
-    INPUT_DIR:str = "data/input/arch_165_sb"
+    INPUT_DIR:str = "data/input/test"
     OUTPUT_DIR:str = "data/output"
     ONE_FILE:bool = False
-    BLOCK_SHAPE:tuple = (256,256)
+    WINDOW_SHAPE:tuple = (512,512)
     MAX_TARGETS:int = 10
     USE_SQRT:bool = True
     USE_LOG:bool = False    
@@ -42,7 +42,7 @@ def main():
     ATDCA(input_dir=INPUT_DIR,              # Directory of input images
           output_dir=OUTPUT_DIR,            # Directory for output
           one_file=ONE_FILE,                # Output as one file or individual bands
-          window_shape=BLOCK_SHAPE,         # Breaks image into tiles for memory-safe processing
+          window_shape=WINDOW_SHAPE,        # Breaks image into tiles for memory-safe processing
           max_targets=MAX_TARGETS,          # Number of targets for algorithm to find
           use_sqrt=USE_SQRT,                # Generate synthetic bands with sqrt  
           use_log=USE_LOG,                  # Generate synthetic bands with log
@@ -61,9 +61,13 @@ if __name__ == "__main__":
     main()
     print(f"\n-- Execution finished --\nNJIT, 11 bands. Runtime = {(time() - start):.2f}")
 
-# TEST 3-band Timing results
-# BGP, 512: 215
+# Timing results
+# BGP, block=512, band=3: 215
+# BGP, block=512, band=3, @njit: 
+
+# BGP, block=256, band=11: 1629
 #
+# 
 
 
 
