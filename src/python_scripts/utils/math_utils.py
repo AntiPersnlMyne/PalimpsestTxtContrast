@@ -4,7 +4,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -32,7 +32,7 @@ SpectralVectors = Tuple[List[SpectralVector], List[Tuple[int, int]]]
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
-# @njit
+@njit
 def normalize_data(
     data: np.ndarray,
     min_val:float,
@@ -48,10 +48,6 @@ def normalize_data(
         np.ndarray: The normalized array, with values in the range [0, 1].
     """
         
-    # Check datatype
-    if not np.issubdtype(data.dtype, np.floating):
-        data = data.astype(float)
-        
     # Flatten data
     orig_shape = data.shape
     data = data.flatten()
@@ -63,6 +59,7 @@ def normalize_data(
     return data.reshape(orig_shape)
     
     
+# @njit(fastmath=True, cache=True)
 @njit
 def normalize_block(
     block:np.ndarray, 
@@ -74,8 +71,8 @@ def normalize_block(
     
     Args:
         block (np.ndarray): Block of data to normalize. Size: (bands, H, W)
-        band_mins (np.ndarray): Size: (bands,)
-        band_maxs (np.ndarray): Size: (bands,)
+        band_mins (np.ndarray): Size: (bands, )
+        band_maxs (np.ndarray): Size: (bands, )
     
     Returns:
         np.ndarray (bands, H, W) normalized to [0,1]

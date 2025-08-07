@@ -4,7 +4,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -15,12 +15,11 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Imports
 # --------------------------------------------------------------------------------------------
 import numpy as np
-from itertools import combinations
 from tqdm import tqdm
 from typing import Tuple, List
 from os import system
 from numba import njit
-from ..utils.math_utils import normalize_data, normalize_block
+from ..utils.math_utils import normalize_block
 from .rastio import *
 from ..utils.fileio import rm
 
@@ -124,7 +123,7 @@ def band_generation_process(
     win_height, win_width = window_shape    
     
     # Determine number of bands up front by using a preview block
-    preview_block = input_dataset.read_multiband_block(((0, 0), window_shape))
+    preview_block = input_dataset.read_multiband_block(((0, 0), (5,5)))
     sample_bands = _create_bands_from_block(preview_block, use_sqrt, use_log)
     num_output_bands = sample_bands.shape[0]
     del preview_block, sample_bands # free memory
@@ -139,7 +138,7 @@ def band_generation_process(
     # --------------------------------------------------------------------------------------------
     # Pass 1: Generate unnormalized output
     # --------------------------------------------------------------------------------------------
-    with MultibandBlockReader(input_image_paths) as reader:
+    with input_dataset as reader:
         with MultibandBlockWriter(
             output_path =        output_dir, 
             output_image_shape = input_shape, 
@@ -202,7 +201,7 @@ def band_generation_process(
                     writer.write_block(window=window, block=norm_block)
                     del block, norm_block # free memory    
                     
-    rm(unorm_path) # free unnorm after norm written
+    rm(unorm_path) # delete unnorm data
     
     
 
