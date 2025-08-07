@@ -4,7 +4,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -19,9 +19,10 @@ from tqdm import tqdm
 from typing import Tuple, List
 from os import system
 from numba import njit
-from ..utils.math_utils import normalize_block
+from ..utils.math_utils import normalize_block_worker
 from .rastio import *
 from ..utils.fileio import rm
+from ..utils.parallel import parallel_normalize
 
 
 
@@ -100,7 +101,8 @@ def band_generation_process(
     output_dir:str,
     window_shape:Tuple[int,int],
     use_sqrt:bool,
-    use_log:bool
+    use_log:bool,
+    max_workers:int|None = None
     ) -> None:
     """
     The Band Generation Process. Generates synthetic, non-linear bands as combinations of existing bands. 
@@ -114,6 +116,8 @@ def band_generation_process(
             Smaller block process slower with a smaller memory footprint. 
         use_sqrt (bool): If True, generate bands using square root.
         use_log (bool): If True, generate bands using log base 10.
+        max_workers (int|None, optional): Defines degree of parallelism, i.e. more workers = more fast. 
+            Number depends on CPU model. None lets program choose.
     """
         
     # Initial scan to determine band count and output shape
@@ -176,30 +180,35 @@ def band_generation_process(
     # Pass 2: Normalize output
     # --------------------------------------------------------------------------------------------
     unorm_path = f"{output_dir}/{output_unorm_filename}"
-    with MultibandBlockReader([unorm_path]) as reader:
-        with MultibandBlockWriter(
-            output_path =        output_dir, 
-            output_image_shape = input_shape, 
-            output_image_name =  output_norm_filename, 
-            num_bands =          num_output_bands, 
-            output_datatype =    np.float32
-        ) as writer:
-            print("[BGP] Normalizing bands (pass 2) ...") 
-            for row_off in tqdm(range(0, src_height, win_height), desc="[BGP] Second pass", colour="CYAN"):
-                for col_off in range(0, src_width, win_width):
-                        
-                    # prevent block from accessing out-of-bounds
-                    actual_height = min(win_height, src_height - row_off)
-                    actual_width = min(win_width, src_width - col_off)
-                    window = ((row_off, col_off), (actual_height, actual_width))
-            
-                    # get data block and normalize
-                    block = reader.read_multiband_block(window=window)
-                    norm_block = normalize_block(block=block, band_mins=band_mins, band_maxs=band_maxs)
-                    
-                    # write block
-                    writer.write_block(window=window, block=norm_block)
-                    del block, norm_block # free memory    
+    
+    # Get all possible windows 
+    windows = []
+    for row_off in range(0, src_height, win_height):
+        for col_off in range(0, src_width, win_width):
+            h = min(win_height, src_height - row_off)
+            w = min(win_width, src_width - col_off)
+            windows.append(((row_off, col_off), (h, w)))
+
+    # Open the writer
+    with MultibandBlockWriter(
+        output_path=output_dir,
+        output_image_shape=input_shape,
+        output_image_name=output_norm_filename,
+        num_bands=num_output_bands,
+        output_datatype=np.float32
+    ) as writer:
+        # Stream in parallel: workers read+normalize, parent writes
+        parallel_normalize(
+            unorm_path=unorm_path,
+            windows=windows,
+            band_mins=band_mins,
+            band_maxs=band_maxs,
+            writer=writer,
+            max_workers=None,   # use all cores
+            inflight=2,         # cap RAM: ~workers*inflight blocks in memory
+            show_progress=True,
+            clip01=True
+        )
                     
     rm(unorm_path) # delete unnorm data
     

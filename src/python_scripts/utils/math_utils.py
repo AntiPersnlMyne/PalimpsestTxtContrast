@@ -4,7 +4,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -19,7 +19,6 @@ from numba import njit
 from numpy import linalg as LA
 from numpy.typing import NDArray
 from typing import List, Tuple
-from warnings import warn
 
 
 # --------------------------------------------------------------------------------------------
@@ -91,6 +90,35 @@ def normalize_block(
 
     return norm_block
 
+
+def normalize_block_worker(
+    block: np.ndarray,
+    band_mins: np.ndarray,
+    band_maxs: np.ndarray
+    ) -> np.ndarray:
+    """
+    Normalize a block per band using provided global min/max arrays.
+
+    Args:
+        block (np.ndarray): Array of shape (bands, height, width).
+        band_mins (np.ndarray): Min values for each band.
+        band_maxs (np.ndarray): Max values for each band.
+
+    Returns:
+        np.ndarray: Normalized block of same shape.
+    """
+    
+    norm_block = np.empty_like(block)
+    
+    for i in range(block.shape[0]): # iterate bands
+        band = block[i]
+        min_val = band_mins[i]
+        max_val = band_maxs[i]
+        # avoid div0
+        if (max_val != min_val): norm_block[i] = (band - min_val) / (max_val - min_val)
+    
+    return norm_block
+    
 
 # --------------------------------------------------------------------------------------------
 # Matrix Operand Functions
