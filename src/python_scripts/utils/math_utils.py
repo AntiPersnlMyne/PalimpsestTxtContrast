@@ -47,9 +47,7 @@ def normalize_data(
     Returns:
         np.ndarray: The normalized array, with values in the range [0, 1].
     """
-    
-    print(f"[math_utils] Data shape is {data.shape}")
-    
+        
     # Check datatype
     if not np.issubdtype(data.dtype, np.floating):
         data = data.astype(float)

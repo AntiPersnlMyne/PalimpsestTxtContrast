@@ -22,6 +22,7 @@ from numba import njit
 from ..utils.math_utils import normalize_data 
 from .rastio import *
 from ..utils.fileio import rm
+from os import system
 
 
 # --------------------------------------------------------------------------------------------

@@ -62,8 +62,7 @@ if __name__ == "__main__":
     print(f"\n-- Execution finished --\nNJIT, 11 bands. Runtime = {(time() - start):.2f}")
 
 # TEST 3-band Timing results
-# BGP,128: 145
-# BGP,256: 144
+# BGP, 512: 215
 #
 
 
