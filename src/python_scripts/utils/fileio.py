@@ -19,7 +19,7 @@ import numpy as np
 from typing import List, Tuple
 from glob import glob
 import os
-from shutil import rmtree
+from warnings import warn
 
 
 
@@ -49,9 +49,12 @@ def _glob_imread(filepath: str, extension: str | List[str] | None = None) -> dic
     return images
 
 
-def rm(directory:str):
+def rm(filepath:str) -> None:
     """Deletes a directory and all of its contents"""
-    rmtree(directory)
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    else:
+        warn("[fileio] Filepath does not exist")
     
 
 # --------------------------------------------------------------------------------------------
