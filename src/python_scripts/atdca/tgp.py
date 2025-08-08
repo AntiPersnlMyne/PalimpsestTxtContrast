@@ -85,16 +85,16 @@ def _best_target(
 
             # Convert the flat index back into row/col coordinates
             (row_off, col_off), (win_height, win_width) = window
-            block_row, block_col = divmod(max_px_idx, win_height)
+            block_row, block_col = divmod(max_px_idx, win_width)
             
             # Convert tile-local coordinates to full image coordinates 
-            im_row, im_col = row_off + block_row, col_off + block_col
+            img_row, img_col = row_off + block_row, col_off + block_col
             
              # Extract all bands (bands,:,:) from the best pixel
             bands = block[:, block_row, block_col].astype(np.float32)
            
             # Update best target
-            target = Target(max_px_val, im_row, im_col, bands)
+            target = Target(max_px_val, img_row, img_col, bands)
             if target.value > best_target.value:
                 best_target = target
 
@@ -181,7 +181,6 @@ def target_generation_process(
 
     # Calculate initial target
     if use_parallel:
-        pass
         t0 = scan_for_max_parallel(
             paths=generated_bands, windows=windows, p_matrix=None,
             max_workers=max_workers, inflight=inflight, show_progress=show_progress
@@ -200,7 +199,6 @@ def target_generation_process(
     for _ in range(1, max_targets):
         # Find next candidate in orthogonal space
         if use_parallel:
-            pass
             best_target = scan_for_max_parallel(
                 paths=generated_bands, windows=windows, p_matrix=p_matrix,
                 max_workers=max_workers, inflight=inflight, show_progress=show_progress,

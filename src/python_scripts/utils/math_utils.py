@@ -39,7 +39,6 @@ SpectralVectors = Tuple[List[SpectralVector], List[Tuple[int, int]]]
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
-@njit
 def block_l2_norms(block:np.ndarray) -> np.ndarray:
     """
     Compute L2 (Euclidian) norms from (num_bands, height, width) block
@@ -52,11 +51,9 @@ def block_l2_norms(block:np.ndarray) -> np.ndarray:
     Returns:
         np.ndarray: _description_
     """
-    return normalize(block, block, norm_type=NORM_L2)
-    '''numpy-@njit
+    # return normalize(block, block, norm_type=NORM_L2) # opencv
     norms = np.sum(block.astype(np.float32) ** 2, axis=0, dtype=np.float32)
     return np.sqrt(norms, dtype=np.float32)
-    '''
 
 
 
@@ -122,11 +119,6 @@ def project_block_onto_subspace(
     # Reshape block from (bands, height, width) to (pixels, bands)
     # The transpose is needed to correctly align the dimensions
     reshaped = block.reshape(num_bands, height * width).T
-    
-    # --- ADD THESE PRINT STATEMENTS ---
-    print(f"Shape of reshaped matrix (A): {reshaped.shape}")
-    print(f"Shape of projection_matrix (B): {projection_matrix.shape}")
-    # ----------------------------------
 
     # Apply the projection matrix
     projected = reshaped @ projection_matrix
