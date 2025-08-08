@@ -21,7 +21,9 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 from .bgp import band_generation_process
 from .tgp import target_generation_process
 # from .tcp import *
+
 from ..utils.fileio import discover_image_files
+from numpy import ndarray
 
 
 
@@ -83,7 +85,7 @@ def ATDCA(
 
 
     print("[ATDCA] Running Target Generation Process (TGP)...")
-    target_generation_process(
+    targets:list[ndarray] = target_generation_process(
         generated_bands=[f"{output_dir}/gen_band_norm.tif"],
         window_shape=window_shape,
         max_targets=max_targets,
