@@ -19,10 +19,10 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "2.0.0"
+__version__ = "2.0.0" 
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Prototype"  # "Prototype", "Development", "Production"
+__status__ = "Development"  # "Prototype", "Development", "Production"
 
 # --------------------------------------------------------------------------------------------
 # Imports & thread oversubscription guards (safe defaults)
