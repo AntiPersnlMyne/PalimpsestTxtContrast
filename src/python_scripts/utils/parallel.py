@@ -82,7 +82,7 @@ def _chunked(iterable: Iterable[Any], size: int) -> Iterator[List[Any]]:
 # ======================================================================================
 # Pass 1: read -> create synthetic bands (generation)
 # ======================================================================================
-# Per-process state for generation
+
 _gen_state: dict[str, Any] = {
     "paths": None,       # List[str]
     "use_sqrt": False,
@@ -91,8 +91,15 @@ _gen_state: dict[str, Any] = {
 }
 
 
-def _init_generate_worker(input_paths: List[str], func_module: str, func_name: str, use_sqrt: bool, use_log: bool) -> None:
-    """Initializer for Pass 1 workers.
+def _init_generate_worker(
+    input_paths: List[str], 
+    func_module: str, 
+    func_name: str, 
+    use_sqrt: bool, 
+    use_log: bool
+    ) -> None:
+    """
+    Initializer for Pass 1 workers.
 
     Args:
         input_paths: Paths to input rasters. One multiband or many single-band files.
@@ -240,54 +247,83 @@ def parallel_generate_streaming(
 
 
 # ======================================================================================
-# Pass 2: normalization (uses unnormalized TIFF produced in Pass 1)
+# Pass 2: bands -> normalize -> write (normalization)
 # ======================================================================================
+
 _worker_state: dict[str, Any] = {
+    """Stores global information accessible to the worker"""
+    
     "path": None,          # str
-    "band_mins": None,     # np.ndarray, shape (bands,)
-    "band_maxs": None,     # np.ndarray, shape (bands,)
-    "clip01": True,        # bool
+    "band_mins": None,     # np.ndarray; shape: (bands,)
+    "band_maxs": None,     # np.ndarray; shape: (bands,)
 }
 
 
-def _init_normalize_worker(unorm_path: str, band_mins: np.ndarray, band_maxs: np.ndarray, clip01: bool) -> None:
-    """Initializer for normalization workers (Pass 2)."""
+def _init_normalize_worker(
+    unorm_path: str, 
+    band_mins: np.ndarray, 
+    band_maxs: np.ndarray
+    ) -> None:
+    """
+    Initalizes worker process by
+    1. Setup global information accessable to the worker
+    2. Ensure any BLAS pools are initalized and resources ready
+
+    Args:
+        unorm_path (str): Path to unnormalized dataset.
+        band_mins (np.ndarray): Array of min-value per band.
+        band_maxs (np.ndarray): Array of max-value per band.
+    """
+    # Instantiate global worker variables
     _worker_state["path"] = unorm_path
     _worker_state["band_mins"] = np.asarray(band_mins, dtype=np.float32)
     _worker_state["band_maxs"] = np.asarray(band_maxs, dtype=np.float32)
-    _worker_state["clip01"] = bool(clip01)
 
     # Light warmup (no disk I/O) to pre-allocate and ensure BLAS pools are quiet
-    b = _worker_state["band_mins"].shape[0]
-    dummy = np.zeros((b, 4, 4), dtype=np.float32)
-    denom = np.maximum(_worker_state["band_maxs"] - _worker_state["band_mins"], 1e-8)
-    _ = (dummy - _worker_state["band_mins"][..., None, None]) / denom[..., None, None]
+    b_dim_len = _worker_state["band_mins"].shape[0]
+    dummy_block = np.zeros((b_dim_len, 4, 4), dtype=np.float32)
+    denom = np.maximum(_worker_state["band_maxs"] - _worker_state["band_mins"], 1e-8) # prevent div 0
+    _ = (dummy_block - _worker_state["band_mins"][..., None, None]) / denom[..., None, None]
 
 
-def _normalize_windows_chunk(windows_chunk: List[WindowType]) -> List[Tuple[WindowType, np.ndarray]]:
-    """Worker: read a chunk of windows and return normalized blocks for each.
-
-    Returns list[(window, norm_block)] where norm_block has shape (bands, h, w), float32.
+def _normalize_windows_chunk(
+    windows_chunk: List[WindowType]
+    ) -> List[Tuple[WindowType, np.ndarray]]:
     """
-    # print(f"[worker] pid={getpid()} processing {len(windows_chunk)} windows")
+    (per-worker) Read a chunk of windows and return normalized blocks for each.
+
+    Args:
+        windows_chunk (List[WindowType]): List of windows - not chunks - to normalize.
+
+    Returns:
+        List[Tuple[WindowType, np.ndarray]]: list[(window, norm_block)] where norm_block has shape (bands, h, w), float32.
+    """
+    
+    # Get global worker variables for workers to access
     path: str = _worker_state["path"]
     mins: np.ndarray = _worker_state["band_mins"]
     maxs: np.ndarray = _worker_state["band_maxs"]
-    clip01: bool = _worker_state["clip01"]
 
-    denom = np.maximum(maxs - mins, 1e-8).astype(np.float32)
-    out: List[Tuple[WindowType, np.ndarray]] = []
+    # bandwise calculate denominator; const varaible
+    denom = np.maximum(maxs - mins, 1e-8).astype(np.float32) # prevent div 0
+    out:List[Tuple[WindowType, np.ndarray]] = []
 
+    # Calculate norm of each window and add results to list
     with rasterio.open(path, "r") as src:
         for window in windows_chunk:
+            
+            # Get data block
             (row_off, col_off), (h, w) = window
             block = src.read(window=Window(col_off, row_off, w, h)).astype(np.float32) #type:ignore
-            norm = (block - mins[:, None, None]) / denom[:, None, None]
-            if clip01:
-                np.clip(norm, 0.0, 1.0, out=norm)
+            
+            # np.newaxis for block dimension compatibility - doesn't add new data
+            norm = (block - mins[:, np.newaxis, np.newaxis]) / denom[:, np.newaxis, np.newaxis]
+            np.clip(norm, 0.0, 1.0, out=norm)
+            
+            # append normalized tile to end of output
             out.append((window, norm))
 
-    return out
+    return out # length: len(windows_chunk) 
 
 
 def parallel_normalize_streaming(
@@ -299,14 +335,27 @@ def parallel_normalize_streaming(
     writer: SupportsWriteBlock,
     max_workers: int | None = None,
     inflight: int = 2,
-    chunk_size: int = 4,
-    show_progress: bool = True,
-    clip01: bool = True,
-) -> None:
-    """Normalize windows in parallel with a bounded, streaming, **chunked** pattern.
+    chunk_size: int = 4
+    ) -> None:
+    """
+    Orchestrates the parallel processing using submit_streaming. 
+    It sets up the parameters for the streaming pipeline, initializes the worker 
+    processes, and submits the normalization tasks to the pool of workers.
+    
+    `NOTE`: keyword arguments required; This means that you cannot pass these arguments positionally; you must use their names.
 
-    This function does **not** compute mins/maxs (they come from Pass 1).
-    It simply reads, normalizes, and streams blocks to the parent writer.
+    Args:
+        unorm_path (str): Path to the unnormalized dataset (multiband TIFF) written in Pass 1.
+        windows (Iterable[WindowType]): Sequence of windows to process. Order is not required.
+        band_mins (np.ndarray): 1-D array of band maximums.
+        band_maxs (np.ndarray): 1-D array of band maximums.
+        writer (SupportsWriteBlock): Writer object that will receive each normalized block.
+        max_workers (int, optional): Number of worker processes. If None, defaults to os.cpu_count() (i.e. all of them). Defaults to None.
+        chunk_size (int, optional): Number of windows processed per task. Increase to reduce overhead. Defaults to 4.
+        inflight (int): 
+            At most inflight * max_workers tasks will be in flight ("worked on") at once.
+            Lower to reduce RAM; raise to improve throughput.
+            Defaults to 2.
     """
     windows_list = list(windows)
     chunks = list(_chunked(windows_list, chunk_size))
@@ -314,7 +363,7 @@ def parallel_normalize_streaming(
     with ProcessPoolExecutor(
         max_workers=max_workers,
         initializer=_init_normalize_worker,
-        initargs=(unorm_path, band_mins, band_maxs, clip01),
+        initargs=(unorm_path, band_mins, band_maxs),
     ) as ex:
         pending: set[Future] = set()
         target_inflight = max(1, (max_workers or 1) * max(1, inflight))
@@ -353,7 +402,7 @@ def parallel_normalize_streaming(
 
 
 # ======================================================================================
-# Generic streaming submission
+# Generic Streaming Submission
 # ======================================================================================
 
 def submit_streaming(
