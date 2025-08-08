@@ -19,10 +19,9 @@ from tqdm import tqdm
 from typing import Tuple, List
 from os import system
 from numba import njit
-from ..utils.math_utils import normalize_block_worker
 from .rastio import *
 from ..utils.fileio import rm
-from ..utils.parallel import parallel_normalize
+from ..utils.parallel import parallel_normalize, parallel_generate_streaming
 
 
 
@@ -37,7 +36,7 @@ ImageBlock = np.ndarray
 # Band Generation Process (BGP)
 # --------------------------------------------------------------------------------------------
 # @njit(parallel=True, fastmath=True, cache=True)
-@njit
+# @njit
 def _create_bands_from_block(
     image_block: ImageBlock,
     use_sqrt: bool,
@@ -142,38 +141,36 @@ def band_generation_process(
     # --------------------------------------------------------------------------------------------
     # Pass 1: Generate unnormalized output
     # --------------------------------------------------------------------------------------------
-    with input_dataset as reader:
-        with MultibandBlockWriter(
-            output_path =        output_dir, 
-            output_image_shape = input_shape, 
-            output_image_name =  output_unorm_filename, 
-            num_bands =          num_output_bands, 
-            window_shape =       window_shape,
-            output_datatype =    np.float32
-        ) as writer:
-            print("[BGP] Generating new bands (pass 1) ...")
-            for row_off in tqdm(range(0, src_height, win_height), desc="[BGP] First pass", colour="CYAN"):
-                for col_off in range(0, src_width, win_width):
-                    
-                    # prevent block from accessing out-of-bounds
-                    actual_height = min(win_height, src_height - row_off)
-                    actual_width = min(win_width, src_width - col_off)
-                    window = ((row_off, col_off), (actual_height, actual_width))
-            
-                    # create new bands from data block
-                    block = reader.read_multiband_block(window=window)
-                    new_bands = _create_bands_from_block(image_block=block, use_sqrt=use_sqrt, use_log=use_log)
+    # Build all possible windows
+    windows = []
+    for row_off in range(0, src_height, win_height):
+        for col_off in range(0, src_width, win_width):
+            h = min(win_height, src_height - row_off)
+            w = min(win_width, src_width - col_off)
+            windows.append(((row_off, col_off), (h, w)))
 
-                    # update global min/max per-band
-                    # maximum - element-wise | max - along (height,width) per band
-                    band_mins = np.minimum(band_mins, np.min(new_bands, axis=(1, 2)))
-                    band_maxs = np.maximum(band_maxs, np.max(new_bands, axis=(1, 2)))
-                    
-                    # write block
-                    writer.write_block(window=window, block=new_bands)
-                    del block, new_bands  # free memory
-                
-                if row_off == 0: system("clear||clc") # clear warnings
+    # Write unnormalized output, collect global stats
+    with MultibandBlockWriter(
+        output_path=output_dir,
+        output_image_shape=input_shape,
+        output_image_name=output_unorm_filename,
+        num_bands=num_output_bands,
+        output_datatype=np.float32,
+    ) as writer:
+        band_stats = parallel_generate_streaming(
+            input_paths=input_image_paths,          # list[str]; one multiband or many single-band
+            windows=windows,
+            writer=writer,
+            func_module="python_scripts.atdca.bgp", # module path where _create_bands_from_block lives
+            func_name="_create_bands_from_block",   # function name, without parentheses
+            use_sqrt=use_sqrt,
+            use_log=use_log,
+            max_workers=None,                      # None = all cores
+            inflight=2,                            # tune for RAM vs throughput
+        )
+
+    # Set bands' min/max
+    band_mins, band_maxs = band_stats[0], band_stats[1]
 
     
     # --------------------------------------------------------------------------------------------
@@ -206,8 +203,6 @@ def band_generation_process(
             writer=writer,
             max_workers=None,   # use all cores
             inflight=2,         # cap RAM: ~workers*inflight blocks in memory
-            show_progress=True,
-            clip01=True
         )
                     
     rm(unorm_path) # delete unnorm data
