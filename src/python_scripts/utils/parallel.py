@@ -34,21 +34,26 @@ __status__ = "Development"  # "Prototype", "Development", "Production"
 # _os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 # _os.environ.setdefault("NUMBA_NUM_THREADS", "1")
 
-from concurrent.futures import ProcessPoolExecutor, as_completed, Future
-from typing import Iterable, Iterator, List, Optional, Sequence, Tuple, Protocol, Any, Callable
-from tqdm import tqdm
-from rasterio.windows import Window
-from ..atdca.rastio import MultibandBlockReader
-from ..atdca.tgp import block_l2_norms, project_block_onto_subspace, Target
-
 import numpy as np
 import rasterio
 import importlib
 
+from concurrent.futures import ProcessPoolExecutor, as_completed, Future
+from typing import Iterable, Iterator, List, Sequence, Tuple, Protocol, Any, Callable
+from tqdm import tqdm
+from rasterio.windows import Window
+from dataclasses import dataclass
+
+from ..atdca.rastio import MultibandBlockReader
+from ..utils.math_utils import (
+    project_block_onto_subspace,
+    block_l2_norms
+)
+
 
 
 # --------------------------------------------------------------------------------------
-# Window Data Structure-like-things
+# Data Structure-like-things
 # --------------------------------------------------------------------------------------
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]  # ((row_off, col_off), (height, width))
 
@@ -79,6 +84,15 @@ def _chunked(iterable: Iterable[Any], size: int) -> Iterator[List[Any]]:
         if not chunk:
             return
         yield chunk
+
+
+@dataclass
+class Target:
+    value: float
+    row: int
+    col: int
+    band_spectrum: np.ndarray  # shape (bands,)
+
 
 
 # --------------------------------------------------------------------------------------
