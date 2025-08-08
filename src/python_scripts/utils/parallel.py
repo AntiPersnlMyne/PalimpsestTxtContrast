@@ -19,7 +19,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "2.0.0" 
+__version__ = "2.0.1" 
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development"  # "Prototype", "Development", "Production"
@@ -43,8 +43,10 @@ import numpy as np
 import rasterio
 import importlib
 
+
+
 # --------------------------------------------------------------------------------------
-# Types
+# Window Data Structure-like-things
 # --------------------------------------------------------------------------------------
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]  # ((row_off, col_off), (height, width))
 
@@ -320,12 +322,12 @@ def parallel_normalize_streaming(
         chunk_iter = iter(chunks)
         for _ in range(target_inflight):
             try:
-                c = next(chunk_iter)
+                chunk = next(chunk_iter)
             except StopIteration:
                 break
-            pending.add(ex.submit(_normalize_windows_chunk, c))
+            pending.add(ex.submit(_normalize_windows_chunk, chunk))
 
-        pbar = tqdm(total=len(windows_list), desc="Pass 2: normalize", unit="win") if show_progress else None
+        prog_bar = tqdm(total=len(windows_list), desc="[BGP] Second pass - normalize", unit="win", colour="MAGENTA")
 
         try:
             while pending:
@@ -335,84 +337,118 @@ def parallel_normalize_streaming(
 
                 for window, norm_block in results:
                     writer.write_block(window=window, block=norm_block)
-                    if pbar is not None:
-                        pbar.update(1)
+                    prog_bar.update(1)
 
                 try:
-                    c = next(chunk_iter)
+                    chunk = next(chunk_iter)
                 except StopIteration:
-                    c = None
-                if c is not None:
-                    pending.add(ex.submit(_normalize_windows_chunk, c))
+                    chunk = None
+                if chunk is not None:
+                    pending.add(ex.submit(_normalize_windows_chunk, chunk))
         except Exception as e:
             for f in pending: f.cancel()
             raise Exception(f"[parallel] Error during Pass 2:\n{e}")
         finally:
-            if pbar is not None:
-                pbar.close()
+            prog_bar.close()
 
 
 # ======================================================================================
-# Advanced: Generic streaming submission (optional)
+# Generic streaming submission
 # ======================================================================================
 
 def submit_streaming(
     *,
-    worker: Callable[..., Any],
-    initializer: Optional[Callable[..., Any]] = None,
-    initargs: Tuple[()] = (),
-    tasks: Iterable[Tuple[Any, ...]],
-    consumer: Callable[[Any], None],
-    max_workers: Optional[int] = None,
-    inflight: int = 2,
-    desc: str = "stream",
-    show_progress: bool = True,
+    worker:Callable[..., Any],
+    initializer:Callable[..., Any]|None = None,
+    initargs:Tuple[()] = (),
+    tasks:Iterable[Tuple[Any, ...]],
+    consumer:Callable[[Any], None],
+    max_workers:int|None = None,
+    inflight:int = 2,
+    prog_bar_label:str = "stream",
+    prog_bar_color:str = "WHITE"
     ) -> None:
-    """Generic streaming executor with bounded in-flight tasks.
-
-    The worker runs in subprocesses and returns results that the parent consumes
-    immediately via `consumer`, which is responsible for writing/aggregation.
-    This keeps memory bounded.
+    """
+    Generic helper function designed to parallelize tasks in a streaming fashion. 
+    It avoids loading all data into memory at once by submitting tasks to a 
+    process pool and consuming the results as they become available. 
+    
+    Args:
+        worker (Callable[..., Any]): The function to be executed in parallel. 
+            It should accept arguments (passed as a tuple).
+        initializer (Callable[..., Any] | None, optional): A function to initialize 
+            the worker process (used to set up any global state).
+            Defaults to None.
+        initargs (Tuple[()]): A tuple of arguments to pass to the initializer function.
+            Likely, matches the function signature of the function that the initalizer is initalizing.
+        tasks (Iterable[Tuple[Any, ...]]): An iterable of tasks to be executed. 
+            Each task is represented as a tuple of arguments for the function.
+        consumer (Callable[[Any], None]): A function that consumes the results returned by the worker. 
+            This is where you write the results to disk or aggregate them.
+        max_workers (int | None, optional): The maximum number of worker processes to use.
+            If None, uses all CPU cores. Defaults to None.
+        inflight (int, optional): The maximum number of tasks that can be in progress at any time. 
+            This controls memory usage. Larger number processes more tasks, increases RAM usage.
+            Defaults to 2.
+        prog_bar_label (str, optional): Label for the progress bar.
+        prog_bar_color (str, optional): Color for the progress bar.
     """
     tasks_list = list(tasks)
     total = len(tasks_list)
 
+    # manage the worker processes
     with ProcessPoolExecutor(
         max_workers=max_workers, 
         initializer=initializer, 
         initargs=initargs
         ) as ex:
-        pending: set[Future] = set()
+
+        pending:set[Future] = set()
         target_inflight = max(1, (max_workers or 1) * max(1, inflight))
 
-        it = iter(tasks_list)
+        task_iterator = iter(tasks_list)
         for _ in range(target_inflight):
-            try:
-                t = next(it)
-            except StopIteration:
+            try: 
+                # grab next task from stack
+                task = next(task_iterator)
+            except StopIteration: 
+                # no more tasks left
                 break
-            pending.add(ex.submit(worker, *t))
+            
+            # Submit tasks to the process pool
+            pending.add(ex.submit(worker, *task))
 
-        pbar = tqdm(total=total, desc=desc, unit="task") if show_progress else None
+        prog_bar = tqdm(total=total, desc=prog_bar_label, unit="task", colour=prog_bar_color) 
 
         try:
             while pending:
-                done = next(as_completed(pending))
-                pending.remove(done)
-                result = done.result()
+                # Removes completed task from the "todo list"
+                done = next(as_completed(pending)) 
+                pending.remove(done) 
+                result = done.result() 
+                
+                # Give results to consumer to write to disc
                 consumer(result)
-                if pbar is not None:
-                    pbar.update(1)
+                
+                # Update progress bar with +1 task completed
+                prog_bar.update(1)
+                
                 try:
-                    t = next(it)
-                except StopIteration:
-                    t = None
-                if t is not None:
-                    pending.add(ex.submit(worker, *t))
-        except Exception:
-            for fut in pending:
-                fut.cancel()
-            raise
+                    # Get next task to submit
+                    task = next(task_iterator)
+                except StopIteration: 
+                    # signal no more tasks left to run
+                    task = None
+                if task is not None:
+                    # Submit tasks to the process pool
+                    pending.add(ex.submit(worker, *task))
+        
+        except Exception as e:
+            # Cancels all future tasks from executing
+            for future_task in pending:
+                future_task.cancel()
+            raise e
+        
         finally:
-            if pbar is not None:
-                pbar.close()
+            # Shut down progress bar - fail or success
+            prog_bar.close()

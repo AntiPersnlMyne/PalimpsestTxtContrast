@@ -4,7 +4,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "2.2.0"
+__version__ = "2.2.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -171,8 +171,8 @@ def band_generation_process(
             func_name="_create_bands_from_block",   # function name, without parentheses
             use_sqrt=use_sqrt,
             use_log=use_log,
-            max_workers=None,                      # None = all cores
-            inflight=2,                            # tune for RAM vs throughput
+            max_workers=None,                       # None = all cores
+            inflight=2,                             # tune for RAM vs throughput
         )
 
     # Set bands' min/max
