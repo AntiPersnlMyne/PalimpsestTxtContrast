@@ -428,6 +428,11 @@ def _scan_window(window: WindowType) -> Tuple[float, int, int, np.ndarray]:
     Returns:
         Tuple[float,int,int,np.ndarray]: Values of a Target dataclass: (value, row, col, band_spectrum)
     """
+    # 
+    assert isinstance(window, tuple) and len(window) == 2 \
+    and isinstance(window[0], tuple) and isinstance(window[1], tuple), \
+        f"Expected WindowType ((row_off,col_off),(h,w)), got: {window!r}"
+        
     # Get worker varaibles
     reader:MultibandBlockReader = _scan_state["reader"] #type:ignore 
     p_matrix = _scan_state["projection_matrix"]
@@ -479,10 +484,10 @@ def scan_for_max_parallel(
         target = Target(value, row, col, band_spec)
         if target.value > best_target.value: best_target = target
 
-    tasks = [( (window,), ) for window in list(windows)]  # each task is a 1‑tuple of args
+    tasks = [(window,) for window in list(windows)] # wrap args (window) in tuple for streaming
 
     submit_streaming(
-        worker= lambda values: _scan_window(*values),  # unpack args from tuple output
+        worker= _scan_window, 
         initializer=_init_scan_worker,
         initargs=(list(paths), p_matrix),
         tasks=tasks,

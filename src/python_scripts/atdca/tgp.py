@@ -26,7 +26,7 @@ from ..utils.math_utils import (
     block_l2_norms
 )
 from ..atdca.rastio import MultibandBlockReader
-from ..utils.parallel import submit_streaming, scan_for_max_parallel
+from ..utils.parallel import scan_for_max_parallel
 
 
 

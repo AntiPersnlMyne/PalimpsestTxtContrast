@@ -88,7 +88,7 @@ def ATDCA(
         window_shape=window_shape,
         max_targets=max_targets,
         ocpi_threshold=ocpi_threshold,
-        use_parallel=False,
+        use_parallel=True,
         max_workers=None,
         inflight=inflight,
         show_progress=verbose
