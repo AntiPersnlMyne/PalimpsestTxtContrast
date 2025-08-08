@@ -29,7 +29,7 @@ warnings.filterwarnings("ignore", category=UserWarning, message="Dataset has no 
 # --------------------------------------------------------------------------------------------
 def main():
     # Automatic Target Detection w/ OSP input parameters
-    INPUT_DIR:str = "data/input/arch_165_sb"
+    INPUT_DIR:str = "data/input/test"
     OUTPUT_DIR:str = "data/output"
     ONE_FILE:bool = False
     WINDOW_SHAPE:tuple = (512,512)
@@ -69,8 +69,7 @@ if __name__ == "__main__":
 # Timing results
 # BGP, block=512, band=3: 215
 # BGP, block=512, band=3, @njit: 221
-# BGP, block=512, band=3, @njit, par-pass2: 218
-# BGP, block=512, band=3, @njit, par-pass1, par-pass2: # 17
+# BGP, block=512, band=3, @njit, par-pass1, par-pass2: # 17 (12 on laptop)
 
 
 # BGP, block=256, band=11: 1629

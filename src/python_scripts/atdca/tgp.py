@@ -14,72 +14,134 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Imports
 # --------------------------------------------------------------------------------------------
 import numpy as np
-from typing import Callable, List, Tuple, Union
-from tqdm import tqdm
-from os.path import join
+
+from dataclasses import dataclass
+from typing import Iterable, List, Tuple, Sequence
+from numba import njit
 
 from ..utils.math_utils import (
     compute_orthogonal_projection_matrix,
     project_block_onto_subspace,
-    compute_opci
+    compute_opci,
+    block_l2_norms
 )
-from .rastio import get_block_writer
+from ..atdca.rastio import MultibandBlockReader
+
 
 
 # --------------------------------------------------------------------------------------------
 # Custom Datatypes
 # --------------------------------------------------------------------------------------------
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
-SpectralVector = np.typing.NDArray[np.float32]
-SpectralVectors = Tuple[List[SpectralVector], List[Tuple[int, int]]]
-
 ImageBlock = np.ndarray
 ImageShape = Tuple[int, int]
 
-ImageReader = Callable[[Union[str, WindowType]], Union[ImageBlock, ImageShape, None]]
-ImageWriter = Callable[[WindowType, ImageBlock], None]
+@dataclass
+class Target:
+    value: float
+    row: int
+    col: int
+    band_spectrum: np.ndarray  # shape (bands,)
+
 
 
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
-def make_tcp_writer_factory(output_dir:str, output_filename:str, image_shape:Tuple[int, int], one_file:bool):
+@njit
+def _best_target(
+    *,
+    paths: Sequence[str],
+    windows: Iterable[WindowType],
+    p_matrix:np.ndarray|None
+) -> Target:
     """
-    Internal writer factory that returns a writer function per target.
+    Find global argmax of ||x|| or ||P x|| across all pixels.
 
     Args:
-        output_dir (str): Directory where output will be saved.
-        output_filename (str): Base filename.
-        image_shape (Tuple[int, int]): Shape of the output image.
-        one_file (bool): Whether all targets are stored as one file.
-
-    Returns:
-        Callable: Function(target_index) → writer_function
+        paths (list[str]): One multiband file or many single-band files for dataset.
+        windows (Iterable[WindowType]): List of windows to iterate over.
+        p_matrix (np.ndarray | None): Projection matrix. If not provided (None),
+            assumes first target i.e. no P matrix created yet.
     """
-    def factory(target_index: int):
-        if one_file:
-            output_path = join(output_dir, f"{output_filename}.tif")
-        else:
-            output_path = join(output_dir, f"{output_filename}_{target_index}.tif")
+    
+    # Initalize best_target
+    best_target:Target = Target(0,0,0,np.empty(0))
 
-        return get_block_writer(
-            output_path=output_path,
-            image_shape=image_shape,
-            dtype=np.float32
-        )
+    with MultibandBlockReader(list(paths)) as reader:        
+        for window in windows:
+            # project block - can be optimized by not checking every iteration?
+            block = reader.read_multiband_block(window)  # (bands, h, w)
+            if p_matrix is not None: block = project_block_onto_subspace(block, p_matrix)
+            
+            # Compute L2 norm and returns tile
+            norms = block_l2_norms(block)  # shape: (height,width)
+            
+            # Find pixel within tile with largest norm
+            max_px_idx = int(np.argmax(norms))
+            max_px_val = float(norms.flat[max_px_idx])
 
-    return factory
+            # Convert the flat index back into row/col coordinates
+            (row_off, col_off), (win_height, win_width) = window
+            block_row, block_col = divmod(max_px_idx, win_height)
+            
+            # Convert tile-local coordinates (dr, dc) to full image coordinates (r, c)
+            im_row, im_col = row_off + block_row, col_off + block_col
+            
+             # Extract all bands (bands,:,:) from the best pixel
+            bands = block[:, block_row, block_col].astype(np.float32)
+           
+            # Update best target
+            target = Target(max_px_val, im_row, im_col, bands)
+            if target.value > best_target.value:
+                best_target = target
+
+    # Check some target was found and return
+    assert best_target, "No pixels scanned"
+    return best_target 
+
+
+def _make_windows(image_shape: Tuple[int, int], window_shape: Tuple[int, int]):
+    """
+    Generates all possible windows over an image. Used in _best_target.
+    
+    Args: 
+        image_shape (Tuple[int,int]): (height,width) of entire source image.
+        window_shape (Tuple[int,int]): (height,width) of window.
+    """
+    # Get image and window dimensions
+    img_height, img_width = image_shape
+    win_height, win_width = window_shape
+    windows:List[WindowType] = []
+    
+    for row_off in range(0, img_height, win_height):
+        for col_off in range(0, img_width, win_width):
+            
+            # Prevent window from out-of-bounds
+            actual_height = min(win_height, img_height - row_off)
+            actual_width = min(win_width, img_width - col_off)
+            
+            # Create window and append to list
+            windows.append( ((row_off, col_off), (actual_height, actual_width)) )
+    
+    return windows
+
 
 
 # --------------------------------------------------------------------------------------------
 # TGP Function
 # --------------------------------------------------------------------------------------------
 def target_generation_process(
-    image_reader:ImageReader,
+    *,
+    generated_bands:Sequence[str],
+    window_shape:Tuple[int,int],
     max_targets:int = 10,
-    opci_threshold:float = 0.01,
-    block_shape: Tuple[int, int] = (512, 512)
-) -> SpectralVectors:
+    ocpi_threshold:float = 0.01,       
+    use_parallel:bool = False,  # vvv Parallelization parameters vvv
+    max_workers:int,
+    inflight:int,
+    show_progress:bool
+    ) -> List[np.ndarray]:
     """
     Target Generation Process (TGP).
 
@@ -87,105 +149,72 @@ def target_generation_process(
     until OPCI falls below a threshold or a max target count is reached.
 
     Args:
-        image_reader (ImageReader): Function to stream image data by window or query shape.
+        generated_bands (Sequence[str]): Either </path/to/gen_band_norm.tif> (multiband) or a list of single-band files.
+        window_shape (Tuple[int,int]): Size of tile ("block") of data to process.
         max_targets (int, optional): Max number of targets to extract. Defaults to 10.
-        opci_threshold (float, optional): Stop if OPCI falls below this. Defaults to 0.01.
-                                          Higher threshold (e.g. 0.1) creates less pure targets.
-                                          Lower threshold (e.g. 0.001) creates more pure targets.
-        block_shape (Tuple[int, int], optional): Size of image blocks to process. Defaults to (512, 512).
-                                                 More blocks is easier on PC's memory, but slower overall.
+        opci_threshold (float, optional): Stop if OCPI of target falls below this. Defaults to 0.01.
+            Higher threshold (e.g. 0.1) creates less pure targets.
+            Lower threshold (e.g. 0.001) creates more pure targets.
+        use_parallel (bool): Process data serially (slow) or in parallel (fast). 
+            If True, processes faster but uses more RAM.
+            Defaults to False.
 
     Returns:
-        SpectralVectors:
-            List of target spectral vectors, and their (row, col) coordinates.
+        List[np.ndarray]: List of targets (T); 
     """
-    # Get image reader and block data
-    image_shape = image_reader("window_shape")
-    if image_shape is None:
-        raise ValueError("image_reader returned None, cannot determine image dimensions.")
     
-    # Get block size
-    image_height, image_width = image_shape
-    block_height, block_width = block_shape
+    # Get dims for windows
+    # Validate band-major layout
+    with MultibandBlockReader(list(generated_bands)) as reader:
+        # Determine final dimensions from small test block
+        im_height, im_width = reader.image_shape()  
+        dummy_block = reader.read_multiband_block(  
+            ((0, 0), (10,10))
+        )
+        num_bands = int(dummy_block.shape[0])
+        if num_bands < 1: raise ValueError("Input image must have at least 1 band")
 
-    targets = []
-    coords = []
+    # Get all possible windows 
+    windows = _make_windows((im_height, im_width), window_shape)
 
-    # Get a small valid sample block to infer band count
-    sample_block = image_reader(((0, 0), (1, 1)))
-    if not isinstance(sample_block, np.ndarray):
-        raise ValueError("[TGP] image_reader did not return a valid data block")
-
-    # The reader returns in (bands, height, width) format, so the number of bands is the first dimension.
-    num_bands = sample_block.shape[0]
-    # At iteration = 0, this means no projection; identity matrix = no filtering.
-    projection_matrix = np.eye(num_bands, dtype=np.float32)
+    # Calculate initial target
+    if use_parallel:
+        pass
+        # t0 = _scan_for_max_parallel(
+        #     paths=image_paths, windows=windows, projection=None,
+        #     max_workers=max_workers, inflight=inflight, show_progress=show_progress,
+        # )
+    else:
+        t0 = _best_target(paths=generated_bands, windows=windows, p_matrix=None)    
     
-    for iteration in tqdm(range(max_targets), desc="Processing TGP", colour="MAGENTA"):
-        # Initalize local-best variables
-        max_norm = -np.inf
-        best_vector = None
-        best_coords = None
+    # Check target has same num_bands as input data
+    if t0.band_spectrum.shape[0] != num_bands:
+        raise ValueError(f"Band mismatch: discovered {num_bands} bands, candidate has {t0.band_spectrum.shape[0]}")
+    
+    targets:List[np.ndarray] = [t0.band_spectrum]
 
-        # Iterate through entire image
-        for row_off in range(0, image_height, block_height):
-            for col_off in range(0, image_width, block_width):
-                # Check: block boundary being out-of-bounds
-                actual_height = min(block_height, image_height - row_off)
-                actual_width = min(block_width, image_width - col_off)
+    # Computer new p_marix with first target
+    p_matrix = compute_orthogonal_projection_matrix(targets).astype(np.float32)  # (bands,bands)
 
-                # Get next block to process
-                window = ((row_off, col_off), (actual_height, actual_width))
-                block = image_reader(window)
-                
-                # Check: Block isn't empty or returning window shape
-                if not isinstance(block, np.ndarray): 
-                    continue
-                
-                # Project block 
-                projected = project_block_onto_subspace(block, projection_matrix)
-                
-                # Check: projected data is 3D image
-                if projected.ndim != 3: raise ValueError(f"Expected 3D block, got shape {projected.shape}")
-                
-                # Reshpe data and normalize
-                reshaped = projected.reshape(-1, projected.shape[2])
-                norms = np.linalg.norm(reshaped, axis=1)
+    for _ in range(1, max_targets):
+        # Find next candidate in orthogonal space
+        if use_parallel:
+            pass
+            # best_target = _scan_for_max_parallel(
+            #     paths=image_paths, windows=windows, projection=P,
+            #     max_workers=max_workers, inflight=inflight, show_progress=show_progress,
+            # )
+        else:
+            best_target = _best_target(paths=generated_bands, windows=windows, p_matrix=p_matrix)
 
-                # Find local maximum per-block (i.e. best target per block)
-                local_max_idx = np.argmax(norms)
-                local_max_val = norms[local_max_idx]
-
-                # Replace target If local target is best found so far
-                if local_max_val > max_norm:
-                    max_norm = local_max_val
-                    best_vector = reshaped[local_max_idx]
-                    row_in_block = local_max_idx // actual_width
-                    col_in_block = local_max_idx % actual_width
-                    best_coords = (row_off + row_in_block, col_off + col_in_block)
-                    
-                # --- ADD THIS PRINT STATEMENT ---
-                print(f"DEBUG: TGP received a block with shape: {block.shape}")
-                print(f"DEBUG: Initial projection matrix shape: {projection_matrix.shape}")
-                
-                
-        if best_vector is None:
-            print(f"[TGP] No more valid blocks to evaluate.")
+        # Evaluate OPCI metric - determines stopping criteria
+        opci = compute_opci(p_matrix, best_target.band_spectrum)
+        if opci < ocpi_threshold:
             break
 
-        if iteration > 0:
-            opci_val = compute_opci(projection_matrix, best_vector)
-            if opci_val < opci_threshold:
-                print(f"[TGP] Stopping: OPCI ({opci_val:.5f}) < threshold ({opci_threshold})")
-                break
+        # Accept best_target and update projection
+        targets.append(best_target.band_spectrum)
+        p_matrix = compute_orthogonal_projection_matrix(targets).astype(np.float32)
 
-        targets.append(best_vector)
-        coords.append(best_coords)
-
-        # Update projection space
-        projection_matrix = compute_orthogonal_projection_matrix(targets)
-
-    return targets, coords
-
-
+    return targets # generated targets; size: [<= max_targets]
 

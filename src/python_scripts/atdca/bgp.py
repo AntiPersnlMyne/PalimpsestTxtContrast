@@ -15,9 +15,7 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Imports
 # --------------------------------------------------------------------------------------------
 import numpy as np
-from tqdm import tqdm
 from typing import Tuple, List
-from os import system
 from numba import njit
 from .rastio import *
 from ..utils.fileio import rm
@@ -132,10 +130,10 @@ def band_generation_process(
     win_height, win_width = window_shape    
     
     # Determine number of bands up front by using a preview block
-    preview_block = input_dataset.read_multiband_block(((0, 0), (5,5)))
-    sample_bands = _create_bands_from_block(preview_block, use_sqrt, use_log)
+    dummy_block = input_dataset.read_multiband_block(((0, 0), (5,5)))
+    sample_bands = _create_bands_from_block(dummy_block, use_sqrt, use_log)
     num_output_bands = sample_bands.shape[0]
-    del preview_block, sample_bands # free memory
+    del dummy_block, sample_bands # free memory
     
     # initalize band-wise norm variables
     band_mins = np.full(num_output_bands, np.inf, dtype=np.float32)

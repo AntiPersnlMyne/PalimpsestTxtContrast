@@ -1,5 +1,7 @@
 """math_utils.py: Linear algebra, matrix, and calculus helper functions"""
 
+from __future__ import annotations
+
 __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
@@ -14,11 +16,16 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
-import numpy as np
 from numba import njit
 from numpy import linalg as LA
 from numpy.typing import NDArray
-from typing import List, Tuple
+from typing import List, Tuple, Iterable, Sequence
+from dataclasses import dataclass
+from cv2 import normalize, NORM_L2
+from ..atdca.rastio import WindowType, MultibandBlockReader
+
+import numpy as np
+
 
 
 # --------------------------------------------------------------------------------------------
@@ -28,102 +35,34 @@ SpectralVector = NDArray[np.float32]
 SpectralVectors = Tuple[List[SpectralVector], List[Tuple[int, int]]]
 
 
+
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
 @njit
-def normalize_data(
-    data: np.ndarray,
-    min_val:float,
-    max_val:float
-    ) -> np.ndarray:
+def block_l2_norms(block:np.ndarray) -> np.ndarray:
     """
-    Normalizes a numpy array to the range [0, 1] using min-max scaling.
+    Compute L2 (Euclidian) norms from (num_bands, height, width) block
 
     Args:
-        data (np.ndarray): The input array to be normalized.
+        data (np.ndarray): _description_
+        min_val (float): _description_
+        max_val (float): _description_
 
     Returns:
-        np.ndarray: The normalized array, with values in the range [0, 1].
+        np.ndarray: _description_
     """
-        
-    # Flatten data
-    orig_shape = data.shape
-    data = data.flatten()
-    
-    # Normalize data to range [0,1]
-    data = (data - min_val) / (max_val - min_val)
-
-    # Restore data in original shape
-    return data.reshape(orig_shape)
-    
-    
-# @njit(fastmath=True, cache=True)
-@njit
-def normalize_block(
-    block:np.ndarray, 
-    band_mins:np.ndarray, 
-    band_maxs:np.ndarray
-    ) -> np.ndarray:
-    """
-    Normalize a block using min/max per band.
-    
-    Args:
-        block (np.ndarray): Block of data to normalize. Size: (bands, H, W)
-        band_mins (np.ndarray): Size: (bands, )
-        band_maxs (np.ndarray): Size: (bands, )
-    
-    Returns:
-        np.ndarray (bands, H, W) normalized to [0,1]
-    """
-    
-    num_bands, height, width = block.shape
-    norm_block = np.empty_like(block)
-
-    for band in range(num_bands):
-        min_val = band_mins[band]
-        max_val = band_maxs[band]
-        range_val = max_val - min_val if max_val > min_val else 1.0  # prevent div-by-zero
-        for i in range(height):
-            for j in range(width):
-                norm_block[band, i, j] = (block[band, i, j] - min_val) / range_val
-
-    return norm_block
+    return normalize(block, block, norm_type=NORM_L2)
+    '''numpy-@njit
+    norms = np.sum(block.astype(np.float32) ** 2, axis=0, dtype=np.float32)
+    return np.sqrt(norms, dtype=np.float32)
+    '''
 
 
-def normalize_block_worker(
-    block: np.ndarray,
-    band_mins: np.ndarray,
-    band_maxs: np.ndarray
-    ) -> np.ndarray:
-    """
-    Normalize a block per band using provided global min/max arrays.
-
-    Args:
-        block (np.ndarray): Array of shape (bands, height, width).
-        band_mins (np.ndarray): Min values for each band.
-        band_maxs (np.ndarray): Max values for each band.
-
-    Returns:
-        np.ndarray: Normalized block of same shape.
-    """
-    
-    norm_block = np.empty_like(block)
-    
-    for i in range(block.shape[0]): # iterate bands
-        band = block[i]
-        min_val = band_mins[i]
-        max_val = band_maxs[i]
-        # avoid div0
-        if (max_val != min_val): norm_block[i] = (band - min_val) / (max_val - min_val)
-    
-    return norm_block
-    
 
 # --------------------------------------------------------------------------------------------
 # Matrix Operand Functions
 # --------------------------------------------------------------------------------------------
-# @njit(fastmath=True, cache=True)
 def compute_orthogonal_projection_matrix(
     target_vectors:list[SpectralVector]
     ) -> np.ndarray:
@@ -164,8 +103,6 @@ def compute_orthogonal_projection_matrix(
     return I - P_U
 
 
-
-# @njit(fastmath=True, cache=True)
 def project_block_onto_subspace(
     block: np.ndarray,
     projection_matrix: np.ndarray
@@ -198,7 +135,6 @@ def project_block_onto_subspace(
     return projected.T.reshape(num_bands, height, width)
 
 
-# @njit(fastmath=True, cache=True)
 def compute_opci(
     projection_matrix: np.ndarray,
     target_vector: SpectralVector
@@ -221,3 +157,4 @@ def compute_opci(
     
     # We use .item() to extract the single float value from the resulting NumPy arrays.
     return float( (numerator / denominator).item() ) # float ( [#]-># )
+
