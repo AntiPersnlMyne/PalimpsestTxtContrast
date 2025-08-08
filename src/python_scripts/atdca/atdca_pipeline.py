@@ -79,7 +79,8 @@ def ATDCA(
         output_dir=output_dir,
         window_shape=window_shape,
         use_sqrt=use_sqrt,
-        use_log=use_log
+        use_log=use_log,
+        max_workers=None
     )
 
 

@@ -21,7 +21,7 @@ from os import system
 from numba import njit
 from .rastio import *
 from ..utils.fileio import rm
-from ..utils.parallel import parallel_normalize, parallel_generate_streaming
+from ..utils.parallel import parallel_normalize_streaming, parallel_generate_streaming
 
 
 
@@ -195,14 +195,14 @@ def band_generation_process(
         output_datatype=np.float32
     ) as writer:
         # Stream in parallel: workers read+normalize, parent writes
-        parallel_normalize(
+        parallel_normalize_streaming(
             unorm_path=unorm_path,
             windows=windows,
             band_mins=band_mins,
             band_maxs=band_maxs,
             writer=writer,
-            max_workers=None,   # use all cores
-            inflight=2,         # cap RAM: ~workers*inflight blocks in memory
+            max_workers=max_workers,  # use all cores
+            inflight=2,               # cap RAM: ~workers*inflight blocks in memory
         )
                     
     rm(unorm_path) # delete unnorm data

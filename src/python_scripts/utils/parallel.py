@@ -1,31 +1,48 @@
-"""parallel.py: Parallelization ("multiprocessing") wrapper API. Compatible with Numba."""
+"""parallel.py: Parallelization ("multiprocessing") wrapper API. 
 
-from __future__ import annotations # has to be up here for some reason
+Usage:
+- Pass 1 (create synthetic bands): `parallel_generate_streaming(...)`
+- Pass 2 (normalize bands):        `parallel_normalize_streaming(...)`
+- Generic advanced API:            `submit_streaming(...)`
+
+Notes
+-----
+- This module uses **streaming, chunked** submission to keep memory bounded.
+- Workers re-open rasters locally (safe across processes).
+- Parent process writes results immediately to avoid concurrent writes.
+- Avoids sending large numpy arrays over IPC; sends only small window tuples.
+"""
+
+from __future__ import annotations  # must be first
 
 __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Prototype" # "Prototype", "Development", "Production"
-
-
+__status__ = "Prototype"  # "Prototype", "Development", "Production"
 
 # --------------------------------------------------------------------------------------------
-# Imports
+# Imports & thread oversubscription guards (safe defaults)
 # --------------------------------------------------------------------------------------------
+import os as _os
+_os.environ.setdefault("OMP_NUM_THREADS", "1")
+_os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+_os.environ.setdefault("MKL_NUM_THREADS", "1")
+_os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+_os.environ.setdefault("NUMBA_NUM_THREADS", "1")
+
 from concurrent.futures import ProcessPoolExecutor, as_completed, Future
 from typing import Iterable, Iterator, List, Optional, Sequence, Tuple, Protocol, Any, Callable
+from os import getpid
+from tqdm import tqdm
+from rasterio.windows import Window
+
 import numpy as np
 import rasterio
-from rasterio.windows import Window
-from tqdm import tqdm
 import importlib
-from os import getpid
-
-
 
 # --------------------------------------------------------------------------------------
 # Types
@@ -34,22 +51,36 @@ WindowType = Tuple[Tuple[int, int], Tuple[int, int]]  # ((row_off, col_off), (he
 
 
 class SupportsWriteBlock(Protocol):
-    """
-    Protocol for writer objects that expose a `write_block` method.
+    """Protocol for writer objects that expose a `write_block` method.
 
     Your writer (e.g., MultibandBlockWriter) should implement:
         write_block(window: WindowType, block: np.ndarray) -> None
     """
 
-    def write_block(self, window: WindowType, block: np.ndarray) -> None:
+    def write_block(self, window: WindowType, block: np.ndarray) -> None:  # pragma: no cover (protocol)
         ...
 
 
+def _chunked(iterable: Iterable[Any], size: int) -> Iterator[List[Any]]:
+    """Yield lists of up to `size` items from `iterable`.
+    Coarsens submission to reduce scheduling/pickling overhead.
+    """
+    it = iter(iterable)
+    while True:
+        chunk: List[Any] = []
+        for _ in range(size):
+            try:
+                chunk.append(next(it))
+            except StopIteration:
+                break
+        if not chunk:
+            return
+        yield chunk
 
-# --------------------------------------------------------------------------------------
-# Pass 1: read -> create synthetic bands
-# --------------------------------------------------------------------------------------
 
+# ======================================================================================
+# Pass 1: read -> create synthetic bands (generation)
+# ======================================================================================
 # Per-process state for generation
 _gen_state: dict[str, Any] = {
     "paths": None,       # List[str]
@@ -63,11 +94,10 @@ def _init_generate_worker(input_paths: List[str], func_module: str, func_name: s
     """Initializer for Pass 1 workers.
 
     Args:
-        input_paths (List[str]): Paths to input rasters. May be one multiband file or many single-band files.
-        func_module (str): Relative path to the module (file) that the function is from. Formatted same as Python's relative imports e.g., python_scripts.atdca.bgp.
-        func_name (str): Function name for the band-generation function; avoids pickling callables.
-        use_sqrt (bool): Flag forwarded to the band_generation function.
-        use_log (bool): Flag forwarded to the band_generation function.
+        input_paths: Paths to input rasters. One multiband or many single-band files.
+        func_module: Absolute module path, e.g. "python_scripts.atdca.bgp".
+        func_name: Top-level function name to call, e.g. "_create_bands_from_block".
+        use_sqrt, use_log: Flags forwarded to the band-generation function.
     """
     _gen_state["paths"] = list(input_paths)
     _gen_state["use_sqrt"] = bool(use_sqrt)
@@ -77,17 +107,16 @@ def _init_generate_worker(input_paths: List[str], func_module: str, func_name: s
 
 
 def _read_input_window(paths: Sequence[str], window: WindowType) -> np.ndarray:
-    """Read a window from input paths into shape (bands, h, w) without relying on project-specific readers."""
+    """Read a window from input paths into shape (bands, h, w) without project-specific readers."""
     (row_off, col_off), (h, w) = window
     if len(paths) == 1:
         with rasterio.open(paths[0], "r") as src:
-            return src.read(window=Window(col_off, row_off, w, h))#type:ignore
+            return src.read(window=Window(col_off, row_off, w, h)) #type:ignore
     else:
-        # stack band 1 from each single-band file
         out = None
         for i, p in enumerate(paths):
             with rasterio.open(p, "r") as src:
-                band = src.read(1, window=Window(col_off, row_off, w, h))#type:ignore
+                band = src.read(1, window=Window(col_off, row_off, w, h)) #type:ignore
                 if out is None:
                     out = np.empty((len(paths), h, w), dtype=band.dtype)
                 out[i] = band
@@ -109,60 +138,57 @@ def _generate_window(window: WindowType) -> Tuple[WindowType, np.ndarray, np.nda
     use_log = _gen_state["use_log"]
     bands_fn = _gen_state["bands_fn"]
 
-    block = _read_input_window(paths, window)
-    new_bands = bands_fn(block, use_sqrt, use_log)
+    block = _read_input_window(paths, window).astype(np.float32)
+    new_bands = bands_fn(block, use_sqrt, use_log).astype(np.float32)
     mins = new_bands.min(axis=(1, 2)).astype(np.float32)
     maxs = new_bands.max(axis=(1, 2)).astype(np.float32)
-    return window, new_bands.astype(np.float32), mins, maxs
+    return window, new_bands, mins, maxs
+
+
+def _generate_windows_chunk(windows_chunk: List[WindowType]) -> List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]]:
+    """Worker: read inputs, create synthetic bands for a chunk of windows."""
+    paths = _gen_state["paths"]
+    use_sqrt = _gen_state["use_sqrt"]
+    use_log = _gen_state["use_log"]
+    bands_fn = _gen_state["bands_fn"]
+
+    out: List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]] = []
+    for window in windows_chunk:
+        block = _read_input_window(paths, window).astype(np.float32)
+        new_bands = bands_fn(block, use_sqrt, use_log).astype(np.float32)
+        mins = new_bands.min(axis=(1, 2)).astype(np.float32)
+        maxs = new_bands.max(axis=(1, 2)).astype(np.float32)
+        out.append((window, new_bands, mins, maxs))
+    return out
 
 
 def parallel_generate_streaming(
     *,
-    input_paths:Sequence[str],
-    windows:Iterable[WindowType],
-    writer:SupportsWriteBlock,
-    func_module:str,
-    func_name:str,
-    use_sqrt:bool,
-    use_log:bool,
-    max_workers:int|None = None,
-    inflight:int = 2
+    input_paths: Sequence[str],
+    windows: Iterable[WindowType],
+    writer: SupportsWriteBlock,
+    func_module: str,
+    func_name: str,
+    use_sqrt: bool,
+    use_log: bool,
+    max_workers: int | None = None,
+    inflight: int = 2,
+    chunk_size: int = 4,
+    show_progress: bool = True,
+    desc: str = "[BGP] First pass - create",
 ) -> np.ndarray:
+    """Pass 1 streaming generation with bounded memory and per-band stats aggregation.
+
+    Returns
+    -------
+    band_stats : np.ndarray
+        Shape (2, bands) where [0] = global mins, [1] = global maxs.
     """
-    Pass 1 streaming generation with bounded memory and per-band stats aggregation.
+    windows_list = list(windows)
+    chunks = list(_chunked(windows_list, chunk_size))
 
-    Args:
-        input_paths (List[str]): Path to input rasters. Accepts one? multiband many single-band files.
-        windows (List[WindowType]): Total list of windows to process.
-        writer (SupportsWriteBlock): Open writer where synthetic blocks will be written. Uses `MultibandBlockWriter`.
-        func_module (str): Import path for the band-generation function; avoids pickling callables.
-        func_name (str): Function name for the band-generation function; avoids pickling callables.
-        use_sqrt (bool): Flag forwarded to the band_generation function.
-        use_log (bool): Flag forwarded to the band_generation function.
-        max_workers (int, optional): Number of processes to run in parallel. If None, lets program decide. Defaults to None.
-        inflight (int): 
-            At most `inflight * max_workers` tasks will be in flight ("worked on") at once.
-            Lower to reduce RAM; raise to improve throughput.
-            Defaults to 2.
-
-    Returns:
-        np.ndarray: Array of band statistics.
-            Array of shape (2, bands) where [0] = global mins, [1] = global maxs. Used in bgp for Pass 2.
-    """
-    # Discover band count from the first completed task, and grow stats arrays accordingly
-    global_mins: np.ndarray|None = None
-    global_maxs: np.ndarray|None = None
-
-    windows_iter = iter(windows)
-    windows_list: List[WindowType]|None = None
-    total = None
-
-    try:
-        windows_list = list(windows_iter)
-        total = len(windows_list)
-        windows_iter = iter(windows_list)
-    except TypeError:
-        pass
+    global_mins: np.ndarray | None = None
+    global_maxs: np.ndarray | None = None
 
     with ProcessPoolExecutor(
         max_workers=max_workers,
@@ -171,188 +197,223 @@ def parallel_generate_streaming(
     ) as ex:
         pending: set[Future] = set()
         target_inflight = max(1, (max_workers or 1) * max(1, inflight))
+
+        chunk_iter = iter(chunks)
         for _ in range(target_inflight):
             try:
-                w = next(windows_iter)
+                c = next(chunk_iter)
             except StopIteration:
                 break
-            pending.add(ex.submit(_generate_window, w))
+            pending.add(ex.submit(_generate_windows_chunk, c))
 
-
-        prog_bar = tqdm(total=total, desc="[BGP] First pass - create", unit="win", colour="CYAN")
+        pbar = tqdm(total=len(windows_list), desc=desc, unit="win", colour="CYAN") if show_progress else None
 
         try:
             while pending:
                 done = next(as_completed(pending))
                 pending.remove(done)
-                window, new_bands, mins, maxs = done.result()
+                results = done.result()  # list of (window, new_bands, mins, maxs)
 
-                # Initialize global stats once we know band count
-                if global_mins is None or global_maxs is None:
-                    global_mins = mins.copy()
-                    global_maxs = maxs.copy()
-                else:
-                    # Aggregate per band
-                    global_mins = np.minimum(global_mins, mins)
-                    global_maxs = np.maximum(global_maxs, maxs)
-
-                writer.write_block(window=window, block=new_bands)
-                prog_bar.update(1)
+                for window, new_bands, mins, maxs in results:
+                    writer.write_block(window=window, block=new_bands)
+                    global_mins = np.minimum(global_mins, mins) if global_mins is not None else mins.copy()
+                    global_maxs = np.maximum(global_maxs, maxs) if global_maxs is not None else maxs.copy()
+                    if pbar is not None:
+                        pbar.update(1)
 
                 try:
-                    w = next(windows_iter)
+                    c = next(chunk_iter)
                 except StopIteration:
-                    w = None
-                if w is not None:
-                    pending.add(ex.submit(_generate_window, w))
+                    c = None
+                if c is not None:
+                    pending.add(ex.submit(_generate_windows_chunk, c))
         except Exception as e:
-            # Cancel all future tasks
-            for fututre_task in pending:
-                fututre_task.cancel()
-            raise Exception(f"[parallel] Error during tasks execution:\n{e}")
+            for f in pending: f.cancel()
+            raise Exception(f"[parallel] Error during Pass 1:\n{e}")
         finally:
-            prog_bar.close()
+            if pbar is not None:
+                pbar.close()
 
-    # Return global min/max per band alone row-major array
     assert global_mins is not None and global_maxs is not None, "No windows processed"
     return np.stack([global_mins, global_maxs], axis=0)
 
 
-
-
-# --------------------------------------------------------------------------------------
-# Pass 2: Normalize data
-# --------------------------------------------------------------------------------------
-# Global (per-process) state initialized via initializer to avoid pickling large arrays per task
+# ======================================================================================
+# Pass 2: normalization (uses unnormalized TIFF produced in Pass 1)
+# ======================================================================================
 _worker_state: dict[str, Any] = {
     "path": None,          # str
     "band_mins": None,     # np.ndarray, shape (bands,)
     "band_maxs": None,     # np.ndarray, shape (bands,)
+    "clip01": True,        # bool
 }
 
 
-def _init_normalize_worker(unorm_path: str, band_mins: np.ndarray, band_maxs: np.ndarray) -> None:
-    """
-    Initializer specifically for normalizer function.
-
-    Stores immutable references to inputs in a process-local dict so each task
-    doesn't have to receive large arrays via pickling.
-
-    Args:
-        unorm_path (str): Path to unnormalized dataset.
-        band_mins (np.ndarray): Array, each index is minimum value per band.
-        band_maxs (np.ndarray): Array, each index is maximum value per band.
-    """
+def _init_normalize_worker(unorm_path: str, band_mins: np.ndarray, band_maxs: np.ndarray, clip01: bool) -> None:
+    """Initializer for normalization workers (Pass 2)."""
     _worker_state["path"] = unorm_path
     _worker_state["band_mins"] = np.asarray(band_mins, dtype=np.float32)
     _worker_state["band_maxs"] = np.asarray(band_maxs, dtype=np.float32)
+    _worker_state["clip01"] = bool(clip01)
+
+    # Light warmup (no disk I/O) to pre-allocate and ensure BLAS pools are quiet
+    b = _worker_state["band_mins"].shape[0]
+    dummy = np.zeros((b, 4, 4), dtype=np.float32)
+    denom = np.maximum(_worker_state["band_maxs"] - _worker_state["band_mins"], 1e-8)
+    _ = (dummy - _worker_state["band_mins"][..., None, None]) / denom[..., None, None]
 
 
-def _normalize_window(window: WindowType) -> Tuple[WindowType, np.ndarray]:
+def _normalize_windows_chunk(windows_chunk: List[WindowType]) -> List[Tuple[WindowType, np.ndarray]]:
+    """Worker: read a chunk of windows and return normalized blocks for each.
+
+    Returns list[(window, norm_block)] where norm_block has shape (bands, h, w), float32.
     """
-    Worker function: read one window from the multiband TIFF, normalize per band, return the block.
+    # print(f"[worker] pid={getpid()} processing {len(windows_chunk)} windows")
+    path: str = _worker_state["path"]
+    mins: np.ndarray = _worker_state["band_mins"]
+    maxs: np.ndarray = _worker_state["band_maxs"]
+    clip01: bool = _worker_state["clip01"]
 
-    Returns:
-        Tuple[WindowType, np.ndarray]: norm_block - (window, norm_block) - has shape (bands, height, width), dtype float32.
-    """
-
-        
-    (row_off, col_off), (h, w) = window
-    path:str = _worker_state["path"]
-    mins:np.ndarray = _worker_state["band_mins"]
-    maxs:np.ndarray = _worker_state["band_maxs"]
-
-    # Re-open the dataset inside the worker process. No shared handles.
-    with rasterio.open(path, "r") as src:
-        block = src.read(window=Window(col_off, row_off, w, h))  #type:ignore
-
-    # Vectorized per-band normalization: (x - min) / (max - min)
     denom = np.maximum(maxs - mins, 1e-8).astype(np.float32)
-    norm = (block.astype(np.float32) - mins[:, None, None]) / denom[:, None, None]
-    np.clip(norm, 0.0, 1.0, out=norm)
+    out: List[Tuple[WindowType, np.ndarray]] = []
 
-    return window, norm
+    with rasterio.open(path, "r") as src:
+        for window in windows_chunk:
+            (row_off, col_off), (h, w) = window
+            block = src.read(window=Window(col_off, row_off, w, h)).astype(np.float32) #type:ignore
+            norm = (block - mins[:, None, None]) / denom[:, None, None]
+            if clip01:
+                np.clip(norm, 0.0, 1.0, out=norm)
+            out.append((window, norm))
+
+    return out
 
 
-def parallel_normalize(
+def parallel_normalize_streaming(
     *,
-    unorm_path:str,
-    windows:Iterable[WindowType],
-    band_mins:np.ndarray,
-    band_maxs:np.ndarray,
-    writer:SupportsWriteBlock,
-    max_workers:Optional[int] = None,
-    inflight:int = 2,
+    unorm_path: str,
+    windows: Iterable[WindowType],
+    band_mins: np.ndarray,
+    band_maxs: np.ndarray,
+    writer: SupportsWriteBlock,
+    max_workers: int | None = None,
+    inflight: int = 2,
+    chunk_size: int = 4,
+    show_progress: bool = True,
+    clip01: bool = True,
 ) -> None:
-    """Normalize windows in parallel with a bounded, streaming pattern.
+    """Normalize windows in parallel with a bounded, streaming, **chunked** pattern.
 
-    Parameters
-    ----------
-    unorm_path (str): Path to the unnormalized multiband GeoTIFF written in Pass 2.
-    windows (Iterable[WindowType]): Sequence of windows to process. Order is not required.
-    band_mins (np.ndarray): Array of band maximums in band-major order.
-    band_maxs (np.ndarray): Array of band maximums in band-major order.
-    writer (SupportsWriteBlock): Writer object that will receive each normalized block.
-    max_workers (int, optional): Number of worker processes. If None, defaults to `os.cpu_count()` (i.e. all of them). Defaults to None.
-    inflight (int): 
-        At most `inflight * max_workers` tasks will be in flight ("worked on") at once.
-        Lower to reduce RAM; raise to improve throughput.
-        Defaults to 2.
+    This function does **not** compute mins/maxs (they come from Pass 1).
+    It simply reads, normalizes, and streams blocks to the parent writer.
     """
-    windows_iter = iter(windows)
-
-    # Wrap iterator in a list to know total count for progress.
-    windows_list:List[WindowType]|None = None
-    total = None
-    
-    try:
-        windows_list = list(windows_iter)
-        total = len(windows_list)
-        windows_iter = iter(windows_list)
-    except TypeError:
-        # Not materializable; proceed without total
-        pass
+    windows_list = list(windows)
+    chunks = list(_chunked(windows_list, chunk_size))
 
     with ProcessPoolExecutor(
         max_workers=max_workers,
         initializer=_init_normalize_worker,
-        initargs=(unorm_path, band_mins, band_maxs),
+        initargs=(unorm_path, band_mins, band_maxs, clip01),
     ) as ex:
         pending: set[Future] = set()
-
-        # Prime the pump: submit up to inflight * workers tasks
         target_inflight = max(1, (max_workers or 1) * max(1, inflight))
+
+        chunk_iter = iter(chunks)
         for _ in range(target_inflight):
             try:
-                w = next(windows_iter)
+                c = next(chunk_iter)
             except StopIteration:
                 break
-            pending.add(ex.submit(_normalize_window, w))
+            pending.add(ex.submit(_normalize_windows_chunk, c))
 
-        # Progress bar setup
-        prog_bar = tqdm(total=total, desc="[BGP] Second pass - normalize", unit="win", colour="MAGENTA")
+        pbar = tqdm(total=len(windows_list), desc="Pass 2: normalize", unit="win") if show_progress else None
 
-        # Drain as tasks complete; submit new ones to keep inflight bounded
         try:
             while pending:
                 done = next(as_completed(pending))
                 pending.remove(done)
+                results = done.result()  # list[(window, norm_block)]
 
-                window, norm_block = done.result()  # may raise from worker
-                writer.write_block(window=window, block=norm_block)
-                prog_bar.update(1)
+                for window, norm_block in results:
+                    writer.write_block(window=window, block=norm_block)
+                    if pbar is not None:
+                        pbar.update(1)
 
                 try:
-                    w = next(windows_iter)
+                    c = next(chunk_iter)
                 except StopIteration:
-                    w = None
-                if w is not None:
-                    pending.add(ex.submit(_normalize_window, w))
+                    c = None
+                if c is not None:
+                    pending.add(ex.submit(_normalize_windows_chunk, c))
+        except Exception as e:
+            for f in pending: f.cancel()
+            raise Exception(f"[parallel] Error during Pass 2:\n{e}")
+        finally:
+            if pbar is not None:
+                pbar.close()
+
+
+# ======================================================================================
+# Advanced: Generic streaming submission (optional)
+# ======================================================================================
+
+def submit_streaming(
+    *,
+    worker: Callable[..., Any],
+    initializer: Optional[Callable[..., Any]] = None,
+    initargs: Tuple[()] = (),
+    tasks: Iterable[Tuple[Any, ...]],
+    consumer: Callable[[Any], None],
+    max_workers: Optional[int] = None,
+    inflight: int = 2,
+    desc: str = "stream",
+    show_progress: bool = True,
+    ) -> None:
+    """Generic streaming executor with bounded in-flight tasks.
+
+    The worker runs in subprocesses and returns results that the parent consumes
+    immediately via `consumer`, which is responsible for writing/aggregation.
+    This keeps memory bounded.
+    """
+    tasks_list = list(tasks)
+    total = len(tasks_list)
+
+    with ProcessPoolExecutor(
+        max_workers=max_workers, 
+        initializer=initializer, 
+        initargs=initargs
+        ) as ex:
+        pending: set[Future] = set()
+        target_inflight = max(1, (max_workers or 1) * max(1, inflight))
+
+        it = iter(tasks_list)
+        for _ in range(target_inflight):
+            try:
+                t = next(it)
+            except StopIteration:
+                break
+            pending.add(ex.submit(worker, *t))
+
+        pbar = tqdm(total=total, desc=desc, unit="task") if show_progress else None
+
+        try:
+            while pending:
+                done = next(as_completed(pending))
+                pending.remove(done)
+                result = done.result()
+                consumer(result)
+                if pbar is not None:
+                    pbar.update(1)
+                try:
+                    t = next(it)
+                except StopIteration:
+                    t = None
+                if t is not None:
+                    pending.add(ex.submit(worker, *t))
         except Exception:
-            # Cancel all outstanding tasks on error for faster teardown
             for fut in pending:
                 fut.cancel()
             raise
         finally:
-            prog_bar.close()
-
+            if pbar is not None:
+                pbar.close()

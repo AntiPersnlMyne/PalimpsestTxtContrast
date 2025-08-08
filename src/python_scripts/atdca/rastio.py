@@ -142,7 +142,7 @@ class MultibandBlockWriter:
             "width": self.output_shape[1],
             "count": self.num_bands, 
             "dtype": self.output_dtype,
-            "compress": "deflate",
+            "compress": None, # change to zstd later
             "tiled": True,
             "blockxsize": self.window_shape[1], 
             "blockysize": self.window_shape[0],

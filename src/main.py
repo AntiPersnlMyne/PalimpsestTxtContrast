@@ -65,7 +65,7 @@ if __name__ == "__main__":
 # BGP, block=512, band=3: 215
 # BGP, block=512, band=3, @njit: 221
 # BGP, block=512, band=3, @njit, par-pass2: 218
-# BGP, block=512, band=3, @njit, par-pass1, par-pass2: # 295
+# BGP, block=512, band=3, @njit, par-pass1, par-pass2: # 17
 
 
 # BGP, block=256, band=11: 1629
