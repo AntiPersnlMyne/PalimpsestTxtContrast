@@ -16,18 +16,13 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 
 
 # --------------------------------------------------------------------------------------------
-# Imports
+# Imports Pipeline Modules
 # --------------------------------------------------------------------------------------------
-# Import pipeline modules
-from .bgp import *
-# from .tgp import *
+from .bgp import band_generation_process
+from .tgp import target_generation_process
 # from .tcp import *
-# from .rastio import *
-from ..utils.fileio import *
+from ..utils.fileio import discover_image_files
 
-# Pyhton Modules
-import numpy as np
-import os
 
 
 # --------------------------------------------------------------------------------------------
@@ -36,6 +31,7 @@ import os
 def ATDCA(
     input_dir:str, 
     output_dir:str, 
+    verbose:bool = False,
     one_file:bool = False,
     window_shape:tuple = (512,512),
     max_targets:int = 10,
@@ -72,9 +68,6 @@ def ATDCA(
 
     print(f"[ATDCA] Found {len(input_files)} input band(s).")
     
-
-    # Output path for generated bands file. Bands saved to disc to free working memory.
-    
     print("[ATDCA] Running Band Generation Process (BGP)...")
     band_generation_process(
         input_image_paths=input_files,
@@ -84,24 +77,27 @@ def ATDCA(
         use_log=use_log,
         max_workers=None,
         chunk_size=chunk_size,
-        inflight=inflight
+        inflight=inflight,
+        show_progress=verbose
     )
 
 
+    print("[ATDCA] Running Target Generation Process (TGP)...")
+    target_generation_process(
+        generated_bands=[f"{output_dir}/gen_band_norm.tif"],
+        window_shape=window_shape,
+        max_targets=max_targets,
+        ocpi_threshold=ocpi_threshold,
+        use_parallel=False,
+        max_workers=None,
+        inflight=inflight,
+        show_progress=verbose
+    )
 
-
-
-
-
-    # print("[ATDCA] Running Target Generation Process (TGP)...")
-    # bgp_reader = get_single_multiband_reader(bgp_output_path)
-    # targets, _ = target_generation_process(
-    #     image_reader=bgp_reader,
-    #     max_targets=max_targets,
-    #     opci_threshold=ocpi_threshold,
-    #     block_shape=block_shape
-    # )
     # print(f"[ATDCA] TGP detected {len(targets)} target(s).")
+
+
+
 
     # print("[ATDCA] Running Target Classification Process (TCP)...")
     # if isinstance(shape, tuple): # Check shape returns window size

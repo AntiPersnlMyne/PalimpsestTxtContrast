@@ -209,7 +209,7 @@ def parallel_generate_streaming(
                 break
             pending.add(ex.submit(_generate_windows_chunk, c))
 
-        pbar = tqdm(total=len(windows_list), desc=desc, unit="win", colour="CYAN") if show_progress else None
+        prog_bar = tqdm(total=len(windows_list), desc=desc, unit="win", colour="CYAN") if show_progress else None
 
         try:
             while pending:
@@ -221,8 +221,8 @@ def parallel_generate_streaming(
                     writer.write_block(window=window, block=new_bands)
                     global_mins = np.minimum(global_mins, mins) if global_mins is not None else mins.copy()
                     global_maxs = np.maximum(global_maxs, maxs) if global_maxs is not None else maxs.copy()
-                    if pbar is not None:
-                        pbar.update(1)
+                    if prog_bar is not None:
+                        prog_bar.update(1)
 
                 try:
                     c = next(chunk_iter)
@@ -234,8 +234,7 @@ def parallel_generate_streaming(
             for f in pending: f.cancel()
             raise Exception(f"[parallel] Error during Pass 1:\n{e}")
         finally:
-            if pbar is not None:
-                pbar.close()
+            if prog_bar is not None: prog_bar.close()
 
     assert global_mins is not None and global_maxs is not None, "No windows processed"
     return np.stack([global_mins, global_maxs], axis=0)
@@ -330,7 +329,8 @@ def parallel_normalize_streaming(
     writer: SupportsWriteBlock,
     max_workers: int | None = None,
     inflight: int = 2,
-    chunk_size: int = 4
+    chunk_size: int = 4,
+    show_progress:bool = True
     ) -> None:
     """
     Orchestrates the parallel processing using submit_streaming. 
@@ -371,7 +371,7 @@ def parallel_normalize_streaming(
                 break
             pending.add(ex.submit(_normalize_windows_chunk, chunk))
 
-        prog_bar = tqdm(total=len(windows_list), desc="[BGP] Second pass - normalize", unit="win", colour="MAGENTA")
+        if show_progress: prog_bar = tqdm(total=len(windows_list), desc="[BGP] Second pass - normalize", unit="win", colour="MAGENTA")
 
         try:
             while pending:
@@ -381,7 +381,7 @@ def parallel_normalize_streaming(
 
                 for window, norm_block in results:
                     writer.write_block(window=window, block=norm_block)
-                    prog_bar.update(1)
+                    if show_progress: prog_bar.update(1)
 
                 try:
                     chunk = next(chunk_iter)
@@ -393,7 +393,7 @@ def parallel_normalize_streaming(
             for f in pending: f.cancel()
             raise Exception(f"[parallel] Error during Pass 2:\n{e}")
         finally:
-            prog_bar.close()
+            if show_progress: prog_bar.close()
 
 
 

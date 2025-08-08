@@ -49,10 +49,9 @@ class Target:
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
-@njit
 def _best_target(
     *,
-    paths: Sequence[str],
+    paths: List[str],
     windows: Iterable[WindowType],
     p_matrix:np.ndarray|None
 ) -> Target:
@@ -136,12 +135,12 @@ def _make_windows(image_shape: Tuple[int, int], window_shape: Tuple[int, int]):
 # --------------------------------------------------------------------------------------------
 def target_generation_process(
     *,
-    generated_bands:Sequence[str],
+    generated_bands:List[str],
     window_shape:Tuple[int,int],
     max_targets:int = 10,
     ocpi_threshold:float = 0.01,       
     use_parallel:bool = False,  # vvv Parallelization parameters vvv
-    max_workers:int,
+    max_workers:int|None = None,
     inflight:int,
     show_progress:bool
     ) -> List[np.ndarray]:
@@ -168,7 +167,7 @@ def target_generation_process(
     
     # Get dims for windows
     # Validate band-major layout
-    with MultibandBlockReader(list(generated_bands)) as reader:
+    with MultibandBlockReader(generated_bands) as reader:
         # Determine final dimensions from small test block (10, 10)
         im_height, im_width = reader.image_shape()  
         dummy_block = reader.read_multiband_block(  

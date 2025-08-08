@@ -31,6 +31,7 @@ def main():
     # Automatic Target Detection w/ OSP input parameters
     INPUT_DIR:str = "data/input/test"
     OUTPUT_DIR:str = "data/output"
+    VERBOSE:bool = True
     ONE_FILE:bool = False
     WINDOW_SHAPE:tuple = (512,512)
     MAX_TARGETS:int = 10
@@ -44,6 +45,7 @@ def main():
     ATDCA(
         input_dir=INPUT_DIR,              # Directory of input images
         output_dir=OUTPUT_DIR,            # Directory for output
+        verbose=VERBOSE,
         one_file=ONE_FILE,                # Output as one file or individual bands
         window_shape=WINDOW_SHAPE,        # Breaks image into tiles for memory-safe processing 
         max_targets=MAX_TARGETS,          # Number of targets for algorithm to find

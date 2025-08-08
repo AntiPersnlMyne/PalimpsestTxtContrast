@@ -101,7 +101,8 @@ def band_generation_process(
     use_log:bool,
     max_workers:int|None = None,
     chunk_size:int = 4,
-    inflight:int = 2
+    inflight:int = 2,
+    show_progress:bool = True
     
     ) -> None:
     """
@@ -121,6 +122,7 @@ def band_generation_process(
         chunk_size (int, optional): How many windows of data the program can parallelize at once. 
             i.e. more chunks = more fast. Try 8 or 16 if RAM allows. Defaults to 4.
         inflight (int, optional): Controls memory footprint. At most `inflight * max_workers` blocks in RAM. Defaults to 2.
+        verbose (bool): If true, shows progress bars.
     """
         
     # Initial scan to determine band count and output shape
@@ -169,8 +171,10 @@ def band_generation_process(
             func_name="_create_bands_from_block",   # function name, without parentheses
             use_sqrt=use_sqrt,
             use_log=use_log,
-            max_workers=None,                       # None = all cores
+            max_workers=max_workers,                       
+            chunk_size=chunk_size,
             inflight=2,                             # tune for RAM vs throughput
+            show_progress=show_progress
         )
 
     # Set bands' min/max
@@ -207,6 +211,7 @@ def band_generation_process(
             writer=writer,
             max_workers=max_workers,  # use all cores
             inflight=2,               # cap RAM: ~workers*inflight blocks in memory
+            chunk_size=chunk_size
         )
                     
     rm(unorm_path) # delete unnorm data
