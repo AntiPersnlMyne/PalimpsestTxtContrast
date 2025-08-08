@@ -19,7 +19,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "2.0.1" 
+__version__ = "2.1.0" 
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development"  # "Prototype", "Development", "Production"
@@ -27,17 +27,19 @@ __status__ = "Development"  # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 # Imports & thread oversubscription guards (safe defaults)
 # --------------------------------------------------------------------------------------------
-import os as _os
-_os.environ.setdefault("OMP_NUM_THREADS", "1")
-_os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
-_os.environ.setdefault("MKL_NUM_THREADS", "1")
-_os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
-_os.environ.setdefault("NUMBA_NUM_THREADS", "1")
+# import os as _os
+# _os.environ.setdefault("OMP_NUM_THREADS", "1")
+# _os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+# _os.environ.setdefault("MKL_NUM_THREADS", "1")
+# _os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+# _os.environ.setdefault("NUMBA_NUM_THREADS", "1")
 
 from concurrent.futures import ProcessPoolExecutor, as_completed, Future
 from typing import Iterable, Iterator, List, Optional, Sequence, Tuple, Protocol, Any, Callable
 from tqdm import tqdm
 from rasterio.windows import Window
+from ..atdca.rastio import MultibandBlockReader
+from ..atdca.tgp import block_l2_norms, project_block_onto_subspace, Target
 
 import numpy as np
 import rasterio
@@ -79,9 +81,9 @@ def _chunked(iterable: Iterable[Any], size: int) -> Iterator[List[Any]]:
         yield chunk
 
 
-# ======================================================================================
+# --------------------------------------------------------------------------------------
 # Pass 1: read -> create synthetic bands (generation)
-# ======================================================================================
+# --------------------------------------------------------------------------------------
 
 _gen_state: dict[str, Any] = {
     "paths": None,       # List[str]
@@ -130,27 +132,6 @@ def _read_input_window(paths: Sequence[str], window: WindowType) -> np.ndarray:
                 out[i] = band
         assert out is not None
         return out
-
-
-def _generate_window(window: WindowType) -> Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]:
-    """Worker: read inputs, create synthetic bands, return block and per-band stats.
-
-    Returns
-    -------
-    (window, new_bands, mins, maxs)
-        new_bands: (bands, h, w) synthetic output
-        mins/maxs: (bands,) local stats for aggregation in parent
-    """
-    paths = _gen_state["paths"]
-    use_sqrt = _gen_state["use_sqrt"]
-    use_log = _gen_state["use_log"]
-    bands_fn = _gen_state["bands_fn"]
-
-    block = _read_input_window(paths, window).astype(np.float32)
-    new_bands = bands_fn(block, use_sqrt, use_log).astype(np.float32)
-    mins = new_bands.min(axis=(1, 2)).astype(np.float32)
-    maxs = new_bands.max(axis=(1, 2)).astype(np.float32)
-    return window, new_bands, mins, maxs
 
 
 def _generate_windows_chunk(windows_chunk: List[WindowType]) -> List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]]:
@@ -246,9 +227,9 @@ def parallel_generate_streaming(
     return np.stack([global_mins, global_maxs], axis=0)
 
 
-# ======================================================================================
+# --------------------------------------------------------------------------------------
 # Pass 2: bands -> normalize -> write (normalization)
-# ======================================================================================
+# --------------------------------------------------------------------------------------
 
 _worker_state: dict[str, Any] = {
     """Stores global information accessible to the worker"""
@@ -401,21 +382,126 @@ def parallel_normalize_streaming(
             prog_bar.close()
 
 
-# ======================================================================================
+
+# --------------------------------------------------------------------------------------
+# Parallel scan helpers (submit_streaming): initializer + worker + driver
+# --------------------------------------------------------------------------------------
+_scan_state: dict[str, Any|None] = {
+    "paths": None,              # Sequence[str]
+    "projection_matrix": None,  # np.ndarray | None
+    "reader": None,             # MultibandBlockReader
+}
+
+
+def _init_scan_worker(paths: Sequence[str], projection: np.ndarray|None) -> None:
+    """
+    Initializer for parallel scan workers.
+
+    Opens a reader in each process and stores the projection matrix (if any).
+    """
+    _scan_state["paths"] = list(paths)
+    _scan_state["projection"] = projection.astype(np.float32) if projection is not None else None
+    _scan_state["reader"] = MultibandBlockReader(list(paths))
+
+
+def _scan_window(window: WindowType) -> Tuple[float, int, int, np.ndarray]:
+    """
+    (per worker) Scan a single window and return its best candidate.
+
+    Args:
+        windows (Iterable[WindowType]): List of windows to iterate over.
+
+    Returns:
+        Tuple[float,int,int,np.ndarray]: Values of a Target dataclass: (value, row, col, band_spectrum)
+    """
+    # Get worker varaibles
+    reader:MultibandBlockReader = _scan_state["reader"] #type:ignore 
+    p_matrix = _scan_state["projection_matrix"]
+    (row_off, col_off), (win_height, win_width) = window
+    
+    # Project block onto P matrix
+    block = reader.read_multiband_block(window)  # (bands, h, w)
+    if p_matrix is not None: block = project_block_onto_subspace(block=block, projection_matrix=p_matrix)  # (bands, h, w)
+
+        # Compute L2 norm and returns tile
+    norms = block_l2_norms(block)  # shape: (h, w)
+    
+    # Find pixel within tile with largest norm
+    max_px_idx = int(np.argmax(norms))
+    max_px_val = float(norms.flat[max_px_idx])
+
+    block_row, block_col = divmod(max_px_idx, win_width)
+    
+    # Convert tile-local coordinates to full image coordinates
+    im_row, im_col = row_off + block_row, col_off + block_col
+    
+    # Extract all bands (bands,:,:) from the best pixel
+    bands = block[:, block_row, block_col].astype(np.float32)
+    
+    # Return Target dataclass values
+    return max_px_val, im_row, im_col, bands
+
+
+def scan_for_max_parallel(
+    *,
+    paths: Sequence[str],
+    windows: Iterable[WindowType],
+    p_matrix: np.ndarray|None,
+    max_workers: int|None = None,
+    inflight: int = 2,
+    show_progress: bool = True,
+) -> Target:
+    """
+    Parallel variant of global argmax scan using `submit_streaming`.
+
+    The parent process reduces local candidates into a single global best.
+    """
+    # Initalize best_target output
+    best_target:Target = Target(0,0,0,np.empty(0))
+
+    def _consume(result: Tuple[float, int, int, np.ndarray]) -> None:
+        nonlocal best_target
+        value, row, col, band_spec = result
+        target = Target(value, row, col, band_spec)
+        if target.value > best_target.value: best_target = target
+
+    tasks = [( (window,), ) for window in list(windows)]  # each task is a 1‑tuple of args
+
+    submit_streaming(
+        worker= lambda values: _scan_window(*values),  # unpack args from tuple output
+        initializer=_init_scan_worker,
+        initargs=(list(paths), p_matrix),
+        tasks=tasks,
+        consumer=_consume,
+        max_workers=max_workers,
+        inflight=inflight,
+        prog_bar_label="[TGP] Target generation",
+        prog_bar_color="YELLOW",
+        show_progress=show_progress
+    )
+
+    assert best_target is not None, "No pixels scanned; empty window list purghaps?"
+    return best_target
+
+
+
+
+# --------------------------------------------------------------------------------------
 # Generic Streaming Submission
-# ======================================================================================
+# --------------------------------------------------------------------------------------
 
 def submit_streaming(
     *,
     worker:Callable[..., Any],
     initializer:Callable[..., Any]|None = None,
-    initargs:Tuple[()] = (),
+    initargs:Tuple = (),
     tasks:Iterable[Tuple[Any, ...]],
     consumer:Callable[[Any], None],
     max_workers:int|None = None,
     inflight:int = 2,
     prog_bar_label:str = "stream",
-    prog_bar_color:str = "WHITE"
+    prog_bar_color:str = "WHITE",
+    show_progress:bool = False
     ) -> None:
     """
     Generic helper function designed to parallelize tasks in a streaming fashion. 
@@ -467,7 +553,7 @@ def submit_streaming(
             # Submit tasks to the process pool
             pending.add(ex.submit(worker, *task))
 
-        prog_bar = tqdm(total=total, desc=prog_bar_label, unit="task", colour=prog_bar_color) 
+        if show_progress: prog_bar = tqdm(total=total, desc=prog_bar_label, unit="task", colour=prog_bar_color) 
 
         try:
             while pending:
@@ -480,7 +566,7 @@ def submit_streaming(
                 consumer(result)
                 
                 # Update progress bar with +1 task completed
-                prog_bar.update(1)
+                if show_progress: prog_bar.update(1)
                 
                 try:
                     # Get next task to submit
@@ -500,4 +586,4 @@ def submit_streaming(
         
         finally:
             # Shut down progress bar - fail or success
-            prog_bar.close()
+            if show_progress: prog_bar.close()

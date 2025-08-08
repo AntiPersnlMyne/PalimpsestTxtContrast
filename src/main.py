@@ -67,13 +67,16 @@ if __name__ == "__main__":
     print(f"\n[main] - Execution finished -\nRuntime = {(time() - start):.2f}")
 
 # Timing results
+# -- BGP --
 # BGP, block=512, band=3: 215
 # BGP, block=512, band=3, @njit: 221
 # BGP, block=512, band=3, @njit, par-pass1, par-pass2: # 17 (12 on laptop)
 
-
 # BGP, block=256, band=11: 1629
 # BGP, block=256, band=11, @njit, par-pass1, par-pass2: 144
+
+# -- BGP->TGP -- 
+# 
 # 
 
 

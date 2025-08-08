@@ -26,6 +26,7 @@ from ..utils.math_utils import (
     block_l2_norms
 )
 from ..atdca.rastio import MultibandBlockReader
+from ..utils.parallel import submit_streaming, scan_for_max_parallel
 
 
 
@@ -63,9 +64,11 @@ def _best_target(
         windows (Iterable[WindowType]): List of windows to iterate over.
         p_matrix (np.ndarray | None): Projection matrix. If not provided (None),
             assumes first target i.e. no P matrix created yet.
+    Returns:
+        Target (dataclass): Best target found in dataset. Object's data: value, row, col, band_spectrum.
     """
     
-    # Initalize best_target
+    # Initalize best_target output
     best_target:Target = Target(0,0,0,np.empty(0))
 
     with MultibandBlockReader(list(paths)) as reader:        
@@ -85,7 +88,7 @@ def _best_target(
             (row_off, col_off), (win_height, win_width) = window
             block_row, block_col = divmod(max_px_idx, win_height)
             
-            # Convert tile-local coordinates (dr, dc) to full image coordinates (r, c)
+            # Convert tile-local coordinates to full image coordinates 
             im_row, im_col = row_off + block_row, col_off + block_col
             
              # Extract all bands (bands,:,:) from the best pixel
@@ -160,13 +163,13 @@ def target_generation_process(
             Defaults to False.
 
     Returns:
-        List[np.ndarray]: List of targets (T); 
+        List[np.ndarray]: List of targets (t0, t1, t2, ...); 
     """
     
     # Get dims for windows
     # Validate band-major layout
     with MultibandBlockReader(list(generated_bands)) as reader:
-        # Determine final dimensions from small test block
+        # Determine final dimensions from small test block (10, 10)
         im_height, im_width = reader.image_shape()  
         dummy_block = reader.read_multiband_block(  
             ((0, 0), (10,10))
@@ -180,30 +183,29 @@ def target_generation_process(
     # Calculate initial target
     if use_parallel:
         pass
-        # t0 = _scan_for_max_parallel(
-        #     paths=image_paths, windows=windows, projection=None,
-        #     max_workers=max_workers, inflight=inflight, show_progress=show_progress,
-        # )
+        t0 = scan_for_max_parallel(
+            paths=generated_bands, windows=windows, p_matrix=None,
+            max_workers=max_workers, inflight=inflight, show_progress=show_progress
+        )
     else:
         t0 = _best_target(paths=generated_bands, windows=windows, p_matrix=None)    
     
     # Check target has same num_bands as input data
-    if t0.band_spectrum.shape[0] != num_bands:
-        raise ValueError(f"Band mismatch: discovered {num_bands} bands, candidate has {t0.band_spectrum.shape[0]}")
+    if t0.band_spectrum.shape[0] != num_bands: raise ValueError(f"Band mismatch: discovered {num_bands} bands, candidate has {t0.band_spectrum.shape[0]}")
     
     targets:List[np.ndarray] = [t0.band_spectrum]
 
-    # Computer new p_marix with first target
+    # Compute new p_marix with first target
     p_matrix = compute_orthogonal_projection_matrix(targets).astype(np.float32)  # (bands,bands)
 
     for _ in range(1, max_targets):
         # Find next candidate in orthogonal space
         if use_parallel:
             pass
-            # best_target = _scan_for_max_parallel(
-            #     paths=image_paths, windows=windows, projection=P,
-            #     max_workers=max_workers, inflight=inflight, show_progress=show_progress,
-            # )
+            best_target = scan_for_max_parallel(
+                paths=generated_bands, windows=windows, p_matrix=p_matrix,
+                max_workers=max_workers, inflight=inflight, show_progress=show_progress,
+            )
         else:
             best_target = _best_target(paths=generated_bands, windows=windows, p_matrix=p_matrix)
 
