@@ -42,7 +42,9 @@ def ATDCA(
     use_sqrt:bool = False,
     use_log:bool = False,
     ocpi_threshold:float = 0.01,
-    input_image_type:str|tuple[str, ...] = "tif"
+    input_image_type:str|tuple[str, ...] = "tif",
+    chunk_size:int = 4,
+    inflight:int = 2
     ) -> None:
     """
     Runs the Automatic Target Detection Classification Algorithm (ATDCA)
@@ -80,7 +82,9 @@ def ATDCA(
         window_shape=window_shape,
         use_sqrt=use_sqrt,
         use_log=use_log,
-        max_workers=None
+        max_workers=None,
+        chunk_size=chunk_size,
+        inflight=inflight
     )
 
 

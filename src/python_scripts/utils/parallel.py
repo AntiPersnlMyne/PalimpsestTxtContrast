@@ -36,7 +36,6 @@ _os.environ.setdefault("NUMBA_NUM_THREADS", "1")
 
 from concurrent.futures import ProcessPoolExecutor, as_completed, Future
 from typing import Iterable, Iterator, List, Optional, Sequence, Tuple, Protocol, Any, Callable
-from os import getpid
 from tqdm import tqdm
 from rasterio.windows import Window
 

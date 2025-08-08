@@ -32,22 +32,27 @@ def main():
     INPUT_DIR:str = "data/input/test"
     OUTPUT_DIR:str = "data/output"
     ONE_FILE:bool = False
-    WINDOW_SHAPE:tuple = (512,512)
+    WINDOW_SHAPE:tuple = (1024,1024)
     MAX_TARGETS:int = 10
     USE_SQRT:bool = True
     USE_LOG:bool = False    
     OCPI_THRESHOLD:float = 0.01
     INPUT_IMG_TYPE:str|tuple[str,...] = "tif"
+    CHUNK_SIZE:int = 16
+    INFLIGHT = 2
     
-    ATDCA(input_dir=INPUT_DIR,              # Directory of input images
-          output_dir=OUTPUT_DIR,            # Directory for output
-          one_file=ONE_FILE,                # Output as one file or individual bands
-          window_shape=WINDOW_SHAPE,        # Breaks image into tiles for memory-safe processing
-          max_targets=MAX_TARGETS,          # Number of targets for algorithm to find
-          use_sqrt=USE_SQRT,                # Generate synthetic bands with sqrt  
-          use_log=USE_LOG,                  # Generate synthetic bands with log
-          ocpi_threshold=OCPI_THRESHOLD,    # Target purity threshold
-          input_image_type=INPUT_IMG_TYPE   # Image type of source data
+    ATDCA(
+        input_dir=INPUT_DIR,              # Directory of input images
+        output_dir=OUTPUT_DIR,            # Directory for output
+        one_file=ONE_FILE,                # Output as one file or individual bands
+        window_shape=WINDOW_SHAPE,        # Breaks image into tiles for memory-safe processing
+        max_targets=MAX_TARGETS,          # Number of targets for algorithm to find
+        use_sqrt=USE_SQRT,                # Generate synthetic bands with sqrt  
+        use_log=USE_LOG,                  # Generate synthetic bands with log
+        ocpi_threshold=OCPI_THRESHOLD,    # Target purity threshold
+        input_image_type=INPUT_IMG_TYPE,  # Image type of source data
+        chunk_size=CHUNK_SIZE,            # How many windows to process at once
+        inflight=INFLIGHT                 # Throughput
     )
 
 

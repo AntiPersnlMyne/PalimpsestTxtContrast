@@ -101,7 +101,10 @@ def band_generation_process(
     window_shape:Tuple[int,int],
     use_sqrt:bool,
     use_log:bool,
-    max_workers:int|None = None
+    max_workers:int|None = None,
+    chunk_size:int = 4,
+    inflight:int = 2
+    
     ) -> None:
     """
     The Band Generation Process. Generates synthetic, non-linear bands as combinations of existing bands. 
@@ -115,8 +118,11 @@ def band_generation_process(
             Smaller block process slower with a smaller memory footprint. 
         use_sqrt (bool): If True, generate bands using square root.
         use_log (bool): If True, generate bands using log base 10.
-        max_workers (int|None, optional): Defines degree of parallelism, i.e. more workers = more fast. 
-            Number depends on CPU model. None lets program choose.
+        max_workers (int|None, optional): Number of cores for paralellization. If None, defaults to number of processors on the machine.
+            i.e. more workers = more fast. Defaults to None.
+        chunk_size (int, optional): How many windows of data the program can parallelize at once. 
+            i.e. more chunks = more fast. Try 8 or 16 if RAM allows. Defaults to 4.
+        inflight (int, optional): Controls memory footprint. At most `inflight * max_workers` blocks in RAM. Defaults to 2.
     """
         
     # Initial scan to determine band count and output shape
