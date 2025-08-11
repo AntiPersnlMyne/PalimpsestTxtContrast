@@ -209,6 +209,7 @@ def target_generation_process(
         # Evaluate OPCI metric - determines stopping criteria
         opci = compute_opci(p_matrix, best_target.band_spectrum)
         if opci < ocpi_threshold:
+            if show_progress: print("[TGP] ocpi fell below threshold, no more targets classified..")
             break
 
         # Accept best_target and update projection

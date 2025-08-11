@@ -172,8 +172,8 @@ def target_classification_process(
                 consumer=_consume,
                 max_workers=max_workers,
                 inflight=inflight,
-                prog_bar_label="[TCP] Classify",
-                prog_bar_color="BLACK",
+                prog_bar_label="[TCP] Labeling targets",
+                prog_bar_color="WHITE",
                 show_progress=show_progress,
             )
             

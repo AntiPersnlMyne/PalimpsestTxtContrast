@@ -45,7 +45,7 @@ import os
 def ATDCA(
     input_dir:str, 
     output_dir:str, 
-    input_image_type:str|tuple[str, ...] = "tif",
+    input_image_types:str|tuple[str, ...] = "tif",
     window_shape:tuple = (512,512),
     use_sqrt:bool = False,
     use_log:bool = False,
@@ -86,10 +86,12 @@ def ATDCA(
     # Get input data
     # --------------------------------------------------------------------------------------------
     # Locate all image files of user-specified type in input directory
-    input_files = discover_image_files(input_dir, input_image_type)
+    input_files = discover_image_files(input_dir, input_image_types)
+    generated_bands_dir = f"{output_dir}/gen_band_norm.tif"
+    targets_classified_dir = f"{output_dir}/target_classified"
     
     if not input_files:
-        raise FileNotFoundError(f"No input images found in {input_dir} with extension(s): {input_image_type}")
+        raise FileNotFoundError(f"No input images found in {input_dir} with extension(s): {input_image_types}")
 
     print(f"[ATDCA] Found {len(input_files)} input band(s).")
     
@@ -109,9 +111,9 @@ def ATDCA(
 
 
     print("[ATDCA] Running Target Generation Process (TGP)...")
-    
+        
     targets:list[ndarray] = target_generation_process(
-        generated_bands=[f"{output_dir}/gen_band_norm.tif"],
+        generated_bands=[generated_bands_dir],
         window_shape=window_shape,
         max_targets=max_targets,
         ocpi_threshold=ocpi_threshold,
@@ -127,17 +129,19 @@ def ATDCA(
     print("[ATDCA] Running Target Classification Process (TCP)...")
     
     target_classification_process(
-        generated_bands=[f"{output_dir}/gen_band_norm.tif"],
+        generated_bands=[generated_bands_dir],
         window_shape=window_shape,
         targets=targets,
-        output_dir=f"{output_dir}/target_classified.tif",
+        output_dir=targets_classified_dir,
         use_parallel=use_parallel,
         max_workers=max_workers,
         inflight=inflight,
         show_progress=verbose
     )
+    
+    os.remove(generated_bands_dir) # Cleanup temp file
 
-    print(f"[ATDCA] Complete. Results written to: {f"{output_dir}/target_classified.tif"}")
+    print(f"[ATDCA] Complete. Results written to: {targets_classified_dir}")
 
 
 
