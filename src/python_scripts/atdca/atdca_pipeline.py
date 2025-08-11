@@ -17,7 +17,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "1.1.1"
+__version__ = "1.2.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -27,15 +27,14 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 # Imports Pipeline Modules
 # --------------------------------------------------------------------------------------------
+import logging
+import os
+from numpy import ndarray
+
 from .bgp import band_generation_process
 from .tgp import target_generation_process
 from .tcp import target_classification_process
-
 from ..utils.fileio import discover_image_files
-from numpy import ndarray
-from typing import Sequence, Tuple
-import os
-
 
 
 
@@ -82,20 +81,19 @@ def ATDCA(
         verbose (bool, optional): Enable/Disable loading bars in terminal.
     """
     
-    # --------------------------------------------------------------------------------------------
-    # Get input data
-    # --------------------------------------------------------------------------------------------
     # Locate all image files of user-specified type in input directory
     input_files = discover_image_files(input_dir, input_image_types)
     generated_bands_dir = f"{output_dir}/gen_band_norm.tif"
     targets_classified_dir = f"{output_dir}/target_classified"
     
-    if not input_files:
-        raise FileNotFoundError(f"No input images found in {input_dir} with extension(s): {input_image_types}")
+    # Check input data exists
+    if not input_files: raise FileNotFoundError(f"No input images found in {input_dir} with extension(s): {input_image_types}")
 
-    if verbose:
-        print(f"[ATDCA] Found {len(input_files)} input band(s).")
-        print("[ATDCA] Running Band Generation Process (BGP)...")
+    # verbose enables prog bar, else prints warnings/errors only
+    if verbose: logging.basicConfig(level=logging.INFO)
+    else: logging.basicConfig(level=logging.WARNING)
+    
+    logging.info("[ATDCA] Running Band Generation Process (BGP)...")
         
     band_generation_process(
         input_image_paths=input_files,
@@ -110,7 +108,7 @@ def ATDCA(
     )
 
 
-    if verbose: print("[ATDCA] Running Target Generation Process (TGP)...")
+    logging.info("[ATDCA] Running Target Generation Process (TGP)...")
         
     targets:list[ndarray] = target_generation_process(
         generated_bands=[generated_bands_dir],
@@ -123,9 +121,8 @@ def ATDCA(
         show_progress=verbose
     )
 
-    if verbose: 
-        print(f"[ATDCA] TGP detected {len(targets)} target(s).")
-        print("[ATDCA] Running Target Classification Process (TCP)...")
+    logging.info(f"[ATDCA] TGP detected {len(targets)} target(s).")
+    logging.info("[ATDCA] Running Target Classification Process (TCP)...")
     
     target_classification_process(
         generated_bands=[generated_bands_dir],
@@ -140,7 +137,7 @@ def ATDCA(
     
     os.remove(generated_bands_dir) # Cleanup temp file
 
-    if verbose: print(f"[ATDCA] Complete. Results written to: {targets_classified_dir}")
+    logging.info(f"[ATDCA] Complete. Results written to: {targets_classified_dir}")
 
 
 

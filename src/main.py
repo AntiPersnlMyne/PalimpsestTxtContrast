@@ -43,7 +43,7 @@ def main():
     CHUNK_SIZE:int = 8
     INFLIGHT:int = 2
     # Progress bar enable/disable
-    VERBOSE:bool = False
+    VERBOSE:bool = True
     
     
     ATDCA(
