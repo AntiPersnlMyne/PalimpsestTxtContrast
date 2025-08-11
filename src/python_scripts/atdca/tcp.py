@@ -16,7 +16,6 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 import numpy as np
 from typing import List, Sequence, Tuple
-from contextlib import nullcontext
 
 # Project modules
 from .rastio import MultibandBlockReader, MultibandBlockWriter, window_imread
@@ -111,9 +110,7 @@ def target_classification_process(
     window_shape: Tuple[int, int],
     targets: List[np.ndarray],
     output_dir: str,
-    scores_filename: str = "tcp_scores.tif",
-    write_labels: bool = True,
-    labels_filename: str = "tcp_labels.tif",
+    scores_filename: str = "targets_classified.tif",
     use_parallel: bool = True,
     max_workers: int|None = None,
     inflight: int = 2,
@@ -154,31 +151,17 @@ def target_classification_process(
         num_bands=k_targets,
         output_datatype=np.float32,
     )
-    labels_writer = (
-        MultibandBlockWriter(
-            output_path=output_dir,
-            output_image_shape=(img_height, img_width),
-            output_image_name=labels_filename,
-            num_bands=1,
-            output_datatype=np.uint16,
-        ) if write_labels 
-        else None
-    )
 
     # Build all windows
     windows = _make_windows((img_height, img_width), window_shape)
 
     if use_parallel:
         # Parallel streaming: workers compute; parent writes immediately.
-        with scores_writer as s_writer, (labels_writer if labels_writer else nullcontext()) as l_writer:
+        with scores_writer as s_writer:
             def _consume(result: Tuple[WindowType, np.ndarray]) -> None:
                 # Consumer executes in parent; safe to write here
                 window, scores = result                           # (K,h,w)
                 s_writer.write_block(window=window, block=scores)
-                if l_writer is not None:
-                    # Argmax across K scores → 1-band label map
-                    labels = np.argmax(scores, axis=0, keepdims=True).astype(np.uint16)
-                    l_writer.write_block(window=window, block=labels)
 
             tasks = [(window,) for window in windows]  # one-arg tasks: (window,)
             submit_streaming(
@@ -196,7 +179,7 @@ def target_classification_process(
             
     # Serial path (versus parallel) 
     else:
-        with scores_writer as s_writer, (labels_writer if labels_writer else nullcontext()) as l_writer:
+        with scores_writer as s_writer:
             for window in windows:
                 # Read block of data
                 block = window_imread(generated_bands, window).astype(np.float32)  # (B,h,w)
@@ -210,10 +193,6 @@ def target_classification_process(
                     proj_matrix = block if  k_targets == 1 else project_block_onto_subspace(block, Pk_arr[k_target])
                     scores[k_target] = np.tensordot(targets_arr[k_target], proj_matrix, axes=([0], [0]))
                 s_writer.write_block(window=window, block=scores)
-                if l_writer is not None:
-                    labels = np.argmax(scores, axis=0, keepdims=True).astype(np.uint16)
-                    l_writer.write_block(window=window, block=labels)
-
 
 
 
