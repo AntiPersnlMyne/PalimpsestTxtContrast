@@ -34,18 +34,21 @@ def _compute_pk(targets: List[np.ndarray]) -> List[np.ndarray]:
 
     targets
     """
-    k_targets = len(targets)
+    if not targets:
+        raise ValueError("[TCP] Empty targets list.")
+    
+    bands = int(targets[0].shape[0])
     Pk: List[np.ndarray] = []
     
     # Iterate targets and create P_matrix(s)
-    for k_target in range(k_targets):
-        targets = [targets[k] for k in range(k_targets) if k != k_target]
-        if not targets:
-            # No targets to project 
-            P_matrix = np.eye(targets[0].shape[0], dtype=np.float32)
+    for k_target in range(len(targets)):
+        target_list = [targets[k] for k in range(len(targets)) if k != k_target]
+        if not target_list:
+            # No targets to project; return identity matrix
+            P_matrix = np.eye(bands, dtype=np.float32)
         else:
             # Project targets
-            P_matrix = compute_orthogonal_projection_matrix(targets).astype(np.float32)
+            P_matrix = compute_orthogonal_projection_matrix(target_list).astype(np.float32)
         Pk.append(P_matrix)
         
     return Pk
@@ -79,21 +82,18 @@ def _tcp_window(window: WindowType) -> Tuple[WindowType, np.ndarray]:
     targets:np.ndarray = _worker_state["targets"]  # type:ignore ; (K, B)
     Pk:np.ndarray = _worker_state["Pk"]            # type:ignore ; (K, B, B)
 
-    (row_off, col_off), (height, width) = window
     block = window_imread(paths, window).astype(np.float32)  # (bands, height, width)
-
-    k_targets, bands = targets.shape
-    scores = np.empty((k_targets, height, width), dtype=np.float32)
+    (_, _), (win_height, win_width) = window
+    
+    k_targets, _ = targets.shape
+    scores = np.empty((k_targets, win_height, win_width), dtype=np.float32)
 
     # OSP score per target k: d_k(x) = t_k^T (P_k x)
     # For each target, project using P_k then compute t_k^T (P_k x)
     for k_target in range(k_targets):
         # Nothing to project out
-        if k_targets == 1:
-            proj = block
-        # Project out previous k targets
-        else:
-            proj = project_block_onto_subspace(block, Pk[k_target])  # (bands, height, width)
+        proj = block if k_targets == 1 else project_block_onto_subspace(block, Pk[k_target])  # (bands, height, width)
+            
         # Fast, multidimensional dot product over band axis
         # tensordot: (B,) * (B,height,width) over band axis -> (height,width) 
         scores[k_target] = np.tensordot(targets[k_target], proj, axes=([0], [0])).astype(np.float32)

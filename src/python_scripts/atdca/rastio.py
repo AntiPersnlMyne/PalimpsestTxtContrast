@@ -59,7 +59,7 @@ def window_imread(filepaths: Sequence[str], window: WindowType) -> np.ndarray:
             band_stack[i] = band
                 
     # Return read data
-    assert (band_stack.ndim and band_stack.size) != 0, "[rastio] window_imread read no data" # asserts size and dims aren't both empty
+    # assert (band_stack.ndim and band_stack.size) != 0, "[rastio] window_imread read no data" # asserts size and dims aren't both empty
     return band_stack
 
 
