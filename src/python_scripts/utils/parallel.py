@@ -38,10 +38,7 @@ from rasterio.windows import Window
 from dataclasses import dataclass
 
 from ..atdca.rastio import MultibandBlockReader
-from ..utils.math_utils import (
-    project_block_onto_subspace,
-    block_l2_norms
-)
+from ..utils.math_utils import project_block_onto_subspace, block_l2_norms
 
 
 
@@ -421,9 +418,12 @@ def _scan_window(window: WindowType) -> Tuple[float, int, int, np.ndarray]:
         Tuple[float,int,int,np.ndarray]: Values of a Target dataclass: (value, row, col, band_spectrum)
     """
     # 
-    assert isinstance(window, tuple) and len(window) == 2 \
-    and isinstance(window[0], tuple) and isinstance(window[1], tuple), \
-        f"Expected WindowType ((row_off,col_off),(h,w)), got: {window!r}"
+    assert (
+        isinstance(window, tuple)
+        and len(window) == 2
+        and isinstance(window[0], tuple)
+        and isinstance(window[1], tuple)
+    ), f"Expected WindowType ((row_off,col_off),(h,w)), got: {window!r}"
         
     # Get worker varaibles
     reader:MultibandBlockReader = _scan_state["reader"] #type:ignore 
@@ -431,26 +431,23 @@ def _scan_window(window: WindowType) -> Tuple[float, int, int, np.ndarray]:
     (row_off, col_off), (win_height, win_width) = window
     
     # Project block onto P matrix
-    block = reader.read_multiband_block(window)  # (bands, h, w)
+    block = reader.read_multiband_block(window).astype(np.float32)  # (bands, h, w)
     if p_matrix is not None: block = project_block_onto_subspace(block=block, projection_matrix=p_matrix)  # (bands, h, w)
 
-        # Compute L2 norm and returns tile
-    norms = block_l2_norms(block)  # shape: (h, w)
-    
     # Find pixel within tile with largest norm
+    norms = block_l2_norms(block)  # shape: (h, w)
     max_px_idx = int(np.argmax(norms))
     max_px_val = float(norms.flat[max_px_idx])
-
     block_row, block_col = divmod(max_px_idx, win_width)
     
-    # Convert tile-local coordinates to full image coordinates
-    im_row, im_col = row_off + block_row, col_off + block_col
+    # # Convert tile-local coordinates to full image coordinates
+    # 
     
-    # Extract all bands (bands,:,:) from the best pixel
-    bands = block[:, block_row, block_col].astype(np.float32)
+    # Return the original spectrum for OPCI/targets
+    bands_orig = block[:, block_row, block_col].astype(np.float32)
     
     # Return Target dataclass values
-    return max_px_val, im_row, im_col, bands
+    return max_px_val, row_off + block_row, col_off + block_col, bands_orig
 
 
 def best_target_parallel(

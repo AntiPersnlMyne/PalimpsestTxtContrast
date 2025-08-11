@@ -31,21 +31,21 @@ def main():
     
     ATDCA(
         # Input information
-        input_dir="data/input/arch165_sb",    # Directory of input images                              <--The only two
-        output_dir="data/output",       # Directory for output                                   <--required parameters
-        input_image_types="tif",        # Image type of source data
+        input_dir="data/input/arch165_sb",  # Directory of input images                              <--The only two
+        output_dir="data/output",           # Directory for output                                   <--required parameters
+        input_image_types="tif",            # Image type of source data
         # BGP and TCP parameters    
-        use_sqrt=True,                  # Generate synthetic bands with sqrt  
-        use_log=True,                   # Generate synthetic bands with log
-        max_targets=10,                 # Number of targets for algorithm to find
-        opci_threshold=0.00000001,             # Target purity threshold
+        use_sqrt=False,                     # Generate synthetic bands with sqrt  
+        use_log=False,                      # Generate synthetic bands with log
+        max_targets=10,                     # Number of targets for algorithm to find
+        opci_threshold=0.001,               # Target purity threshold
         # Parallelism fine-tuning
-        window_shape=(512,512),         # Breaks image into tiles for memory-safe processing 
-        max_workers=None,               # Max number of processes during parallel
-        chunk_size=8,                   # How many windows to process at once
-        inflight=2,                     # RAM Throughput
+        window_shape=(512,512),             # Breaks image into tiles for memory-safe processing 
+        max_workers=None,                   # Max number of processes during parallel
+        chunk_size=8,                       # How many windows to process at once
+        inflight=2,                         # RAM Throughput
         # Debug
-        verbose=True,                   # Enable/Disable progress bar
+        verbose=True,                       # Enable/Disable progress bar
     )
     
     # test.debug_target_generation_process(
