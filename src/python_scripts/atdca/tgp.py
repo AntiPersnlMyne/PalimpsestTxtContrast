@@ -16,8 +16,7 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 import numpy as np
 
 from dataclasses import dataclass
-from typing import Iterable, List, Tuple, Sequence
-from numba import njit
+from typing import Iterable, List, Tuple
 
 from ..utils.math_utils import (
     compute_orthogonal_projection_matrix,
@@ -26,7 +25,7 @@ from ..utils.math_utils import (
     block_l2_norms
 )
 from ..atdca.rastio import MultibandBlockReader
-from ..utils.parallel import scan_for_max_parallel
+from ..utils.parallel import best_target_parallel
 
 
 
@@ -35,7 +34,6 @@ from ..utils.parallel import scan_for_max_parallel
 # --------------------------------------------------------------------------------------------
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
 ImageBlock = np.ndarray
-ImageShape = Tuple[int, int]
 
 @dataclass
 class Target:
@@ -137,6 +135,7 @@ def target_generation_process(
     *,
     generated_bands:List[str],
     window_shape:Tuple[int,int],
+    image_shape:Tuple[int,int,int],
     max_targets:int = 10,
     ocpi_threshold:float = 0.01,       
     use_parallel:bool = False,  # vvv Parallelization parameters vvv
@@ -153,6 +152,7 @@ def target_generation_process(
     Args:
         generated_bands (Sequence[str]): Either </path/to/gen_band_norm.tif> (multiband) or a list of single-band files.
         window_shape (Tuple[int,int]): Size of tile ("block") of data to process.
+        image_shape (Tuple[int,int,int]): (bands,height,width) of input data.
         max_targets (int, optional): Max number of targets to extract. Defaults to 10.
         opci_threshold (float, optional): Stop if OCPI of target falls below this. Defaults to 0.01.
             Higher threshold (e.g. 0.1) creates less pure targets.
@@ -164,24 +164,19 @@ def target_generation_process(
     Returns:
         List[np.ndarray]: List of targets (t0, t1, t2, ...); 
     """
-    
-    # Get dims for windows
-    # Validate band-major layout
-    with MultibandBlockReader(generated_bands) as reader:
-        # Determine final dimensions from small test block (10, 10)
-        im_height, im_width = reader.image_shape()  
-        dummy_block = reader.read_multiband_block(  
-            ((0, 0), (10,10))
-        )
-        num_bands = int(dummy_block.shape[0])
-        if num_bands < 1: raise ValueError("Input image must have at least 1 band")
 
-    # Get all possible windows 
-    windows = _make_windows((im_height, im_width), window_shape)
+    # Calculate all possible windows 
+    num_bands, img_height, img_width = image_shape
+    windows = _make_windows((img_height, img_width), window_shape)
 
-    # Calculate initial target
+    targets:List[np.ndarray] = []
+
+
+    # =================================
+    # Find the first target t0 and OPCI
+    # =================================
     if use_parallel:
-        t0 = scan_for_max_parallel(
+        t0 = best_target_parallel(
             paths=generated_bands, windows=windows, p_matrix=None,
             max_workers=max_workers, inflight=inflight, show_progress=show_progress
         )
@@ -191,15 +186,17 @@ def target_generation_process(
     # Check target has same num_bands as input data
     if t0.band_spectrum.shape[0] != num_bands: raise ValueError(f"Band mismatch: discovered {num_bands} bands, candidate has {t0.band_spectrum.shape[0]}")
     
-    targets:List[np.ndarray] = [t0.band_spectrum]
-
     # Compute new p_marix with first target
     p_matrix = compute_orthogonal_projection_matrix(targets).astype(np.float32)  # (bands,bands)
-
+    
+    
+    # =========================================
+    # Iterate for subsequence targets (t1...tk)
+    # =========================================
     for _ in range(1, max_targets):
         # Find next candidate in orthogonal space
         if use_parallel:
-            best_target = scan_for_max_parallel(
+            best_target = best_target_parallel(
                 paths=generated_bands, windows=windows, p_matrix=p_matrix,
                 max_workers=max_workers, inflight=inflight, show_progress=show_progress,
             )

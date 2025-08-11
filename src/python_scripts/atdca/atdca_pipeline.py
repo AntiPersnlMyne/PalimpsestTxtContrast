@@ -35,6 +35,7 @@ from .bgp import band_generation_process
 from .tgp import target_generation_process
 from .tcp import target_classification_process
 from ..utils.fileio import discover_image_files
+from ..atdca.rastio import MultibandBlockReader
 
 
 
@@ -81,7 +82,12 @@ def ATDCA(
         verbose (bool, optional): Enable/Disable loading bars in terminal.
     """
     
-    # Locate all image files of user-specified type in input directory
+    # ==============
+    # Initialization
+    # ==============
+    logging.info("[ATDCA] Preprocessing...")
+    
+    # IO variables
     input_files = discover_image_files(input_dir, input_image_types)
     generated_bands_dir = f"{output_dir}/gen_band_norm.tif"
     targets_classified_dir = f"{output_dir}/target_classified"
@@ -89,9 +95,23 @@ def ATDCA(
     # Check input data exists
     if not input_files: raise FileNotFoundError(f"No input images found in {input_dir} with extension(s): {input_image_types}")
 
-    # verbose enables prog bar, else prints warnings/errors only
+    # Verbose enables debug, else prints warnings/errors only
     if verbose: logging.basicConfig(level=logging.INFO)
     else: logging.basicConfig(level=logging.WARNING)
+    
+    # Get input image dimensions
+    # image_shape = (bands, height, width)
+    with MultibandBlockReader(input_files) as reader:
+        dummy_block = reader.read_multiband_block(  ((0, 0), (2,2))  )
+        num_bands = int(dummy_block.shape[0])
+        image_shape = (num_bands, reader.image_shape()[0], reader.image_shape()[1])  
+        if num_bands < 1: raise ValueError("Input image must have at least 1 band")
+
+    
+    
+    # ======
+    #  GOSP
+    # ======
     
     logging.info("[ATDCA] Running Band Generation Process (BGP)...")
         
@@ -113,6 +133,7 @@ def ATDCA(
     targets:list[ndarray] = target_generation_process(
         generated_bands=[generated_bands_dir],
         window_shape=window_shape,
+        image_shape=image_shape,
         max_targets=max_targets,
         ocpi_threshold=ocpi_threshold,
         use_parallel=use_parallel,
@@ -127,6 +148,7 @@ def ATDCA(
     target_classification_process(
         generated_bands=[generated_bands_dir],
         window_shape=window_shape,
+        image_shape=image_shape,
         targets=targets,
         output_dir=targets_classified_dir,
         use_parallel=use_parallel,

@@ -35,7 +35,7 @@ def main():
         input_image_types="tif",        # Image type of source data
         # BGP and TCP parameters    
         use_sqrt=True,                  # Generate synthetic bands with sqrt  
-        use_log=False,                  # Generate synthetic bands with log
+        use_log=True,                   # Generate synthetic bands with log
         max_targets=10,                 # Number of targets for algorithm to find
         ocpi_threshold=0.1,             # Target purity threshold
         # Parallelism fine-tuning

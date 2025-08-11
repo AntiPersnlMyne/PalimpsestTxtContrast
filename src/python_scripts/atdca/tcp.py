@@ -108,6 +108,7 @@ def target_classification_process(
     *, # requirement of keyword args
     generated_bands: Sequence[str],
     window_shape: Tuple[int, int],
+    image_shape:Tuple[int,int,int],
     targets: List[np.ndarray],
     output_dir: str,
     scores_filename: str = "targets_classified.tif",
@@ -127,15 +128,11 @@ def target_classification_process(
     if len(targets) == 0:
         raise ValueError("[TCP] No targets provided (TGP output is empty).")
 
-    # Discover geometry and confirm target dimensionality matches
-    with MultibandBlockReader(list(generated_bands)) as reader:
-        img_height, img_width = reader.image_shape()
-        sample = reader.read_multiband_block(((0,0), (5,5))) # sample 5x5 block
-        band_count = int(sample.shape[0])
-
+    # Confirm target's dimensionality matches
+    num_bands, img_height, img_width = image_shape
     for i, target in enumerate(targets):
-        if target.shape != (band_count,):
-            raise ValueError(f"[TCP] Target {i} shape {target.shape}, expected ({band_count},)")
+        if target.shape != (num_bands,):
+            raise ValueError(f"[TCP] Target {i} shape {target.shape}, expected ({num_bands},)")
 
     # Precompute per-target projectors and pack arrays for per-task access
     Pk_list = _compute_pk(targets)

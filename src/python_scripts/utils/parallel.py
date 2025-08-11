@@ -453,7 +453,7 @@ def _scan_window(window: WindowType) -> Tuple[float, int, int, np.ndarray]:
     return max_px_val, im_row, im_col, bands
 
 
-def scan_for_max_parallel(
+def best_target_parallel(
     *,
     paths: Sequence[str],
     windows: Iterable[WindowType],
