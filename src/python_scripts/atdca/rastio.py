@@ -30,7 +30,7 @@ WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
 # --------------------------------------------------------------------------------------------
 def window_imread(filepaths: Sequence[str], window: WindowType) -> np.ndarray:
     """
-    Reads from a single window (bands, height, width)
+    Reads a tile from a single window (bands, height, width).
     Handles both one multiband file (one path) or many single-band files (many paths).
 
     Args:
@@ -118,7 +118,7 @@ class MultibandBlockReader:
         Reads a block of data from each raster file and combines them into a single multi-band array.
 
         Args:
-            window (WindowType): Region of raster to pull data: ( (row_off, col_off), (height, width) )
+            window (WindowType): Region of raster to pull data: ( (row_off, col_off), (win_height, win_width) )
 
         Returns:
             np.ndarray: A multiband Numpy array representing the block of data 
@@ -164,7 +164,7 @@ class MultibandBlockWriter:
         output_dtype (type, optional): The data type of the output raster. Defaults to float32.
     """
     
-    def __init__(self, output_path, output_image_shape, output_image_name, window_shape:Tuple[int,int] = (512,512), num_bands: int|None = None, output_datatype=np.float32):
+    def __init__(self, output_path, output_image_shape, output_image_name, window_shape:Tuple[int,int] = (512,512), num_bands: int|None = None, output_datatype=np.typename):
         self.output_path = output_path
         self.output_shape = output_image_shape
         self.output_name = output_image_name
