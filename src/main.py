@@ -18,6 +18,7 @@ __status__ = "Development" # "Development", or "Production".
 from python_scripts.atdca import ATDCA # Automatic Target Detection Classification Algorithm
 import warnings
 from time import time
+# from python_scripts.atdca import test
 
 # Suppress GeoTIFF warning - MISHA data isn't georeferenced, warning safely ignored
 warnings.filterwarnings("ignore", category=UserWarning, message="Dataset has no geotransform, gcps, or rpcs.*")
@@ -30,16 +31,15 @@ def main():
     
     ATDCA(
         # Input information
-        input_dir="data/input/test",    # Directory of input images                              <--The only two
+        input_dir="data/input/arch165_sb",    # Directory of input images                              <--The only two
         output_dir="data/output",       # Directory for output                                   <--required parameters
         input_image_types="tif",        # Image type of source data
         # BGP and TCP parameters    
         use_sqrt=True,                  # Generate synthetic bands with sqrt  
         use_log=True,                   # Generate synthetic bands with log
         max_targets=10,                 # Number of targets for algorithm to find
-        ocpi_threshold=0.1,             # Target purity threshold
+        opci_threshold=0.00000001,             # Target purity threshold
         # Parallelism fine-tuning
-        use_parallel=True,              # Use parallel processing
         window_shape=(512,512),         # Breaks image into tiles for memory-safe processing 
         max_workers=None,               # Max number of processes during parallel
         chunk_size=8,                   # How many windows to process at once
@@ -47,7 +47,12 @@ def main():
         # Debug
         verbose=True,                   # Enable/Disable progress bar
     )
-
+    
+    # test.debug_target_generation_process(
+    #     generated_bands=["data/output/gen_band_norm.tif"],
+    #     window_shape=(20, 20),
+    #     opci_threshold=0.1 # Using a typical threshold for debugging
+    # )
 
 
 

@@ -108,11 +108,9 @@ def target_classification_process(
     *, # requirement of keyword args
     generated_bands: Sequence[str],
     window_shape: Tuple[int, int],
-    image_shape:Tuple[int,int,int],
     targets: List[np.ndarray],
     output_dir: str,
     scores_filename: str = "targets_classified.tif",
-    use_parallel: bool = True,
     max_workers: int|None = None,
     inflight: int = 2,
     show_progress: bool = True,
@@ -128,11 +126,15 @@ def target_classification_process(
     if len(targets) == 0:
         raise ValueError("[TCP] No targets provided (TGP output is empty).")
 
-    # Confirm target's dimensionality matches
-    num_bands, img_height, img_width = image_shape
+    # Discover geometry and confirm target dimensionality matches
+    with MultibandBlockReader(list(generated_bands)) as reader:
+        img_height, img_width = reader.image_shape()
+        sample = reader.read_multiband_block(((0,0), (5,5))) # sample 5x5 block
+        band_count = int(sample.shape[0])
+
     for i, target in enumerate(targets):
-        if target.shape != (num_bands,):
-            raise ValueError(f"[TCP] Target {i} shape {target.shape}, expected ({num_bands},)")
+        if target.shape != (band_count,):
+            raise ValueError(f"[TCP] Target {i} shape {target.shape}, expected ({band_count},)")
 
     # Precompute per-target projectors and pack arrays for per-task access
     Pk_list = _compute_pk(targets)
@@ -152,45 +154,27 @@ def target_classification_process(
     # Build all windows
     windows = _make_windows((img_height, img_width), window_shape)
 
-    if use_parallel:
-        # Parallel streaming: workers compute; parent writes immediately.
-        with scores_writer as s_writer:
-            def _consume(result: Tuple[WindowType, np.ndarray]) -> None:
-                # Consumer executes in parent; safe to write here
-                window, scores = result                           # (K,h,w)
-                s_writer.write_block(window=window, block=scores)
+    # Label (score) all pixels in image
+    with scores_writer as writer:
+        def _consume(result: Tuple[WindowType, np.ndarray]) -> None:
+            # Consumer executes in parent; safe to write here
+            window, scores = result                           # (K,h,w)
+            writer.write_block(window=window, block=scores)
 
-            tasks = [(window,) for window in windows]  # one-arg tasks: (window,)
-            submit_streaming(
-                worker=_tcp_window,
-                initializer=_init_tcp_worker,
-                initargs=(list(generated_bands), targets_arr, Pk_arr),
-                tasks=tasks,
-                consumer=_consume,
-                max_workers=max_workers,
-                inflight=inflight,
-                prog_bar_label="[TCP] Labeling targets",
-                prog_bar_color="WHITE",
-                show_progress=show_progress,
-            )
-            
-    # Serial path (versus parallel) 
-    else:
-        with scores_writer as s_writer:
-            for window in windows:
-                # Read block of data
-                block = window_imread(generated_bands, window).astype(np.float32)  # (B,h,w)
-                (_, _), (win_height, win_width) = window
-                
-                # Compute scores
-                scores = np.empty((k_targets, win_height, win_width), dtype=np.float32)
-                
-                # Iterate targets and project
-                for k_target in range(k_targets):
-                    proj_matrix = block if  k_targets == 1 else project_block_onto_subspace(block, Pk_arr[k_target])
-                    scores[k_target] = np.tensordot(targets_arr[k_target], proj_matrix, axes=([0], [0]))
-                s_writer.write_block(window=window, block=scores)
-
+        tasks = [(window,) for window in windows]  # one-arg tasks: (window,)
+        submit_streaming(
+            worker=_tcp_window,
+            initializer=_init_tcp_worker,
+            initargs=(list(generated_bands), targets_arr, Pk_arr),
+            tasks=tasks,
+            consumer=_consume,
+            max_workers=max_workers,
+            inflight=inflight,
+            prog_bar_label="[TCP] Labeling targets",
+            prog_bar_color="WHITE",
+            show_progress=show_progress,
+        )
+        
 
 
 

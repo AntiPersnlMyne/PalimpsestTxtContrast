@@ -35,7 +35,6 @@ from .bgp import band_generation_process
 from .tgp import target_generation_process
 from .tcp import target_classification_process
 from ..utils.fileio import discover_image_files
-from ..atdca.rastio import MultibandBlockReader
 
 
 
@@ -50,8 +49,7 @@ def ATDCA(
     use_sqrt:bool = False,
     use_log:bool = False,
     max_targets:int = 10,
-    ocpi_threshold:float = 0.01,
-    use_parallel = True,
+    opci_threshold:float = 0.01,
     max_workers:int|None = None,
     chunk_size:int = 4,
     inflight:int = 2,
@@ -82,11 +80,6 @@ def ATDCA(
         verbose (bool, optional): Enable/Disable loading bars in terminal.
     """
     
-    # ==============
-    # Initialization
-    # ==============
-    logging.info("[ATDCA] Preprocessing...")
-    
     # IO variables
     input_files = discover_image_files(input_dir, input_image_types)
     generated_bands_dir = f"{output_dir}/gen_band_norm.tif"
@@ -97,22 +90,9 @@ def ATDCA(
 
     # Verbose enables debug, else prints warnings/errors only
     if verbose: logging.basicConfig(level=logging.INFO)
-    else: logging.basicConfig(level=logging.WARNING)
+    else: logging.basicConfig(level=logging.WARNING)  
     
-    # Get input image dimensions
-    # image_shape = (bands, height, width)
-    with MultibandBlockReader(input_files) as reader:
-        dummy_block = reader.read_multiband_block(  ((0, 0), (2,2))  )
-        num_bands = int(dummy_block.shape[0])
-        image_shape = (num_bands, reader.image_shape()[0], reader.image_shape()[1])  
-        if num_bands < 1: raise ValueError("Input image must have at least 1 band")
 
-    
-    
-    # ======
-    #  GOSP
-    # ======
-    
     logging.info("[ATDCA] Running Band Generation Process (BGP)...")
         
     band_generation_process(
@@ -133,10 +113,8 @@ def ATDCA(
     targets:list[ndarray] = target_generation_process(
         generated_bands=[generated_bands_dir],
         window_shape=window_shape,
-        image_shape=image_shape,
         max_targets=max_targets,
-        ocpi_threshold=ocpi_threshold,
-        use_parallel=use_parallel,
+        opci_threshold=opci_threshold,
         max_workers=max_workers,
         inflight=inflight,
         show_progress=verbose
@@ -148,16 +126,14 @@ def ATDCA(
     target_classification_process(
         generated_bands=[generated_bands_dir],
         window_shape=window_shape,
-        image_shape=image_shape,
         targets=targets,
         output_dir=targets_classified_dir,
-        use_parallel=use_parallel,
         max_workers=max_workers,
         inflight=inflight,
         show_progress=verbose
     )
     
-    os.remove(generated_bands_dir) # Cleanup temp file
+    # os.remove(generated_bands_dir) # Cleanup temp file
 
     logging.info(f"[ATDCA] Complete. Results written to: {targets_classified_dir}")
 

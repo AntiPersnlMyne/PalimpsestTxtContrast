@@ -16,13 +16,11 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 import numpy as np
 
 from dataclasses import dataclass
-from typing import Iterable, List, Tuple
+from typing import List, Tuple
 
 from ..utils.math_utils import (
     compute_orthogonal_projection_matrix,
-    project_block_onto_subspace,
     compute_opci,
-    block_l2_norms
 )
 from ..atdca.rastio import MultibandBlockReader
 from ..utils.parallel import best_target_parallel
@@ -45,62 +43,8 @@ class Target:
 
 
 # --------------------------------------------------------------------------------------------
-# Helper Functions
+# Helper Function
 # --------------------------------------------------------------------------------------------
-def _best_target(
-    *,
-    paths: List[str],
-    windows: Iterable[WindowType],
-    p_matrix:np.ndarray|None
-) -> Target:
-    """
-    Find global argmax of ||x|| or ||P x|| across all pixels.
-
-    Args:
-        paths (list[str]): One multiband file or many single-band files for dataset.
-        windows (Iterable[WindowType]): List of windows to iterate over.
-        p_matrix (np.ndarray | None): Projection matrix. If not provided (None),
-            assumes first target i.e. no P matrix created yet.
-    Returns:
-        Target (dataclass): Best target found in dataset. Object's data: value, row, col, band_spectrum.
-    """
-    
-    # Initalize best_target output
-    best_target:Target = Target(0,0,0,np.empty(0))
-
-    with MultibandBlockReader(list(paths)) as reader:        
-        for window in windows:
-            # project block - can be optimized by not checking every iteration?
-            block = reader.read_multiband_block(window)  # (bands, h, w)
-            if p_matrix is not None: block = project_block_onto_subspace(block, p_matrix)
-            
-            # Compute L2 norm and returns tile
-            norms = block_l2_norms(block)  # shape: (height,width)
-            
-            # Find pixel within tile with largest norm
-            max_px_idx = int(np.argmax(norms))
-            max_px_val = float(norms.flat[max_px_idx])
-
-            # Convert the flat index back into row/col coordinates
-            (row_off, col_off), (win_height, win_width) = window
-            block_row, block_col = divmod(max_px_idx, win_width)
-            
-            # Convert tile-local coordinates to full image coordinates 
-            img_row, img_col = row_off + block_row, col_off + block_col
-            
-             # Extract all bands (bands,:,:) from the best pixel
-            bands = block[:, block_row, block_col].astype(np.float32)
-           
-            # Update best target
-            target = Target(max_px_val, img_row, img_col, bands)
-            if target.value > best_target.value:
-                best_target = target
-
-    # Check some target was found and return
-    assert best_target, "No pixels scanned"
-    return best_target 
-
-
 def _make_windows(image_shape: Tuple[int, int], window_shape: Tuple[int, int]):
     """
     Generates all possible windows over an image. Used in _best_target.
@@ -135,11 +79,9 @@ def target_generation_process(
     *,
     generated_bands:List[str],
     window_shape:Tuple[int,int],
-    image_shape:Tuple[int,int,int],
     max_targets:int = 10,
-    ocpi_threshold:float = 0.01,       
-    use_parallel:bool = False,  # vvv Parallelization parameters vvv
-    max_workers:int|None = None,
+    opci_threshold:float = 0.01,        
+    max_workers:int|None = None,  # vvv Parallelization parameters vvv
     inflight:int,
     show_progress:bool
     ) -> List[np.ndarray]:
@@ -152,66 +94,64 @@ def target_generation_process(
     Args:
         generated_bands (Sequence[str]): Either </path/to/gen_band_norm.tif> (multiband) or a list of single-band files.
         window_shape (Tuple[int,int]): Size of tile ("block") of data to process.
-        image_shape (Tuple[int,int,int]): (bands,height,width) of input data.
         max_targets (int, optional): Max number of targets to extract. Defaults to 10.
-        opci_threshold (float, optional): Stop if OCPI of target falls below this. Defaults to 0.01.
+        opci_threshold (float, optional): Stop if OPCI of target falls below this. Defaults to 0.01.
             Higher threshold (e.g. 0.1) creates less pure targets.
             Lower threshold (e.g. 0.001) creates more pure targets.
-        use_parallel (bool): Process data serially (slow) or in parallel (fast). 
-            If True, processes faster but uses more RAM.
-            Defaults to False.
 
     Returns:
         List[np.ndarray]: List of targets (t0, t1, t2, ...); 
     """
-
-    # Calculate all possible windows 
-    num_bands, img_height, img_width = image_shape
-    windows = _make_windows((img_height, img_width), window_shape)
-
     targets:List[np.ndarray] = []
-
-
-    # =================================
-    # Find the first target t0 and OPCI
-    # =================================
-    if use_parallel:
-        t0 = best_target_parallel(
-            paths=generated_bands, windows=windows, p_matrix=None,
-            max_workers=max_workers, inflight=inflight, show_progress=show_progress
-        )
-    else:
-        t0 = _best_target(paths=generated_bands, windows=windows, p_matrix=None)    
     
+    # Get image shape for window creation
+    with MultibandBlockReader(generated_bands) as reader:
+        # Determine final dimensions from small test block (10, 10)
+        image_shape = reader.image_shape()  
+        dummy_block = reader.read_multiband_block(  ((0, 0), (10,10))  )
+        num_bands = int(dummy_block.shape[0]) 
+        del dummy_block # free memory
+
+    # Generate all windows for image 
+    windows = _make_windows(image_shape, window_shape)
+
+
+    # =================================
+    # Find the first target T0 and OPCI
+    # =================================
+    T0 = best_target_parallel(
+        paths=generated_bands, windows=windows, p_matrix=None,
+        max_workers=max_workers, inflight=inflight, show_progress=show_progress
+    )
+    targets.append(T0.band_spectrum)
+
     # Check target has same num_bands as input data
-    if t0.band_spectrum.shape[0] != num_bands: raise ValueError(f"Band mismatch: discovered {num_bands} bands, candidate has {t0.band_spectrum.shape[0]}")
-    
-    # Compute new p_marix with first target
-    p_matrix = compute_orthogonal_projection_matrix(targets).astype(np.float32)  # (bands,bands)
+    if T0.band_spectrum.shape[0] != num_bands: raise ValueError(f"Band mismatch: discovered {num_bands} bands, candidate has {T0.band_spectrum.shape[0]}")
     
     
     # =========================================
     # Iterate for subsequence targets (t1...tk)
     # =========================================
-    for _ in range(1, max_targets):
-        # Find next candidate in orthogonal space
-        if use_parallel:
-            best_target = best_target_parallel(
-                paths=generated_bands, windows=windows, p_matrix=p_matrix,
-                max_workers=max_workers, inflight=inflight, show_progress=show_progress,
-            )
-        else:
-            best_target = _best_target(paths=generated_bands, windows=windows, p_matrix=p_matrix)
+    # Iterate until max_targets or OPCI falls below threshold 
+    while len(targets) < max_targets: 
+        # a. Compute the orthogonal projection matrix for the current set of targets
+        p_matrix = compute_orthogonal_projection_matrix(targets)
 
-        # Evaluate OPCI metric - determines stopping criteria
+        # b. Find the best target in the projected subspace
+        best_target = best_target_parallel(
+            paths=generated_bands, windows=windows, p_matrix=p_matrix,
+            max_workers=max_workers, inflight=inflight, show_progress=show_progress,
+        )
+
+        # Evaluate OPCI - checks for early stopping
         opci = compute_opci(p_matrix, best_target.band_spectrum)
-        if opci < ocpi_threshold:
-            if show_progress: print("[TGP] ocpi fell below threshold, no more targets classified..")
+        print(f"The opci value = {opci}")
+        if opci < opci_threshold:
+            if show_progress: print("[TGP] ^^^ opci fell below threshold, previous target dismissed ^^^ ..")
             break
 
-        # Accept best_target and update projection
+        # Accept best_target 
         targets.append(best_target.band_spectrum)
-        p_matrix = compute_orthogonal_projection_matrix(targets).astype(np.float32)
-
+        
     return targets # generated targets; size: [<= max_targets]
 

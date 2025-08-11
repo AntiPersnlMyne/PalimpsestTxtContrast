@@ -16,13 +16,9 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
-from numba import njit
 from numpy import linalg as LA
 from numpy.typing import NDArray
-from typing import List, Tuple, Iterable, Sequence
-from dataclasses import dataclass
-from cv2 import normalize, NORM_L2
-from ..atdca.rastio import WindowType, MultibandBlockReader
+from typing import List, Tuple
 
 import numpy as np
 
@@ -112,7 +108,7 @@ def project_block_onto_subspace(
         projection_matrix (np.ndarray): Projection matrix of shape (bands, bands)
 
     Returns:
-        np.ndarray: Projected block of same shape as block (height, width, bands)
+        np.ndarray: Projected block of same shape as block (bands, height, width)
     """
     num_bands, height, width = block.shape
 
@@ -134,7 +130,15 @@ def compute_opci(
     """
     Computes the Orthogonal Projection Correlation Index (OPCI) for a candidate target vector.
     If OPCI is small (e.g., < 0.01), then T is almost already spanned by the previous targets, 
-    and should be discarded or used to stop iteration
+    and should be discarded or used to stop iteration.
+    
+    Notes:
+        This implementation is a modification on the original by Cheng and Ren 2000. They make 
+        multiple IO calls to the original image data to compute: ||P_Tx|| / ||x||
+        This implementation calls: numerator (x^T * P_T * x) and denominator (x^T * x).
+        This is an alternative method to calculate the same values without repeated IO calls.
+        The only caveat is that it requires a sqrt, as ||x||^2 = x^T * x, hence the denominator 
+        is a "power of magnitude" (is that a word)? off; easily fixed with np.sqrt.
 
     Args:
         projection_matrix (np.ndarray): Orthogonal projection matrix.
@@ -148,5 +152,5 @@ def compute_opci(
     denominator = target_vector.T @ target_vector
     
     # We use .item() to extract the single float value from the resulting NumPy arrays.
-    return float( (numerator / denominator).item() ) # float ( [#]-># )
+    return float( np.sqrt( (numerator / denominator).item() ) ) # float ( [#]-># )
 

@@ -406,7 +406,7 @@ def _init_scan_worker(paths: Sequence[str], projection: np.ndarray|None) -> None
     Opens a reader in each process and stores the projection matrix (if any).
     """
     _scan_state["paths"] = list(paths)
-    _scan_state["projection"] = projection.astype(np.float32) if projection is not None else None
+    _scan_state["projection_matrix"] = projection.astype(np.float32) if projection is not None else None
     _scan_state["reader"] = MultibandBlockReader(list(paths))
 
 
