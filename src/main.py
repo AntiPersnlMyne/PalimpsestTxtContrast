@@ -27,42 +27,25 @@ warnings.filterwarnings("ignore", category=UserWarning, message="Dataset has no 
 # Driver Code
 # --------------------------------------------------------------------------------------------
 def main():
-    # ATDCA Parameters
-    INPUT_DIR:str = "data/input/test"           # <--The only two
-    OUTPUT_DIR:str = "data/output"              # <--required parameters
-    INPUT_IMG_TYPES:str|tuple[str,...] = "tif"
-    WINDOW_SHAPE:tuple = (1024,1024)
-    # BGP and TCP parameters
-    USE_SQRT:bool = True
-    USE_LOG:bool = False    
-    MAX_TARGETS:int = 10
-    OCPI_THRESHOLD:float = 0.1
-    # Parallelism fine-tuning
-    USE_PARALLEL:bool = True
-    MAX_WORKERS:int|None = None
-    CHUNK_SIZE:int = 8
-    INFLIGHT:int = 2
-    # Progress bar enable/disable
-    VERBOSE:bool = True
-    
     
     ATDCA(
-        input_dir=INPUT_DIR,               # Directory of input images
-        output_dir=OUTPUT_DIR,             # Directory for output
-        input_image_types=INPUT_IMG_TYPES, # Image type of source data
-        window_shape=WINDOW_SHAPE,         # Breaks image into tiles for memory-safe processing 
-        
-        use_sqrt=USE_SQRT,                 # Generate synthetic bands with sqrt  
-        use_log=USE_LOG,                   # Generate synthetic bands with log
-        max_targets=MAX_TARGETS,           # Number of targets for algorithm to find
-        ocpi_threshold=OCPI_THRESHOLD,     # Target purity threshold
-        
-        use_parallel=USE_PARALLEL,         # Use parallel processing
-        max_workers=MAX_WORKERS,           # Max number of processes during parallel
-        chunk_size=CHUNK_SIZE,             # How many windows to process at once
-        inflight=INFLIGHT,                 # RAM Throughput
-        
-        verbose=VERBOSE,                   # Enable/Disable progress bar
+        # Input information
+        input_dir="data/input/test",    # Directory of input images                              <--The only two
+        output_dir="data/output",       # Directory for output                                   <--required parameters
+        input_image_types="tif",        # Image type of source data
+        # BGP and TCP parameters    
+        use_sqrt=True,                  # Generate synthetic bands with sqrt  
+        use_log=False,                  # Generate synthetic bands with log
+        max_targets=10,                 # Number of targets for algorithm to find
+        ocpi_threshold=0.1,             # Target purity threshold
+        # Parallelism fine-tuning
+        use_parallel=True,              # Use parallel processing
+        window_shape=(512,512),         # Breaks image into tiles for memory-safe processing 
+        max_workers=None,               # Max number of processes during parallel
+        chunk_size=8,                   # How many windows to process at once
+        inflight=2,                     # RAM Throughput
+        # Debug
+        verbose=True,                   # Enable/Disable progress bar
     )
 
 
