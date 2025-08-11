@@ -6,7 +6,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone", "Douglas Tavolette", "Roger Easton Jr.", "David Messinger", "Julie Decker"]
 __license__ = "MIT"
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Prototype" # "Development", or "Production". 
@@ -28,33 +28,42 @@ warnings.filterwarnings("ignore", category=UserWarning, message="Dataset has no 
 # Driver Code
 # --------------------------------------------------------------------------------------------
 def main():
-    # Automatic Target Detection w/ OSP input parameters
-    INPUT_DIR:str = "data/input/test"
-    OUTPUT_DIR:str = "data/output"
-    VERBOSE:bool = True
-    ONE_FILE:bool = False
+    # ATDCA Parameters
+    INPUT_DIR:str = "data/input/test"           # <--The only two
+    OUTPUT_DIR:str = "data/output"              # <--required parameters
+    INPUT_IMG_TYPE:str|tuple[str,...] = "tif"
     WINDOW_SHAPE:tuple = (512,512)
-    MAX_TARGETS:int = 10
+    # BGP and TCP parameters
     USE_SQRT:bool = True
     USE_LOG:bool = False    
+    MAX_TARGETS:int = 10
     OCPI_THRESHOLD:float = 0.01
-    INPUT_IMG_TYPE:str|tuple[str,...] = "tif"
+    # Parallelism fine-tuning
+    USE_PARALLEL:bool = True
+    MAX_WORKERS:int|None = None
     CHUNK_SIZE:int = 8
     INFLIGHT:int = 2
+    # Progress bar enable/disable
+    VERBOSE:bool = True
+    
     
     ATDCA(
         input_dir=INPUT_DIR,              # Directory of input images
         output_dir=OUTPUT_DIR,            # Directory for output
-        verbose=VERBOSE,
-        one_file=ONE_FILE,                # Output as one file or individual bands
+        input_image_type=INPUT_IMG_TYPE,  # Image type of source data
         window_shape=WINDOW_SHAPE,        # Breaks image into tiles for memory-safe processing 
-        max_targets=MAX_TARGETS,          # Number of targets for algorithm to find
+        
         use_sqrt=USE_SQRT,                # Generate synthetic bands with sqrt  
         use_log=USE_LOG,                  # Generate synthetic bands with log
+        max_targets=MAX_TARGETS,          # Number of targets for algorithm to find
         ocpi_threshold=OCPI_THRESHOLD,    # Target purity threshold
-        input_image_type=INPUT_IMG_TYPE,  # Image type of source data
+        
+        use_parallel=USE_PARALLEL,        # Use parallel processing
+        max_workers=MAX_WORKERS,          # Max number of processes during parallel
         chunk_size=CHUNK_SIZE,            # How many windows to process at once
-        inflight=INFLIGHT                 # RAM Throughput
+        inflight=INFLIGHT,                # RAM Throughput
+        
+        verbose=VERBOSE,
     )
 
 

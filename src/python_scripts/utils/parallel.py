@@ -180,12 +180,11 @@ def parallel_generate_streaming(
     show_progress: bool = True,
     desc: str = "[BGP] First pass - create",
 ) -> np.ndarray:
-    """Pass 1 streaming generation with bounded memory and per-band stats aggregation.
+    """
+    Streaming generation with bounded memory and per-band stats aggregation.
 
-    Returns
-    -------
-    band_stats : np.ndarray
-        Shape (2, bands) where [0] = global mins, [1] = global maxs.
+    Returns:
+        band_stats (np.ndarray): Shape=(2, bands) where [0] = global mins, [1] = global maxs.
     """
     windows_list = list(windows)
     chunks = list(_chunked(windows_list, chunk_size))

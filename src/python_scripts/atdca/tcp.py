@@ -6,7 +6,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -15,15 +15,13 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Imports
 # --------------------------------------------------------------------------------------------
 import numpy as np
-import rasterio
-from rasterio.windows import Window
 from dataclasses import dataclass
 from typing import List, Sequence, Tuple
-from contextlib import nullcontext # allow use of "with" w/o side effects
+from contextlib import nullcontext
 
-# Project modules (adjust import paths to your tree)
+# Project modules
 from .rastio import MultibandBlockReader, MultibandBlockWriter, window_imread
-from .tgp import _make_windows, WindowType  # reuse window enumerator
+from .tgp import _make_windows, WindowType  
 from ..utils.math_utils import compute_orthogonal_projection_matrix, project_block_onto_subspace
 from ..utils.parallel import submit_streaming
 
@@ -42,7 +40,7 @@ def _compute_pk(targets: List[np.ndarray]) -> List[np.ndarray]:
     
     # Iterate targets and create P_matrix(s)
     for k_target in range(k_targets):
-        targets = [targets[j] for j in range(k_targets) if j != k_target]
+        targets = [targets[k] for k in range(k_targets) if k != k_target]
         if not targets:
             # No targets to project 
             P_matrix = np.eye(targets[0].shape[0], dtype=np.float32)
@@ -110,7 +108,7 @@ def _tcp_window(window: WindowType) -> Tuple[WindowType, np.ndarray]:
 # --------------------------------------------------------------------------------------------
 def target_classification_process(
     *, # requirement of keyword args
-    image_paths: Sequence[str],
+    generated_bands: Sequence[str],
     window_shape: Tuple[int, int],
     targets: List[np.ndarray],
     output_dir: str,
@@ -120,7 +118,6 @@ def target_classification_process(
     use_parallel: bool = True,
     max_workers: int|None = None,
     inflight: int = 2,
-    chunk_size: int = 4, # kept for semantics, does nothing
     show_progress: bool = True,
 ) -> None:
     """
@@ -135,7 +132,7 @@ def target_classification_process(
         raise ValueError("[TCP] No targets provided (TGP output is empty).")
 
     # Discover geometry and confirm target dimensionality matches
-    with MultibandBlockReader(list(image_paths)) as reader:
+    with MultibandBlockReader(list(generated_bands)) as reader:
         img_height, img_width = reader.image_shape()
         sample = reader.read_multiband_block(((0,0), (5,5))) # sample 5x5 block
         band_count = int(sample.shape[0])
@@ -174,21 +171,21 @@ def target_classification_process(
 
     if use_parallel:
         # Parallel streaming: workers compute; parent writes immediately.
-        with scores_writer as writer, (labels_writer if labels_writer else nullcontext()) as lw:
+        with scores_writer as s_writer, (labels_writer if labels_writer else nullcontext()) as l_writer:
             def _consume(result: Tuple[WindowType, np.ndarray]) -> None:
                 # Consumer executes in parent; safe to write here
                 window, scores = result                           # (K,h,w)
-                writer.write_block(window=window, block=scores)
-                if lw is not None:
+                s_writer.write_block(window=window, block=scores)
+                if l_writer is not None:
                     # Argmax across K scores → 1-band label map
                     labels = np.argmax(scores, axis=0, keepdims=True).astype(np.uint16)
-                    lw.write_block(window=window, block=labels)
+                    l_writer.write_block(window=window, block=labels)
 
             tasks = [(window,) for window in windows]  # one-arg tasks: (window,)
             submit_streaming(
                 worker=_tcp_window,
                 initializer=_init_tcp_worker,
-                initargs=(list(image_paths), targets_arr, Pk_arr),
+                initargs=(list(generated_bands), targets_arr, Pk_arr),
                 tasks=tasks,
                 consumer=_consume,
                 max_workers=max_workers,
@@ -200,10 +197,10 @@ def target_classification_process(
             
     # Serial path (versus parallel) 
     else:
-        with scores_writer as sw, (labels_writer if labels_writer else nullcontext()) as lw:
+        with scores_writer as s_writer, (labels_writer if labels_writer else nullcontext()) as l_writer:
             for window in windows:
                 # Read block of data
-                block = window_imread(image_paths, window).astype(np.float32)  # (B,h,w)
+                block = window_imread(generated_bands, window).astype(np.float32)  # (B,h,w)
                 (row_off, col_off), (win_height, win_width) = window
                 
                 # Compute scores
@@ -213,10 +210,10 @@ def target_classification_process(
                 for k_target in range(k_targets):
                     proj_matrix = block if  k_targets == 1 else project_block_onto_subspace(block, Pk_arr[k_target])
                     scores[k_target] = np.tensordot(targets_arr[k_target], proj_matrix, axes=([0], [0]))
-                sw.write_block(window=window, block=scores)
-                if lw is not None:
+                s_writer.write_block(window=window, block=scores)
+                if l_writer is not None:
                     labels = np.argmax(scores, axis=0, keepdims=True).astype(np.uint16)
-                    lw.write_block(window=window, block=labels)
+                    l_writer.write_block(window=window, block=labels)
 
 
 
