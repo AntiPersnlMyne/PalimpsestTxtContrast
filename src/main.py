@@ -16,7 +16,6 @@ __status__ = "Prototype" # "Development", or "Production".
 # Imports
 # --------------------------------------------------------------------------------------------
 from python_scripts.atdca import ATDCA # Automatic Target Detection Classification Algorithm
-# import python_scripts.improc as improc
 import warnings
 from time import time
 

@@ -6,7 +6,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -15,7 +15,6 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Imports
 # --------------------------------------------------------------------------------------------
 import numpy as np
-from dataclasses import dataclass
 from typing import List, Sequence, Tuple
 from contextlib import nullcontext
 
@@ -53,9 +52,9 @@ def _compute_pk(targets: List[np.ndarray]) -> List[np.ndarray]:
 
 
 
-# --------------------------------------------------------------------------------------
-# Parallel processing worker state and worker function
-# --------------------------------------------------------------------------------------
+# ============================================================================================
+# Parallel processing
+# ============================================================================================
 _worker_state: dict[str, object] = {
     "paths": None,       # Sequence[str]
     "targets": None,     # np.ndarray, (K-targets, bands)
@@ -201,7 +200,7 @@ def target_classification_process(
             for window in windows:
                 # Read block of data
                 block = window_imread(generated_bands, window).astype(np.float32)  # (B,h,w)
-                (row_off, col_off), (win_height, win_width) = window
+                (_, _), (win_height, win_width) = window
                 
                 # Compute scores
                 scores = np.empty((k_targets, win_height, win_width), dtype=np.float32)

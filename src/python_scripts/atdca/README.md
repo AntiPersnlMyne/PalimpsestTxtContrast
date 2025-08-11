@@ -21,14 +21,12 @@ ATDCA works efficiently on large image datasets using memory-safe, block-wise pr
 
 ## How to use the ATDCA Pipeline 
 
-- Place **single-band TIFF files** in `data/input/`, one per spectral band.
+- Place **single-band or multiband files** in `data/input/`.
   - Example: `band370nm.tif`, `band400nm.tif`, ..., `band970nm.tif`
+  - Example: `bands370-970.tif`
 
-To run the pipeline either:
-1) Run the pipeline directly from the terminal
-- `python src/python_scripts/atdca_pipeline.py`
-2) Import the pipeline into your pre-existing Python environment
+- Import the pipeline into your pre-existing Python environment
 - ```Python
-    import atdca
-    atdca.ATDCA(...)```
+    from atdca import ATDCA
+    ATDCA(...)```
 
