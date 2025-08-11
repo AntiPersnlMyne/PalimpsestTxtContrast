@@ -1,5 +1,7 @@
 """tcp.py: Target Classification Process. Automatically classified pixels into one of N classes found by tgp.py."""
 
+from __future__ import annotations
+
 __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
@@ -9,23 +11,42 @@ __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
 
-
-
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
-from typing import Callable, List, Union, Tuple
 import numpy as np
-from tqdm import tqdm
-from ..utils.math_utils import compute_orthogonal_projection_matrix
+import rasterio
+from rasterio.windows import Window
+from dataclasses import dataclass
+from typing import Iterable, List, Optional, Sequence, Tuple
+
+# Project modules (adjust import paths to your tree)
+from .rastio import MultibandBlockReader, MultibandBlockWriter
+from .tgp import _make_windows, WindowType  # reuse window enumerator
+from ..utils.math_utils import compute_orthogonal_projection_matrix, project_block_onto_subspace
+from ..utils.parallel import submit_streaming
 
 
 # --------------------------------------------------------------------------------------------
-# Custom Datatypes
+# Helper Functions
 # --------------------------------------------------------------------------------------------
-ImageReader = Callable[[Union[str, Tuple[Tuple[int, int], Tuple[int, int]]]], Union[np.ndarray, Tuple[int, int], None]]
-WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
-ImageWriter = Callable[[int], Callable[[WindowType, np.ndarray], None]]
+def _compute_pk(targets: List[np.ndarray]) -> List[np.ndarray]:
+    """
+    For each target k, build projection matrix P_k that projects out all other (i.e. [0,k-1]) targets .
+
+    targets
+    """
+    K = len(targets)
+    Pk: List[np.ndarray] = []
+    for k in range(K):
+        others = [targets[j] for j in range(K) if j != k]
+        if not others:
+            # Only one target → identity: P x = x
+            P = np.eye(targets[0].shape[0], dtype=np.float32)
+        else:
+            P = compute_orthogonal_projection_matrix(others).astype(np.float32)
+        Pk.append(P)
+    return Pk
 
 
 # --------------------------------------------------------------------------------------------

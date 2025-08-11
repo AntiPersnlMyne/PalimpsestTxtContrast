@@ -50,7 +50,7 @@ def _glob_imread(filepath: str, extension: str | List[str] | None = None) -> dic
 
 
 def rm(filepath:str) -> None:
-    """Deletes a directory and all of its contents"""
+    """Deletes file from directory"""
     if os.path.exists(filepath):
         os.remove(filepath)
     else:

@@ -17,12 +17,50 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 import numpy as np
 from warnings import warn
 import rasterio
-from typing import List, Tuple
+from typing import List, Tuple, Sequence
 from os.path import exists
 from os import makedirs
 from rasterio.windows import Window
 
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
+
+
+# --------------------------------------------------------------------------------------------
+# Imread by window (tcp.py)
+# --------------------------------------------------------------------------------------------
+def window_imread(filepaths: Sequence[str], window: WindowType) -> np.ndarray:
+    """
+    Reads from a single window (bands, height, width)
+    Handles both one multiband file (one path) or many single-band files (many paths).
+
+    Args:
+        filepaths (Sequence[str]): Path to a file, including filename and extension. 
+            If given one path, assumes one single-band or one multiband.
+            If given multiple paths, assumes many single-bands.
+        window (WindowType): Dimensions and locaiton of window to read data from raster. Format: (row_off, col_off, width, height).
+
+    Returns:
+        np.ndarray: block (bands, height, width)
+    """
+    (row_off, col_off), (height, width) = window
+    
+    # One multiband file
+    if len(filepaths) == 1:
+        with rasterio.open(filepaths[0], "r") as src:
+            return src.read(window=Window(col_off, row_off, width, height)) #type:ignore
+        
+    # Many single-band files
+    band_stack:np.ndarray = np.empty((len(filepaths), height, width),
+                                     # reads in 1 px window to get dtype
+                                     dtype=rasterio.open(filepaths[0], "r").read(window=Window(0,0,1,1))) #type:ignore
+    for i, path in enumerate(filepaths):
+        with rasterio.open(path, "r") as src:
+            band = src.read(window=Window(col_off, row_off, width, height)) #type:ignore
+            band_stack[i] = band
+                
+    # Return read data
+    assert (band_stack.ndim and band_stack.size) != 0, "[rastio] window_imread read no data" # asserts size and dims aren't both empty
+    return band_stack
 
 
 
