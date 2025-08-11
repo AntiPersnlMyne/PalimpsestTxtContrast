@@ -93,10 +93,10 @@ def ATDCA(
     if not input_files:
         raise FileNotFoundError(f"No input images found in {input_dir} with extension(s): {input_image_types}")
 
-    print(f"[ATDCA] Found {len(input_files)} input band(s).")
-    
-    print("[ATDCA] Running Band Generation Process (BGP)...")
-    
+    if verbose:
+        print(f"[ATDCA] Found {len(input_files)} input band(s).")
+        print("[ATDCA] Running Band Generation Process (BGP)...")
+        
     band_generation_process(
         input_image_paths=input_files,
         output_dir=output_dir,
@@ -110,7 +110,7 @@ def ATDCA(
     )
 
 
-    print("[ATDCA] Running Target Generation Process (TGP)...")
+    if verbose: print("[ATDCA] Running Target Generation Process (TGP)...")
         
     targets:list[ndarray] = target_generation_process(
         generated_bands=[generated_bands_dir],
@@ -123,10 +123,9 @@ def ATDCA(
         show_progress=verbose
     )
 
-    print(f"[ATDCA] TGP detected {len(targets)} target(s).")
-    
-
-    print("[ATDCA] Running Target Classification Process (TCP)...")
+    if verbose: 
+        print(f"[ATDCA] TGP detected {len(targets)} target(s).")
+        print("[ATDCA] Running Target Classification Process (TCP)...")
     
     target_classification_process(
         generated_bands=[generated_bands_dir],
@@ -141,7 +140,7 @@ def ATDCA(
     
     os.remove(generated_bands_dir) # Cleanup temp file
 
-    print(f"[ATDCA] Complete. Results written to: {targets_classified_dir}")
+    if verbose: print(f"[ATDCA] Complete. Results written to: {targets_classified_dir}")
 
 
 

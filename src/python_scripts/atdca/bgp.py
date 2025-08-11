@@ -210,8 +210,9 @@ def band_generation_process(
             band_maxs=band_maxs,
             writer=writer,
             max_workers=max_workers,  # use all cores
-            inflight=2,               # cap RAM: ~workers*inflight blocks in memory
-            chunk_size=chunk_size
+            inflight=inflight,               # cap RAM: ~workers*inflight blocks in memory
+            chunk_size=chunk_size,
+            show_progress=show_progress
         )
                     
     rm(unorm_path) # delete unnorm data

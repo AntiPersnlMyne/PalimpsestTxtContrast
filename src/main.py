@@ -9,7 +9,7 @@ __license__ = "MIT"
 __version__ = "1.0.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Prototype" # "Development", or "Production". 
+__status__ = "Development" # "Development", or "Production". 
 
 
 # --------------------------------------------------------------------------------------------
@@ -31,19 +31,19 @@ def main():
     INPUT_DIR:str = "data/input/test"           # <--The only two
     OUTPUT_DIR:str = "data/output"              # <--required parameters
     INPUT_IMG_TYPES:str|tuple[str,...] = "tif"
-    WINDOW_SHAPE:tuple = (512,512)
+    WINDOW_SHAPE:tuple = (1024,1024)
     # BGP and TCP parameters
     USE_SQRT:bool = True
     USE_LOG:bool = False    
     MAX_TARGETS:int = 10
-    OCPI_THRESHOLD:float = 0.001
+    OCPI_THRESHOLD:float = 0.1
     # Parallelism fine-tuning
     USE_PARALLEL:bool = True
     MAX_WORKERS:int|None = None
     CHUNK_SIZE:int = 8
     INFLIGHT:int = 2
     # Progress bar enable/disable
-    VERBOSE:bool = True
+    VERBOSE:bool = False
     
     
     ATDCA(

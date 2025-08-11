@@ -322,7 +322,7 @@ def parallel_normalize_streaming(
     max_workers: int | None = None,
     inflight: int = 2,
     chunk_size: int = 4,
-    show_progress:bool = True
+    show_progress:bool = False
     ) -> None:
     """
     Orchestrates the parallel processing using submit_streaming. 
