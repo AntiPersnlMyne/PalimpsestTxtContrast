@@ -1,0 +1,158 @@
+"""tgp.py: Target Generation Process. Automatically creates N most significant targets in target detection for pixel classification"""
+
+__author__ = "Gian-Mateo (GM) Tifone"
+__copyright__ = "2025, RIT MISHA"
+__credits__ = ["Gian-Mateo Tifone"]
+__license__ = "MIT"
+__version__ = "2.0.0"
+__maintainer__ = "MISHA Team"
+__email__ = "mt9485@rit.edu"
+__status__ = "Development" # "Prototype", "Development", "Production"
+
+
+# --------------------------------------------------------------------------------------------
+# Imports
+# --------------------------------------------------------------------------------------------
+import numpy as np
+
+from dataclasses import dataclass
+from typing import List, Tuple
+
+from ..utils.math_utils import (
+    compute_orthogonal_projection_matrix,
+    compute_opci,
+)
+from ..gosp.rastio import MultibandBlockReader
+from ..utils.parallel import best_target_parallel
+
+
+
+# --------------------------------------------------------------------------------------------
+# Custom Datatypes
+# --------------------------------------------------------------------------------------------
+WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
+ImageBlock = np.ndarray
+
+@dataclass
+class Target:
+    value: float
+    row: int
+    col: int
+    band_spectrum: np.ndarray  # shape (bands,)
+
+
+
+# --------------------------------------------------------------------------------------------
+# Helper Function
+# --------------------------------------------------------------------------------------------
+def _make_windows(image_shape: Tuple[int, int], window_shape: Tuple[int, int]):
+    """
+    Generates all possible windows over an image. Used in _best_target.
+    
+    Args: 
+        image_shape (Tuple[int,int]): (height,width) of entire source image.
+        window_shape (Tuple[int,int]): (height,width) of window.
+    """
+    # Get image and window dimensions
+    img_height, img_width = image_shape
+    win_height, win_width = window_shape
+    windows:List[WindowType] = []
+    
+    for row_off in range(0, img_height, win_height):
+        for col_off in range(0, img_width, win_width):
+            
+            # Prevent window from out-of-bounds
+            actual_height = min(win_height, img_height - row_off)
+            actual_width = min(win_width, img_width - col_off)
+            
+            # Create window and append to list
+            windows.append( ((row_off, col_off), (actual_height, actual_width)) )
+    
+    return windows
+
+
+
+# --------------------------------------------------------------------------------------------
+# TGP Function
+# --------------------------------------------------------------------------------------------
+def target_generation_process(
+    *,
+    generated_bands:List[str],
+    window_shape:Tuple[int,int],
+    max_targets:int = 10,
+    opci_threshold:float = 0.01,        
+    max_workers:int|None = None,  # vvv Parallelization parameters vvv
+    inflight:int,
+    show_progress:bool
+    ) -> List[np.ndarray]:
+    """
+    Target Generation Process (TGP).
+
+    Iteratively projects image into orthogonal subspace and extracts new target vectors
+    until OPCI falls below a threshold or a max target count is reached.
+
+    Args:
+        generated_bands (Sequence[str]): Either </path/to/gen_band_norm.tif> (multiband) or a list of single-band files.
+        window_shape (Tuple[int,int]): Size of tile ("block") of data to process.
+        max_targets (int, optional): Max number of targets to extract. Defaults to 10.
+        opci_threshold (float, optional): Stop if OPCI of target falls below this. Defaults to 0.01.
+            Higher threshold (e.g. 0.1) creates less pure targets.
+            Lower threshold (e.g. 0.001) creates more pure targets.
+
+    Returns:
+        List[np.ndarray]: List of targets (t0, t1, t2, ...); 
+    """
+    targets:List[np.ndarray] = []
+    
+    # Get image shape for window creation
+    with MultibandBlockReader(generated_bands) as reader:
+        # Determine final dimensions from small test block (10, 10)
+        image_shape = reader.image_shape()  
+        dummy_block = reader.read_multiband_block(  ((0, 0), (10,10))  )
+        num_bands = int(dummy_block.shape[0]) 
+        del dummy_block # free memory
+
+    # Generate all windows for image 
+    windows = _make_windows(image_shape, window_shape)
+
+
+    # =================================
+    # Find the first target T0 and OPCI
+    # =================================
+    T0 = best_target_parallel(
+        paths=generated_bands, windows=windows, p_matrix=None,
+        max_workers=max_workers, inflight=inflight, show_progress=show_progress
+    )
+    targets.append(T0.band_spectrum)
+
+    # Check target has same num_bands as input data
+    if T0.band_spectrum.shape[0] != num_bands: raise ValueError(f"Band mismatch: discovered {num_bands} bands, candidate has {T0.band_spectrum.shape[0]}")
+    
+    
+    # =========================================
+    # Iterate for subsequence targets (t1...tk)
+    # =========================================
+    # Iterate until max_targets or OPCI falls below threshold 
+    while len(targets) < max_targets: 
+        # a. Compute the orthogonal projection matrix for the current set of targets
+        p_matrix = compute_orthogonal_projection_matrix(targets)
+
+        # b. Find the best target in the projected subspace
+        best_target = best_target_parallel(
+            paths=generated_bands, windows=windows, p_matrix=p_matrix,
+            max_workers=max_workers, inflight=inflight, show_progress=show_progress,
+        )
+
+        # Evaluate OPCI - checks for early stopping
+        opci = compute_opci(p_matrix, best_target.band_spectrum)
+        if not np.isfinite(opci): opci = 0.0 # prevent NaN fallback to 1.0 
+        
+        if opci < opci_threshold:
+            if show_progress: print("[TGP] opci fell below threshold, no more targets generated..")
+            break
+
+        # Accept best_target 
+        targets.append(best_target.band_spectrum)
+        
+    return targets # generated targets; size: [<= max_targets]
+

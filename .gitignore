@@ -7,3 +7,7 @@
 
 # Any Python cache
 **/__pycache__
+
+# Manually imported IDL library
+idlbs
+envi_output

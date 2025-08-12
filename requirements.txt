@@ -1,6 +1,25 @@
-numpy==2.2.6             # Data arrays
-opencv-python==4.11.0.86 # Image processing
-scipy-stubs[scipy]       # ==1.16.0
-scikit-image==0.25.2     # Image processing (?!)
-scikit-learn==1.7        # Machine learning (?!)
-matplotlib==3.10.0       # Plotting visualization (?!)
+# Requires version: 3.10.x > Python  < 3.12.x
+
+# Data arrays and backbone of every other library
+numpy==2.2.6             
+
+# Image processing
+opencv-python==4.11.0.86 
+scikit-image==0.25.2     
+
+# Scientific computing
+scipy                    
+scipy-stubs[scipy] # Syntax highlighting
+
+# Optical Character Recognition (OCR)
+pytesseract==0.3.13
+
+# Optimization
+cython==3.1.2 # Static c-typing
+numba==2.2.6  # Pre-compile
+dask          # Parallelism
+rasterio      # Tilewise processing
+
+# Graphical User Interface 
+screeninfo==0.8.1 # Screen resolution
+tqdm              # Progress bar
