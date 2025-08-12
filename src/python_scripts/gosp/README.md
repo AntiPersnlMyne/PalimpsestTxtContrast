@@ -1,12 +1,13 @@
-# ATDCA: Automatic Target Detection and Classification Algorithm
+# GOSP: Generalized Orthogonal Subspace Projection
+### Reference: Hsuan Ren, Student Member, IEEE, and Chein-I Chang, Senior Member, IEEE, 2000
 
 ---
 
 ## Overview
 
-**ATDCA** (Automatic Target Detection and Classification Algorithm) is an unsupervised algorithm designed to detect and classify targets in multispectral or hyperspectral imagery. It requires no prior knowledge of the scene (i.e. *requires no user input*). 
+**GOSP** (Generalized Orthogonal Subspace Projection) is an unsupervised algorithm designed to detect and classify targets in multispectral or hyperspectral imagery. It requires no prior knowledge of the scene (i.e. *requires no user input*). 
 
-This makes ATDCA ideal for:
+This makes gosp ideal for:
 - Detecting unusual materials
 - Classifying objects in scenes with unknown content
 
@@ -16,10 +17,10 @@ The algorithm is based on **Orthogonal Subspace Projection (OSP)** algorithm and
 2. **TGP** – Target Generation Process  
 3. **TCP** – Target Classification Process
 
-ATDCA works efficiently on large image datasets using memory-safe, block-wise processing powered by `rasterio` and `NumPy`.
+GOSP works efficiently on large image datasets using memory-safe, block-wise processing powered by `rasterio` and `NumPy`.
 
 
-## How to use the ATDCA Pipeline 
+## How to use the gosp pipeline 
 
 - Place **single-band or multiband files** in `data/input/`.
   - Example: `band370nm.tif`, `band400nm.tif`, ..., `band970nm.tif`
@@ -27,6 +28,7 @@ ATDCA works efficiently on large image datasets using memory-safe, block-wise pr
 
 - Import the pipeline into your pre-existing Python environment
 - ```Python
-    from atdca import ATDCA
-    ATDCA(...)```
+    from gosp import gosp
+    gosp(...)
+  ```
 
