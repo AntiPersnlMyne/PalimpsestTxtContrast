@@ -40,7 +40,7 @@ def _create_bands_from_block(
     use_log: bool
 ) -> np.ndarray:
     """
-    Creates new, non-linear bands from existing bands for the ATDCA algorithm.
+    Creates new, non-linear bands from existing bands for the GOSP algorithm.
 
     Args:
         image_block (np.ndarray): A 3D numpy array representing a block of the image,
@@ -166,7 +166,7 @@ def band_generation_process(
             input_paths=input_image_paths,          # list[str]; one multiband or many single-band
             windows=windows,
             writer=writer,
-            func_module="python_scripts.atdca.bgp", # module path where _create_bands_from_block lives
+            func_module="python_scripts.gosp.bgp", # module path where _create_bands_from_block lives
             func_name="_create_bands_from_block",   # function name, without parentheses
             use_sqrt=use_sqrt,
             use_log=use_log,

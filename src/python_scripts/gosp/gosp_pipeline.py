@@ -1,11 +1,11 @@
-"""atdca_pipeline.py: 
+"""gosp.py: 
 
-ATDCA: Stands for Automatic Target Detection Classification Algorithm
+GOSP: Stands for Generalized Orthogonal Subspace Projection.
 
 Implements: The OSP-based, automatic target detection workflow laid out by Chang and Ren.
 [Ref] Hsuan Ren, Student Member, IEEE, and Chein-I Chang, Senior Member, IEEE 2000
 
-Does: Automatically finds K (integer > 1) likely targets in image and classififes all pixels to a target likelihood
+Does: Automatically finds K (integer > 1) likely targets in image and classififes all pixels to a target likelihood.
                             
 Stages:
     1. Band Generation Process (BGP)    - Create synthetic bands from raw imagery
@@ -44,7 +44,7 @@ logging.disable(logging.WARNING)
 
 
 # --------------------------------------------------------------------------------------------
-# ATDCA Pipeline
+# GOSP Pipeline
 # --------------------------------------------------------------------------------------------
 def gosp(
     input_dir:str, 
@@ -61,7 +61,7 @@ def gosp(
     verbose:bool = False,
     ) -> None:
     """
-    Runs the Automatic Target Detection Classification Algorithm (ATDCA)
+    Runs the Generalized Orthogonal Subspace Projection pipeline (GOSP)
 
     Args:
         input_dir (str): Directory containing raw imagery. Accepts multiple single-band or multi-band image.
@@ -98,7 +98,7 @@ def gosp(
     else: logging.basicConfig(level=logging.WARNING)  
     
 
-    logging.info("[ATDCA] Running Band Generation Process (BGP)...")
+    logging.info("[GOSP] Running Band Generation Process (BGP)...")
         
     band_generation_process(
         input_image_paths=input_files,
@@ -113,7 +113,7 @@ def gosp(
     )
 
 
-    logging.info("[ATDCA] Running Target Generation Process (TGP)...")
+    logging.info("[GOSP] Running Target Generation Process (TGP)...")
         
     targets:list[ndarray] = target_generation_process(
         generated_bands=[generated_bands_dir],
@@ -125,8 +125,8 @@ def gosp(
         show_progress=verbose
     )
 
-    logging.info(f"[ATDCA] TGP detected {len(targets)} target(s).")
-    logging.info("[ATDCA] Running Target Classification Process (TCP)...")
+    logging.info(f"[GOSP] TGP detected {len(targets)} target(s).")
+    logging.info("[GOSP] Running Target Classification Process (TCP)...")
     
     target_classification_process(
         generated_bands=[generated_bands_dir],
@@ -140,7 +140,7 @@ def gosp(
     
     os.remove(generated_bands_dir) # Cleanup temp file
 
-    logging.info(f"[ATDCA] Complete. Results written to: {targets_classified_dir}")
+    logging.info(f"[GOSP] Complete. Results written to: {targets_classified_dir}")
 
 
 

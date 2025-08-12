@@ -104,7 +104,7 @@ def _init_generate_worker(
 
     Args:
         input_paths: Paths to input rasters. One multiband or many single-band files.
-        func_module: Absolute module path, e.g. "python_scripts.atdca.bgp".
+        func_module: Absolute module path, e.g. "python_scripts.gosp.bgp".
         func_name: Top-level function name to call, e.g. "_create_bands_from_block".
         use_sqrt, use_log: Flags forwarded to the band-generation function.
     """
