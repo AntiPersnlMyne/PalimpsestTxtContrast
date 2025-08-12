@@ -1,23 +1,23 @@
 # Requires version: 3.10.x > Python  < 3.12.x
 
 # Data arrays and backbone of every other library
-numpy==2.2.6             
+numpy             
 
 # Image processing
 opencv-python==4.11.0.86 
-scikit-image==0.25.2     
+# scikit-image==0.25.2     
 
 # Scientific computing
-scipy                    
-scipy-stubs[scipy] # Syntax highlighting
+# scipy                    
+# scipy-stubs[scipy] # Syntax highlighting
 
 # Optical Character Recognition (OCR)
-pytesseract==0.3.13
+# pytesseract==0.3.13
 
 # Optimization
-cython==3.1.2 # Static c-typing
+# cython==3.1.2 # Static c-typing
 numba==2.2.6  # Pre-compile
-dask          # Parallelism
+# dask          # Parallelism
 rasterio      # Tilewise processing
 
 # Graphical User Interface 
