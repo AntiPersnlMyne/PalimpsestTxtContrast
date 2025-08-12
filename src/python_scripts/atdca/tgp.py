@@ -145,9 +145,10 @@ def target_generation_process(
 
         # Evaluate OPCI - checks for early stopping
         opci = compute_opci(p_matrix, best_target.band_spectrum)
-        print(f"The opci value = {opci}")
+        if not np.isfinite(opci): opci = 0.0 # prevent NaN fallback to 1.0 
+        
         if opci < opci_threshold:
-            if show_progress: print("[TGP] ^^^ opci fell below threshold, previous target dismissed ^^^ ..")
+            if show_progress: print("[TGP] opci fell below threshold, no more targets generated..")
             break
 
         # Accept best_target 

@@ -23,6 +23,10 @@ from typing import List, Tuple
 import numpy as np
 
 
+# Constants to prevent div0
+OPCI_EPS = 1e-12   # denom floor
+OPCI_TOL = 1e-9    # clamp tolerance
+
 
 # --------------------------------------------------------------------------------------------
 # Custom Datatypes
@@ -98,34 +102,40 @@ def compute_orthogonal_projection_matrix(
 
 def project_block_onto_subspace(
     block: np.ndarray,
-    projection_matrix: np.ndarray
+    projection_matrix: np.ndarray|None
 ) -> np.ndarray:
     """
     Projects every pixel in a block into the orthogonal subspace defined by the projection matrix.
 
     Args:
-        block (np.ndarray): Input block of shape (height, width, bands)
+        block (np.ndarray): Input block of shape (bands, height, width)
         projection_matrix (np.ndarray): Projection matrix of shape (bands, bands)
 
     Returns:
         np.ndarray: Projected block of same shape as block (bands, height, width)
     """
-    num_bands, height, width = block.shape
+    if projection_matrix is None: return block
+    
+    bands, height, width = block.shape
 
     # Reshape block from (bands, height, width) to (pixels, bands)
     # The transpose is needed to correctly align the dimensions
-    reshaped = block.reshape(num_bands, height * width).T
-
+    reshaped = block.reshape(bands, -1).astype(np.float32, copy=False)
+    p_matrix =  np.asarray(projection_matrix, dtype=np.float32)
+    if p_matrix.shape != (bands, bands):
+        raise ValueError(f"[project_block_onto_subspace] Bad shapes: P{p_matrix.shape}, block{block.shape}")
+    
     # Apply the projection matrix
-    projected = reshaped @ projection_matrix
+    p_matrix = 0.5 * (p_matrix + p_matrix.T)
     
     # Reshape the projected block back to the original shape
-    return projected.T.reshape(num_bands, height, width)
+    return (p_matrix @ reshaped).reshape(bands,height,width) \
+            .astype(np.float32, copy=False)
 
 
 def compute_opci(
     projection_matrix: np.ndarray,
-    target_vector: SpectralVector
+    spectrum: np.ndarray
 ) -> float:
     """
     Computes the Orthogonal Projection Correlation Index (OPCI) for a candidate target vector.
@@ -142,15 +152,42 @@ def compute_opci(
 
     Args:
         projection_matrix (np.ndarray): Orthogonal projection matrix.
-        candidate_target (np.ndarray): Target candidate vector.
+        spectrum (np.ndarray): Original pixel spectrum. 
 
     Returns:
         float: OPCI value, representing the residual norm after projection
     """
 
-    numerator = target_vector.T @ projection_matrix @ target_vector
-    denominator = target_vector.T @ target_vector
-    
-    # We use .item() to extract the single float value from the resulting NumPy arrays.
-    return float( np.sqrt( (numerator / denominator).item() ) ) # float ( [#]-># )
+    # Pixel x from [Ren and Cheng 2000]
+    x = np.asarray(spectrum, dtype=np.float32).reshape(-1)
+    # Clean up potential NaNs/Inf
+    if not np.isfinite(spectrum).all():
+        x = np.nan_to_num(spectrum, nan=0.0, posinf=0.0, neginf=0.0)
+
+    # Early out on zero vector
+    denom = float(np.dot(x, x))
+    if denom <= OPCI_EPS: return 0.0
+
+    # Symmetrize P (guards against tiny asymmetry so x^T P x stays ~real)
+    p_matrix = np.asarray(projection_matrix, dtype=np.float64)
+    if p_matrix.ndim != 2 or p_matrix.shape[0] != p_matrix.shape[1] \
+        or p_matrix.shape[0] != x.shape[0]:
+            raise ValueError(f"[compute_opci] Bad shapes: P{p_matrix.shape}, x{x.shape}")
+    p_matrix = 0.5 * (p_matrix + p_matrix.T)
+
+    # Quadratic form via y = P x
+    y = p_matrix @ x
+    numerator = float(np.dot(x, y))
+
+    # Clamp ratio to [0,1] within tolerance
+    ratio = numerator / denom
+    if not np.isfinite(ratio): return 0.0
+    # Negative due to numeric issues; project to 0
+    if ratio < -OPCI_TOL: ratio = 0.0
+    # Slightly above 1 because of rounding; clamp
+    elif ratio > 1.0 + OPCI_TOL: ratio = 1.0
+    # Clean tiny negatives/overs by clipping
+    else: ratio = float(np.clip(ratio, 0.0, 1.0))
+
+    return float(np.sqrt(ratio))
 
