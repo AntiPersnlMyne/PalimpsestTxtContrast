@@ -15,13 +15,9 @@ __status__ = "Development" # "Development", or "Production".
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
-from python_scripts.atdca import ATDCA # Automatic Target Detection Classification Algorithm
-import warnings
+from python_scripts.gosp import GOSP # Automatic Target Detection Classification Algorithm
 from time import time
-# from python_scripts.atdca import test
 
-# Suppress GeoTIFF warning - MISHA data isn't georeferenced, warning safely ignored
-warnings.filterwarnings("ignore", category=UserWarning, message="Dataset has no geotransform, gcps, or rpcs.*")
 
 
 # --------------------------------------------------------------------------------------------
@@ -29,7 +25,7 @@ warnings.filterwarnings("ignore", category=UserWarning, message="Dataset has no 
 # --------------------------------------------------------------------------------------------
 def main():
     
-    ATDCA(
+    GOSP(
         # Input information
         input_dir="data/input/test",  # Directory of input images                              <--The only two
         output_dir="data/output",           # Directory for output                                   <--required parameters
@@ -47,13 +43,6 @@ def main():
         # Debug
         verbose=True,                       # Enable/Disable progress bar
     )
-    
-    # test.debug_target_generation_process(
-    #     generated_bands=["data/output/gen_band_norm.tif"],
-    #     window_shape=(20, 20),
-    #     opci_threshold=0.1 # Using a typical threshold for debugging
-    # )
-
 
 
 # --------------------------------------------------------------------------------------------

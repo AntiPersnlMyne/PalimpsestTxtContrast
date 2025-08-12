@@ -22,7 +22,7 @@ from ..utils.math_utils import (
     compute_orthogonal_projection_matrix,
     compute_opci,
 )
-from ..atdca.rastio import MultibandBlockReader
+from ..gosp.rastio import MultibandBlockReader
 from ..utils.parallel import best_target_parallel
 
 

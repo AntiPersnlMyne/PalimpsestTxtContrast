@@ -10,7 +10,7 @@ __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
 
 
-from .atdca_pipeline import *
+from .gosp_pipeline import *
 
 
 

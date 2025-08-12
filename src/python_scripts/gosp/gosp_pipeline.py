@@ -17,7 +17,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -29,6 +29,7 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 import logging
 import os
+import warnings
 from numpy import ndarray
 
 from .bgp import band_generation_process
@@ -36,12 +37,16 @@ from .tgp import target_generation_process
 from .tcp import target_classification_process
 from ..utils.fileio import discover_image_files
 
+# GeoTIFF warning suppression
+warnings.filterwarnings("ignore", category=UserWarning, message="Dataset has no geotransform, gcps, or rpcs.*")
+logging.disable(logging.WARNING)
+
 
 
 # --------------------------------------------------------------------------------------------
 # ATDCA Pipeline
 # --------------------------------------------------------------------------------------------
-def ATDCA(
+def GOSP(
     input_dir:str, 
     output_dir:str, 
     input_image_types:str|tuple[str, ...] = "tif",
