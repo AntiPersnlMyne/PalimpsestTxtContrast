@@ -2,7 +2,6 @@
 
 set -e  # Exit on error
 
-echo "This project only works with Python versions 3.12.7 and below."
 echo "(Optional) Create a virtual environment with Python 3.12 and install required libraries."
 echo "Type y/yes to proceed, or anything else to only install libraries system-wide."
 read -p "Would you like to create a virtual environment? (y/yes): " create_venv
