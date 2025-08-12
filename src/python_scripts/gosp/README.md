@@ -22,7 +22,7 @@ GOSP works efficiently on large image datasets using memory-safe, block-wise pro
 
 ## How to use the gosp pipeline 
 
-- Place **single-band or multiband files** in `data/input/`.
+- Place **single-band or multi-band files** in `data/input/`.
   - Example: `band370nm.tif`, `band400nm.tif`, ..., `band970nm.tif`
   - Example: `bands370-970.tif`
 

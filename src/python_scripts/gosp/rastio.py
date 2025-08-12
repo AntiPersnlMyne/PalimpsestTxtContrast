@@ -15,10 +15,8 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Imports
 # --------------------------------------------------------------------------------------------
 import numpy as np
-from warnings import warn
 import rasterio
 from typing import List, Tuple, Sequence
-from os.path import exists
 from os import makedirs
 from rasterio.windows import Window
 

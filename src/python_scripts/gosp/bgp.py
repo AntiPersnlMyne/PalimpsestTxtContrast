@@ -16,7 +16,6 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 import numpy as np
 from typing import Tuple, List
-from numba import njit
 from .rastio import *
 from ..utils.fileio import rm
 from ..utils.parallel import parallel_normalize_streaming, parallel_generate_streaming

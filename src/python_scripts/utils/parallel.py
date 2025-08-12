@@ -1,10 +1,5 @@
 """parallel.py: Parallelization ("multiprocessing") wrapper API. 
 
-Usage:
-- Pass 1 (create synthetic bands): `parallel_generate_streaming(...)`
-- Pass 2 (normalize bands):        `parallel_normalize_streaming(...)`
-- Generic advanced API:            `submit_streaming(...)`
-
 Notes
 -----
 - This module uses **streaming, chunked** submission to keep memory bounded.

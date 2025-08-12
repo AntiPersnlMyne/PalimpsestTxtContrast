@@ -18,10 +18,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import List, Tuple
 
-from ..utils.math_utils import (
-    compute_orthogonal_projection_matrix,
-    compute_opci,
-)
+from ..utils.math_utils import compute_orthogonal_projection_matrix, compute_opci
 from ..gosp.rastio import MultibandBlockReader
 from ..utils.parallel import best_target_parallel
 

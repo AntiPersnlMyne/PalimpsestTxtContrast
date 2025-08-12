@@ -3,9 +3,9 @@
 ATDCA: Stands for Automatic Target Detection Classification Algorithm
 
 Implements: The OSP-based, automatic target detection workflow laid out by Chang and Ren.
-[Ref] Hsuan Ren, Student Member, IEEE, and Chein-I Chang, Senior Member, IEEE 
+[Ref] Hsuan Ren, Student Member, IEEE, and Chein-I Chang, Senior Member, IEEE 2000
 
-Does: Automatically finds K (integer > 1) likely targets in image and classififes all pixels
+Does: Automatically finds K (integer > 1) likely targets in image and classififes all pixels to a target likelihood
                             
 Stages:
     1. Band Generation Process (BGP)    - Create synthetic bands from raw imagery
