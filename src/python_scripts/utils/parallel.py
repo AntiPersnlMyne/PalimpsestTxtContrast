@@ -431,20 +431,19 @@ def _scan_window(window: WindowType) -> Tuple[float, int, int, np.ndarray]:
     (row_off, col_off), (win_height, win_width) = window
     
     # Project block onto P matrix
-    block = reader.read_multiband_block(window).astype(np.float32)  # (bands, h, w)
-    if p_matrix is not None: block = project_block_onto_subspace(block=block, projection_matrix=p_matrix)  # (bands, h, w)
+    orig_block = reader.read_multiband_block(window).astype(np.float32)  # (bands, h, w)
+    
+    # Projected block is used **only** for scoring
+    proj_block = project_block_onto_subspace(block=orig_block, projection_matrix=p_matrix) if p_matrix is not None else orig_block
 
     # Find pixel within tile with largest norm
-    norms = block_l2_norms(block)  # shape: (h, w)
+    norms = block_l2_norms(proj_block)  # shape: (h, w)
     max_px_idx = int(np.argmax(norms))
     max_px_val = float(norms.flat[max_px_idx])
     block_row, block_col = divmod(max_px_idx, win_width)
     
-    # # Convert tile-local coordinates to full image coordinates
-    # 
-    
     # Return the original spectrum for OPCI/targets
-    bands_orig = block[:, block_row, block_col].astype(np.float32)
+    bands_orig = orig_block[:, block_row, block_col].astype(np.float32)
     
     # Return Target dataclass values
     return max_px_val, row_off + block_row, col_off + block_col, bands_orig
@@ -465,13 +464,16 @@ def best_target_parallel(
     The parent process reduces local candidates into a single global best.
     """
     # Initalize best_target output
-    best_target:Target = Target(0,0,0,np.empty(0))
+    best_target:Target = Target(value=-np.inf, row=-1, col=-1, band_spectrum=np.empty(0, dtype=np.float32))
+    seen = 0
 
     def _consume(result: Tuple[float, int, int, np.ndarray]) -> None:
-        nonlocal best_target
+        nonlocal best_target, seen
+        seen += 1
         value, row, col, band_spec = result
-        target = Target(value, row, col, band_spec)
-        if target.value > best_target.value: best_target = target
+        if value > best_target.value: 
+            best_target = Target(value, row, col, band_spec)
+
 
     tasks = [(window,) for window in list(windows)] # wrap args (window) in tuple for streaming
 
@@ -488,7 +490,7 @@ def best_target_parallel(
         show_progress=show_progress
     )
 
-    assert best_target is not None, "No pixels scanned; empty window list purghaps?"
+    assert seen > 0 and best_target.band_spectrum.size > 0, "No pixels scanned; empty window list purghaps?"
     return best_target
 
 

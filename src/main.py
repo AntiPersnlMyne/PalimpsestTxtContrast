@@ -31,7 +31,7 @@ def main():
     
     ATDCA(
         # Input information
-        input_dir="data/input/arch165_sb",  # Directory of input images                              <--The only two
+        input_dir="data/input/test",  # Directory of input images                              <--The only two
         output_dir="data/output",           # Directory for output                                   <--required parameters
         input_image_types="tif",            # Image type of source data
         # BGP and TCP parameters    
