@@ -15,7 +15,7 @@ __status__ = "Development" # "Development", or "Production".
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
-from python_scripts.gosp import GOSP # Automatic Target Detection Classification Algorithm
+from python_scripts.gosp import gosp # Automatic Target Detection Classification Algorithm
 from time import time
 
 
@@ -25,7 +25,7 @@ from time import time
 # --------------------------------------------------------------------------------------------
 def main():
     
-    GOSP(
+    gosp(
         # Input information
         input_dir="data/input/test",  # Directory of input images                              <--The only two
         output_dir="data/output",           # Directory for output                                   <--required parameters

@@ -46,7 +46,7 @@ logging.disable(logging.WARNING)
 # --------------------------------------------------------------------------------------------
 # ATDCA Pipeline
 # --------------------------------------------------------------------------------------------
-def GOSP(
+def gosp(
     input_dir:str, 
     output_dir:str, 
     input_image_types:str|tuple[str, ...] = "tif",
