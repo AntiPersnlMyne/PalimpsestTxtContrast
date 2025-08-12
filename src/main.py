@@ -15,7 +15,7 @@ __status__ = "Development" # "Development", or "Production".
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
-from python_scripts.gosp import gosp # Automatic Target Detection Classification Algorithm
+from python_scripts.gosp import gosp 
 from time import time
 
 
@@ -27,14 +27,14 @@ def main():
     
     gosp(
         # Input information
-        input_dir="data/input/test",  # Directory of input images                              <--The only two
+        input_dir="data/input/arch_165_sb",  # Directory of input images                              <--The only two
         output_dir="data/output",           # Directory for output                                   <--required parameters
         input_image_types="tif",            # Image type of source data
         # BGP and TCP parameters    
         use_sqrt=False,                     # Generate synthetic bands with sqrt  
         use_log=False,                      # Generate synthetic bands with log
         max_targets=10,                     # Number of targets for algorithm to find
-        opci_threshold=0.001,               # Target purity threshold
+        opci_threshold=0.01,               # Target purity threshold
         # Parallelism fine-tuning
         window_shape=(512,512),             # Breaks image into tiles for memory-safe processing 
         max_workers=None,                   # Max number of processes during parallel
