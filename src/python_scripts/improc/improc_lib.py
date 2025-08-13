@@ -60,12 +60,17 @@ def clahe(
     """
     
     # Assert grayscale
-    if img.ndim > 1: raise Exception("Error: CLAHE input image must be grayscale.")        
+    if img.ndim > 2: raise Exception(f"Error: CLAHE input image must be grayscale.") 
+    
+    # Convert float to CLAHE readable uint16, while preserving original range
+    if isinstance(img, float):
+        img = ((img - img.min()) / (img.max() - img.min()) * 65535).astype(np.uint16)
 
     # Create CLAHE operator 
     clahe = cv.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
     
-    return clahe.apply(img).astype(np.float32)
+    # Normalize to float32 range, keep relative spacing
+    return cv.normalize(clahe.apply(img), img, 0, 1, cv.NORM_MINMAX, cv.CV_32F)
     
     
 def bilateral_filter(
