@@ -26,28 +26,8 @@ from time import time
 # --------------------------------------------------------------------------------------------
 def main():
     
-    start = time()
-    gosp(
-        # Input information
-        input_dir="data/input/arch177_rgb_365cor_lum",   
-        output_dir="data/output",         
-        input_image_types="tif",       
-        # BGP and TCP parameters    
-        use_sqrt=True,                   
-        use_log=True,                     
-        max_targets=20,                     
-        opci_threshold=0.01,              
-        # Parallelism fine-tuning
-        window_shape=(512,512),          
-        max_workers=None,                   
-        chunk_size=8,                      
-        inflight=2,                         
-        # Debug
-        verbose=True,                      
-    )
-    print(f"\n[main] - Execution finished -\nRuntime = {(time() - start):.2f}")
-    
     # Grayscale -> CLAHE -> GOSP
+    start = time()
     improc.process_images( # Grayscale
         src_dir="data/input/arch177_rgb",
         dst_dir="data/output/arch177_gray",
@@ -67,8 +47,8 @@ def main():
         output_dir="data/output",         
         input_image_types="tif",       
         # BGP and TCP parameters    
-        use_sqrt=True,                   
-        use_log=True,                     
+        use_sqrt=False,                   
+        use_log=False,                     
         max_targets=20,                     
         opci_threshold=0.01,              
         # Parallelism fine-tuning
@@ -79,7 +59,7 @@ def main():
         # Debug
         verbose=True,                      
     )
-    
+    print(f"\n[main/365cor-clahe] - Execution finished -\nRuntime = {(time() - start):.2f}")
     
 
 

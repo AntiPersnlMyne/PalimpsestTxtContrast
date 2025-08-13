@@ -60,13 +60,12 @@ def clahe(
     """
     
     # Assert grayscale
-    if img.ndim > 1:
-        raise Exception("Error: CLAHE input image must be grayscale.")
+    if img.ndim > 1: raise Exception("Error: CLAHE input image must be grayscale.")        
 
     # Create CLAHE operator 
     clahe = cv.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
     
-    return clahe.apply(img)
+    return clahe.apply(img).astype(np.float32)
     
     
 def bilateral_filter(
@@ -799,4 +798,4 @@ def bgr2gray(img:np.ndarray) -> np.ndarray:
     Returns:
         np.ndarray: Grayscale image.
     """
-    return cv.cvtColor(img.astype(np.float32), cv.COLOR_BGR2GRAY, None)
+    return cv.cvtColor(img, cv.COLOR_BGR2GRAY)
