@@ -773,3 +773,20 @@ def draw_contours(img:np.ndarray, contours:List[np.ndarray], color:tuple, thickn
     raise NotImplementedError
     
     
+    
+# --------------------------------------------------------------------------------------------
+# Color Space
+# --------------------------------------------------------------------------------------------
+def extract_luminous(img:np.ndarray) -> np.ndarray:
+    """
+    Reads in BGR image, converts to CIELAB space, returns the L channel.
+
+    Args:
+        img (np.ndarray): Input BGR image.
+        
+    Returns:
+        np.ndarray: Luminous (L) channel of `img`.
+    """
+    return cv.cvtColor(img.astype(np.float32), cv.COLOR_BGR2LAB, None)[:,:,0]
+
+

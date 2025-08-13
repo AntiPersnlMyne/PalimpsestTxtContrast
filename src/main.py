@@ -16,6 +16,7 @@ __status__ = "Development" # "Development", or "Production".
 # Imports
 # --------------------------------------------------------------------------------------------
 from python_scripts.gosp import gosp 
+from python_scripts import improc 
 from time import time
 
 
@@ -24,48 +25,44 @@ from time import time
 # Driver Code
 # --------------------------------------------------------------------------------------------
 def main():
+    # start = time()
+    # gosp(
+    #     # Input information
+    #     input_dir="data/input/arch165_rgbcor",   
+    #     output_dir="data/output/rgb_cor",         
+    #     input_image_types="tif",       
+    #     # BGP and TCP parameters    
+    #     use_sqrt=False,                   
+    #     use_log=False,                     
+    #     max_targets=10,                     
+    #     opci_threshold=0.01,              
+    #     # Parallelism fine-tuning
+    #     window_shape=(512,512),          
+    #     max_workers=None,                   
+    #     chunk_size=8,                      
+    #     inflight=2,                         
+    #     # Debug
+    #     verbose=True,                      
+    # )
+    # print(f"\n[main/rgb-cor] - Execution finished -\nRuntime = {(time() - start):.2f}")
     
-    gosp(
-        # Input information
-        input_dir="data/input/arch_165_sb",  # Directory of input images                              <--The only two
-        output_dir="data/output",           # Directory for output                                   <--required parameters
-        input_image_types="tif",            # Image type of source data
-        # BGP and TCP parameters    
-        use_sqrt=False,                     # Generate synthetic bands with sqrt  
-        use_log=False,                      # Generate synthetic bands with log
-        max_targets=10,                     # Number of targets for algorithm to find
-        opci_threshold=0.01,               # Target purity threshold
-        # Parallelism fine-tuning
-        window_shape=(512,512),             # Breaks image into tiles for memory-safe processing 
-        max_workers=None,                   # Max number of processes during parallel
-        chunk_size=8,                       # How many windows to process at once
-        inflight=2,                         # RAM Throughput
-        # Debug
-        verbose=True,                       # Enable/Disable progress bar
+    # Create (2)
+    improc.process_images(
+        src_dir="data/input/arch177_sb_365cor",
+        dst_dir="data/output/arch177_sb_365cor_lum",
+        file_prefix="lum_",
+        transform_fn=improc.extract_luminous,
     )
+    
 
 
 # --------------------------------------------------------------------------------------------
 # Executing Main
 # --------------------------------------------------------------------------------------------
 if __name__ == "__main__":
-    start = time()
     main()
-    print(f"\n[main] - Execution finished -\nRuntime = {(time() - start):.2f}")
 
-# Timing results
-# -- BGP --
-# block=512, band=3: 215
-# block=512, band=3, @njit: 221
-# block=512, band=3, @njit, par-pass1, par-pass2: # 17 (12 on laptop)
 
-# BGP, block=256, band=11: 1629
-# BGP, block=256, band=11, @njit, par-pass1, par-pass2: 144
-
-# -- BGP->TGP -- 
-# block=512, band=3, serial, verbose: 55
-# block=512, band=3 parallel, verbose: 20
-# 
 
 
 

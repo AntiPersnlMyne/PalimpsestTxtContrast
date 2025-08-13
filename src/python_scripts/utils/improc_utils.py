@@ -77,6 +77,7 @@ def _read_files(src_dir: str) -> dict[str, np.ndarray]:
 def _write_files(
     dst_dir: str, 
     dict_of_images: dict[str, np.ndarray], 
+    prefix:str = "",
     suffix: str = ""
     ) -> None:
     """Export processed files into destination directory
@@ -92,7 +93,7 @@ def _write_files(
     
     for filename, image in dict_of_images.items():
         base, _ = os.path.splitext(filename)
-        output_path = os.path.join(dst_dir, f"{base}{suffix}.tif")
+        output_path = os.path.join(dst_dir, f"{prefix}{base}{suffix}.tif")
         success = cv.imwrite(output_path, image)
         if not success:
             raise IOError(f"Failed to write image: {output_path}")
@@ -225,8 +226,9 @@ def _return_cv_img_dtype(img:np.ndarray|None = None, np_dtype:np.dtype|None = No
 def process_images(
     src_dir: str,
     dst_dir: str,
-    file_suffix: str,
     transform_fn: Callable[..., np.ndarray],
+    file_prefix: str = "",
+    file_suffix: str = "",
     transform_kwargs: Optional[dict[str, Any]] = None
 ) -> None:
     """
@@ -254,7 +256,12 @@ def process_images(
         except Exception as e:
             warnings.warn(f"Failed to process image '{name}': {e}")
 
-    _write_files(dst_dir, dst_images, file_suffix)
+    _write_files(
+        dst_dir=dst_dir, 
+        dict_of_images=dst_images, 
+        prefix=file_prefix, 
+        suffix=file_suffix,
+    )
 
 
 

@@ -1,0 +1,18 @@
+### Development 
+
+### BGP
+block=512, band=3: 215
+block=512, band=3, @njit: 221
+block=512, band=3, @njit, par-pass1, par-pass2: # 17 (12 on laptop)
+
+block=256, band=11: 1629
+block=256, band=11, @njit, par-pass1, par-pass2: 144
+
+### BGP->TGP 
+block=512, band=3, serial, verbose: 55
+block=512, band=3 parallel, verbose: 20
+
+### BGP->TGP->TCP
+block=512, band=3, parallel, verbose: 24.96
+block=512, band=11, parallel, verbose: 283.57
+block=512, band=rgb, parallel, verbose: 34.26
