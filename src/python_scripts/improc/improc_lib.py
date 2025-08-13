@@ -789,4 +789,14 @@ def extract_luminous(img:np.ndarray) -> np.ndarray:
     """
     return cv.cvtColor(img.astype(np.float32), cv.COLOR_BGR2LAB, None)[:,:,0]
 
+def bgr2gray(img:np.ndarray) -> np.ndarray:
+    """
+    Reads in BGR image, converts to grayscale, returns grayscale image.
 
+    Args:
+        img (np.ndarray): Input BGR image.
+
+    Returns:
+        np.ndarray: Grayscale image.
+    """
+    return cv.cvtColor(img.astype(np.float32), cv.COLOR_BGR2GRAY, None)
