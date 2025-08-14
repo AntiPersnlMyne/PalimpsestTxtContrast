@@ -40,24 +40,26 @@ def window_imread(filepaths: Sequence[str], window: WindowType) -> np.ndarray:
     Returns:
         np.ndarray: block (bands, height, width)
     """
-    (row_off, col_off), (height, width) = window
+    (row_off, col_off), (win_height, win_width) = window
     
-    # One multiband file
+    # One file - optimized return
     if len(filepaths) == 1:
         with rasterio.open(filepaths[0], "r") as src:
             return src.read(window=Window(col_off, row_off, width, height)) #type:ignore
         
+    # Check output dtype
+    with rasterio.open(filepaths[0], "r") as file:
+        dtype = file.dtypes[0]
+        
+    # Instantiate bandstack output 
+    band_stack: np.ndarray = np.empty((len(filepaths), win_height, win_width), dtype=dtype)
+    
     # Many single-band files
-    band_stack:np.ndarray = np.empty((len(filepaths), height, width),
-                                     # reads in 1 px window to get dtype
-                                     dtype=rasterio.open(filepaths[0], "r").read(window=Window(0,0,1,1))) #type:ignore
     for i, path in enumerate(filepaths):
         with rasterio.open(path, "r") as src:
             band = src.read(window=Window(col_off, row_off, width, height)) #type:ignore
             band_stack[i] = band
                 
-    # Return read data
-    # assert (band_stack.ndim and band_stack.size) != 0, "[rastio] window_imread read no data" # asserts size and dims aren't both empty
     return band_stack
 
 
@@ -123,24 +125,23 @@ class MultibandBlockReader:
                 with shape (height, width, bands), where (height, width) defined by window.
         """
         
-        # get window dimensions
-        (row_off, col_off), (block_height, block_width) = window
+        # Get window dimensions
+        (row_off, col_off), (win_height, win_width) = window
+        
         # Single multi-band file
         if self.srcs[0].count > 1:
             try:
-                block = self.srcs[0].read(
-                    window=Window(col_off, row_off, block_width, block_height) #type:ignore
-                )
+                block = self.srcs[0].read(window=Window(col_off, row_off, win_width, win_height)) #type:ignore
                 return block  # shape: (bands, height, width)
             except Exception as e:
                 raise Exception(f"[rastio] Error reading multi-band block:\n{e}")
             
         # Multiple single-band files (assumes each src is 1-band)
         else:
-            multi_band_block = np.empty((len(self.srcs), block_height, block_width), dtype=np.float32)
+            multi_band_block = np.empty((len(self.srcs), win_height, win_width), dtype=np.float32)
             for i, src in enumerate(self.srcs):
                 try:
-                    band = src.read(1, window=Window(col_off, row_off, block_width, block_height)) #type:ignore
+                    band = src.read(1, window=Window(col_off, row_off, win_width, win_height)) #type:ignore
                     multi_band_block[i] = band
                 except Exception as e:
                     raise Exception(f"[rastio] Error reading band {i} from {src.name}:\n{e}")
@@ -204,10 +205,9 @@ class MultibandBlockWriter:
         """
         # Set write parameters
         (row_off, col_off), (height, width) = window
-        expected_shape = (self.profile["count"], height, width)
-        self.profile["blockxsize"] = width
-        self.profile["blockxsize"] = height
         
+        # Check expected write shape before writings
+        expected_shape = (self.profile["count"], height, width)
         assert block.shape == expected_shape, f"[rastio] Shape mismatch: {block.shape} vs expected: {expected_shape}"
 
         win = Window(col_off, row_off, width, height) #type:ignore
@@ -216,7 +216,7 @@ class MultibandBlockWriter:
         if self.dataset:
             self.dataset.write(block, window=win, indexes=indexes)
         else:
-            print(f"[rastio] Attempted to write but dataset is not initialized")
+            raise Exception(f"[rastio] Attempted to write but dataset is not initialized")
 
 
 
