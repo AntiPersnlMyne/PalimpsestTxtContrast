@@ -23,6 +23,7 @@ __status__ = "Development"  # "Prototype", "Development", "Production"
 # Imports & thread oversubscription guards (safe defaults)
 # --------------------------------------------------------------------------------------------
 import numpy as np
+import os
 import rasterio
 import importlib
 
@@ -35,6 +36,10 @@ from dataclasses import dataclass
 from ..gosp.rastio import MultibandBlockReader
 from ..utils.math_utils import project_block_onto_subspace, block_l2_norms
 
+
+# Guard thread oversubscription inside forked workers
+for _var in ("OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS", "OMP_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
 
 
 # --------------------------------------------------------------------------------------
@@ -86,9 +91,10 @@ class Target:
 
 _gen_state: dict[str, Any] = {
     "paths": None,       # List[str]
-    "use_sqrt": False,
-    "use_log": False,
-    "bands_fn": None,   # callable(image_block, use_sqrt, use_log) -> np.ndarray (bands, h, w)
+    "use_sqrt": False,   # use square root in bgp
+    "use_log": False,    # use log in bgp
+    "bands_fn": None,    # callable(image_block, use_sqrt, use_log) -> np.ndarray (bands, h, w)
+    "reader": None,      # MultibandBlockReader per worker
 }
 
 
@@ -113,39 +119,31 @@ def _init_generate_worker(
     _gen_state["use_log"] = bool(use_log)
     mod = importlib.import_module(func_module)
     _gen_state["bands_fn"] = getattr(mod, func_name)
+    _gen_state["reader"] = MultibandBlockReader(list(input_paths))
 
 
-def _read_input_window(paths: Sequence[str], window: WindowType) -> np.ndarray:
-    """Read a window from input paths into shape (bands, h, w) without project-specific readers."""
-    (row_off, col_off), (h, w) = window
-    if len(paths) == 1:
-        with rasterio.open(paths[0], "r") as src:
-            return src.read(window=Window(col_off, row_off, w, h)) #type:ignore
-    else:
-        out = None
-        for i, p in enumerate(paths):
-            with rasterio.open(p, "r") as src:
-                band = src.read(1, window=Window(col_off, row_off, w, h)) #type:ignore
-                if out is None:
-                    out = np.empty((len(paths), h, w), dtype=band.dtype)
-                out[i] = band
-        assert out is not None
-        return out
+def _read_input_window(window: WindowType) -> np.ndarray:
+    reader: MultibandBlockReader = _gen_state["reader"]  # type: ignore
+    block = reader.read_multiband_block(window)
+    # ensure float32 for downstream math
+    return np.asarray(block, dtype=np.float32, copy=False)
 
 
 def _generate_windows_chunk(windows_chunk: List[WindowType]) -> List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]]:
     """Worker: read inputs, create synthetic bands for a chunk of windows."""
-    paths = _gen_state["paths"]
     use_sqrt = _gen_state["use_sqrt"]
     use_log = _gen_state["use_log"]
     bands_fn = _gen_state["bands_fn"]
 
     out: List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]] = []
     for window in windows_chunk:
-        block = _read_input_window(paths, window).astype(np.float32)
-        new_bands = bands_fn(block, use_sqrt, use_log).astype(np.float32)
+        # Read block and calculate new bands
+        block = _read_input_window(window)
+        new_bands = bands_fn(block, use_sqrt, use_log).astype(np.float32, copy=False)
+        # Per-chunk statistics
         mins = new_bands.min(axis=(1, 2)).astype(np.float32)
         maxs = new_bands.max(axis=(1, 2)).astype(np.float32)
+        # Add window, bands, and statistics to output stream
         out.append((window, new_bands, mins, maxs))
     return out
 
@@ -181,44 +179,55 @@ def parallel_generate_streaming(
         max_workers=max_workers,
         initializer=_init_generate_worker,
         initargs=(list(input_paths), func_module, func_name, use_sqrt, use_log),
-    ) as ex:
+    ) as exec:
+        # "todo" list of all future tasks
         pending: set[Future] = set()
+        # Prevent inflight from being negative
         target_inflight = max(1, (max_workers or 1) * max(1, inflight))
 
         chunk_iter = iter(chunks)
         for _ in range(target_inflight):
-            try:
-                c = next(chunk_iter)
-            except StopIteration:
-                break
-            pending.add(ex.submit(_generate_windows_chunk, c))
+            # Submit as many chunks to pool as inflight permits
+            try: chunk = next(chunk_iter)
+            except StopIteration: break
+            pending.add(exec.submit(_generate_windows_chunk, chunk))
 
+        # Instantiate terminal progress bar if user-specified
         prog_bar = tqdm(total=len(windows_list), desc=desc, unit="win", colour="CYAN") if show_progress else None
 
         try:
+            # Process all tasks in "todo" list
             while pending:
                 done = next(as_completed(pending))
                 pending.remove(done)
                 results = done.result()  # list of (window, new_bands, mins, maxs)
 
+                # Doing the task: write blocks and update progress
                 for window, new_bands, mins, maxs in results:
                     writer.write_block(window=window, block=new_bands)
                     global_mins = np.minimum(global_mins, mins) if global_mins is not None else mins.copy()
                     global_maxs = np.maximum(global_maxs, maxs) if global_maxs is not None else maxs.copy()
-                    if prog_bar is not None:
-                        prog_bar.update(1)
+                    if prog_bar is not None: prog_bar.update(1)
 
-                try:
-                    c = next(chunk_iter)
-                except StopIteration:
-                    c = None
-                if c is not None:
-                    pending.add(ex.submit(_generate_windows_chunk, c))
+                # Get next chunk to process
+                try: chunk = next(chunk_iter)
+                except StopIteration: chunk = None
+                    
+                # Send next chunk to process
+                if chunk is not None:
+                    pending.add(exec.submit(_generate_windows_chunk, chunk))
+        
+        
+        # Catch any errors/exceptions during processing the 'todo' list
         except Exception as e:
             for f in pending: f.cancel()
             raise Exception(f"[parallel] Error during Pass 1:\n{e}")
+        
+        
+        # End execution; close prog-bar
         finally:
-            if prog_bar is not None: prog_bar.close()
+            if prog_bar is not None: 
+                prog_bar.close()
 
     assert global_mins is not None and global_maxs is not None, "No windows processed"
     return np.stack([global_mins, global_maxs], axis=0)
@@ -231,7 +240,7 @@ def parallel_generate_streaming(
 _worker_state: dict[str, Any] = {
     """Stores global information accessible to the worker"""
     
-    "path": None,          # str
+    "src": None,           # rasterio.DatasetReader
     "band_mins": None,     # np.ndarray; shape: (bands,)
     "band_maxs": None,     # np.ndarray; shape: (bands,)
 }
@@ -253,15 +262,15 @@ def _init_normalize_worker(
         band_maxs (np.ndarray): Array of max-value per band.
     """
     # Instantiate global worker variables
-    _worker_state["path"] = unorm_path
+    _worker_state["src"] = unorm_path
     _worker_state["band_mins"] = np.asarray(band_mins, dtype=np.float32)
     _worker_state["band_maxs"] = np.asarray(band_maxs, dtype=np.float32)
 
-    # Light warmup (no disk I/O) to pre-allocate and ensure BLAS pools are quiet
-    b_dim_len = _worker_state["band_mins"].shape[0]
-    dummy_block = np.zeros((b_dim_len, 4, 4), dtype=np.float32)
+    # Warmup: allocate tiny array and compute once to prime threads/allocator
+    b_mins = _worker_state["band_mins"].shape[0]
+    dummy_block = np.zeros((b_mins, 2, 2), dtype=np.float32)
     denom = np.maximum(_worker_state["band_maxs"] - _worker_state["band_mins"], 1e-8) # prevent div 0
-    _ = (dummy_block - _worker_state["band_mins"][..., None, None]) / denom[..., None, None]
+    np.divide(dummy_block, denom[:, None, None], out=dummy_block)
 
 
 def _normalize_windows_chunk(
@@ -278,30 +287,27 @@ def _normalize_windows_chunk(
     """
     
     # Get global worker variables for workers to access
-    path: str = _worker_state["path"]
-    mins: np.ndarray = _worker_state["band_mins"]
-    maxs: np.ndarray = _worker_state["band_maxs"]
+    src:str = _worker_state["src"] # type:ignore
+    mins:np.ndarray = _worker_state["band_mins"] # (bands,)
+    maxs:np.ndarray = _worker_state["band_maxs"] # (bands,)
 
     # bandwise calculate denominator; const varaible
-    denom = np.maximum(maxs - mins, 1e-8).astype(np.float32) # prevent div 0
-    out:List[Tuple[WindowType, np.ndarray]] = []
+    denom = np.maximum(maxs - mins, 1e-8).astype(np.float32) # 1e-8 prevent div 0
+    output:List[Tuple[WindowType, np.ndarray]] = []
 
-    # Calculate norm of each window and add results to list
-    with rasterio.open(path, "r") as src:
-        for window in windows_chunk:
-            
-            # Get data block
+    for window in windows_chunk:
+            # Read block from window
             (row_off, col_off), (h, w) = window
-            block = src.read(window=Window(col_off, row_off, w, h)).astype(np.float32) #type:ignore
-            
-            # np.newaxis for block dimension compatibility - doesn't add new data
-            norm = (block - mins[:, np.newaxis, np.newaxis]) / denom[:, np.newaxis, np.newaxis]
-            np.clip(norm, 0.0, 1.0, out=norm)
-            
-            # append normalized tile to end of output
-            out.append((window, norm))
+            block = src.read(window=Window(col_off, row_off, w, h)).astype(np.float32, copy=False) # type:ignore
+            # in-place: (block - mins) / denom
+            np.subtract(block, mins[:, None, None], out=block)
+            np.divide(block, denom[:, None, None], out=block)
+            # Check [0,1] bounds
+            np.clip(block, 0.0, 1.0, out=block)
+            # Append current block to output stream
+            output.append((window, block))
 
-    return out # length: len(windows_chunk) 
+    return output
 
 
 def parallel_normalize_streaming(
@@ -343,41 +349,56 @@ def parallel_normalize_streaming(
         max_workers=max_workers,
         initializer=_init_normalize_worker,
         initargs=(unorm_path, band_mins, band_maxs),
-    ) as ex:
+    ) as exec:
+        # "todo" list of all future tasks
         pending: set[Future] = set()
+        # Prevent inflight from being negative
         target_inflight = max(1, (max_workers or 1) * max(1, inflight))
 
         chunk_iter = iter(chunks)
         for _ in range(target_inflight):
-            try:
-                chunk = next(chunk_iter)
-            except StopIteration:
-                break
-            pending.add(ex.submit(_normalize_windows_chunk, chunk))
+            # Submit as many chunks to pool as inflight permits
+            try: chunk = next(chunk_iter) # grabs next task
+            except StopIteration: break   # no more tasks left
+            
+            # Submit tasks to the process pool
+            pending.add(exec.submit(_normalize_windows_chunk, chunk))
 
-        if show_progress: prog_bar = tqdm(total=len(windows_list), desc="[BGP] Second pass - normalize", unit="win", colour="MAGENTA")
+        # Instantiate terminal progress bar if user-specified
+        prog_bar = tqdm(total=len(windows_list), desc="[BGP] Second pass - normalize", unit="win", colour="MAGENTA") if show_progress else None
 
         try:
+            # Process all tasks in "todo" list
             while pending:
+                # Removes completed task from the "todo list"
                 done = next(as_completed(pending))
                 pending.remove(done)
                 results = done.result()  # list[(window, norm_block)]
 
+                # Doing the task: write blocks and update progress
                 for window, norm_block in results:
                     writer.write_block(window=window, block=norm_block)
-                    if show_progress: prog_bar.update(1)
+                    if prog_bar is not None:
+                        prog_bar.update(1)
 
-                try:
-                    chunk = next(chunk_iter)
-                except StopIteration:
-                    chunk = None
+                
+                try: chunk = next(chunk_iter)       # Get next chunk to process
+                except StopIteration: chunk = None  # signal no more chunks
+                
+                # Send next chunk to process pool
                 if chunk is not None:
-                    pending.add(ex.submit(_normalize_windows_chunk, chunk))
+                    pending.add(exec.submit(_normalize_windows_chunk, chunk))
+        
+        
+        # Catch any errors/exceptions during processing the 'todo' list
         except Exception as e:
             for f in pending: f.cancel()
             raise Exception(f"[parallel] Error during Pass 2:\n{e}")
+        
+        
+        # Always shut down progress bar fail or succeed
         finally:
-            if show_progress: prog_bar.close()
+            if prog_bar is not None: prog_bar.close()
 
 
 
@@ -385,7 +406,7 @@ def parallel_normalize_streaming(
 # Parallel scan helpers (submit_streaming): initializer + worker + driver
 # --------------------------------------------------------------------------------------
 _scan_state: dict[str, Any|None] = {
-    "paths": None,              # Sequence[str]
+    "paths": None,              # List[str]
     "projection_matrix": None,  # np.ndarray | None
     "reader": None,             # MultibandBlockReader
 }
@@ -418,17 +439,15 @@ def _scan_window(window: WindowType) -> Tuple[float, int, int, np.ndarray]:
         and len(window) == 2
         and isinstance(window[0], tuple)
         and isinstance(window[1], tuple)
-    ), f"Expected WindowType ((row_off,col_off),(h,w)), got: {window!r}"
+    ), f"Band WindowType: {window!r}"
         
     # Get worker varaibles
     reader:MultibandBlockReader = _scan_state["reader"] #type:ignore 
     p_matrix = _scan_state["projection_matrix"]
-    (row_off, col_off), (win_height, win_width) = window
+    (row_off, col_off), (_, win_width) = window
     
     # Project block onto P matrix
-    orig_block = reader.read_multiband_block(window).astype(np.float32)  # (bands, h, w)
-    
-    # Projected block is used **only** for scoring
+    orig_block = reader.read_multiband_block(window).astype(np.float32, copy=False)  # (bands, h, w)
     proj_block = project_block_onto_subspace(block=orig_block, projection_matrix=p_matrix) if p_matrix is not None else orig_block
 
     # Find pixel within tile with largest norm
@@ -438,7 +457,7 @@ def _scan_window(window: WindowType) -> Tuple[float, int, int, np.ndarray]:
     block_row, block_col = divmod(max_px_idx, win_width)
     
     # Return the original spectrum for OPCI/targets
-    bands_orig = orig_block[:, block_row, block_col].astype(np.float32)
+    bands_orig = orig_block[:, block_row, block_col].astype(np.float32, copy=False)
     
     # Return Target dataclass values
     return max_px_val, row_off + block_row, col_off + block_col, bands_orig
@@ -458,20 +477,23 @@ def best_target_parallel(
 
     The parent process reduces local candidates into a single global best.
     """
-    # Initalize best_target output
+    # Initalize output
     best_target:Target = Target(value=-np.inf, row=-1, col=-1, band_spectrum=np.empty(0, dtype=np.float32))
     seen = 0
 
+    # Determine best target
     def _consume(result: Tuple[float, int, int, np.ndarray]) -> None:
         nonlocal best_target, seen
         seen += 1
         value, row, col, band_spec = result
+        # Compare size ("value") of targets' L2 norms
         if value > best_target.value: 
             best_target = Target(value, row, col, band_spec)
 
 
     tasks = [(window,) for window in list(windows)] # wrap args (window) in tuple for streaming
 
+    # Submit tasks to parallel processing
     submit_streaming(
         worker= _scan_window, 
         initializer=_init_scan_worker,
@@ -489,12 +511,6 @@ def best_target_parallel(
     return best_target
 
 
-
-
-# --------------------------------------------------------------------------------------
-# Generic Streaming Submission
-# --------------------------------------------------------------------------------------
-
 def submit_streaming(
     *,
     worker:Callable[..., Any],
@@ -509,7 +525,7 @@ def submit_streaming(
     show_progress:bool = False
     ) -> None:
     """
-    Generic helper function designed to parallelize tasks in a streaming fashion. 
+    Function parallelizes tasks in a streaming fashion between cores with python's multiprocessing lbirary.
     It avoids loading all data into memory at once by submitting tasks to a 
     process pool and consuming the results as they become available. 
     
@@ -536,31 +552,29 @@ def submit_streaming(
     tasks_list = list(tasks)
     total = len(tasks_list)
 
-    # manage the worker processes
     with ProcessPoolExecutor(
         max_workers=max_workers, 
         initializer=initializer, 
         initargs=initargs
-        ) as ex:
-
+    ) as exec:
+        # "todo" list of all future tasks
         pending:set[Future] = set()
+        # Prevent inflight from being negative
         target_inflight = max(1, (max_workers or 1) * max(1, inflight))
 
         task_iterator = iter(tasks_list)
         for _ in range(target_inflight):
-            try: 
-                # grab next task from stack
-                task = next(task_iterator)
-            except StopIteration: 
-                # no more tasks left
-                break
+            # Submit as many chunks to pool as inflight permits
+            try: task = next(task_iterator) # grabs next task
+            except StopIteration: break     # no more tasks left
             
             # Submit tasks to the process pool
-            pending.add(ex.submit(worker, *task))
+            pending.add(exec.submit(worker, *task))
 
-        if show_progress: prog_bar = tqdm(total=total, desc=prog_bar_label, unit="task", colour=prog_bar_color) 
+        prog_bar = tqdm(total=total, desc=prog_bar_label, unit="task", colour=prog_bar_color)  if show_progress else None
 
         try:
+            # Process all tasks in "todo" list
             while pending:
                 # Removes completed task from the "todo list"
                 done = next(as_completed(pending)) 
@@ -571,24 +585,25 @@ def submit_streaming(
                 consumer(result)
                 
                 # Update progress bar with +1 task completed
-                if show_progress: prog_bar.update(1)
+                if prog_bar is not None: 
+                    prog_bar.update(1)
                 
-                try:
-                    # Get next task to submit
-                    task = next(task_iterator)
-                except StopIteration: 
-                    # signal no more tasks left to run
-                    task = None
+                # Get next task to process
+                try: task = next(task_iterator)
+                except StopIteration: task = None # signal no more tasks left to run
+                
+                # Submit next task to the process pool
                 if task is not None:
-                    # Submit tasks to the process pool
-                    pending.add(ex.submit(worker, *task))
+                    pending.add(exec.submit(worker, *task))
         
+        
+        # Catch any errors/exceptions during processing the 'todo' list
         except Exception as e:
             # Cancels all future tasks from executing
             for future_task in pending:
                 future_task.cancel()
             raise e
         
+        # Always shut down progress bar fail or succeed
         finally:
-            # Shut down progress bar - fail or success
-            if show_progress: prog_bar.close()
+            if prog_bar is not None: prog_bar.close()
