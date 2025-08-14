@@ -126,7 +126,7 @@ def _read_input_window(window: WindowType) -> np.ndarray:
     reader: MultibandBlockReader = _gen_state["reader"]  # type: ignore
     block = reader.read_multiband_block(window)
     # ensure float32 for downstream math
-    return np.asarray(block, dtype=np.float32, copy=False)
+    return np.asarray(block, dtype=np.float32)
 
 
 def _generate_windows_chunk(windows_chunk: List[WindowType]) -> List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]]:
@@ -139,7 +139,7 @@ def _generate_windows_chunk(windows_chunk: List[WindowType]) -> List[Tuple[Windo
     for window in windows_chunk:
         # Read block and calculate new bands
         block = _read_input_window(window)
-        new_bands = bands_fn(block, use_sqrt, use_log).astype(np.float32, copy=False)
+        new_bands = bands_fn(block, use_sqrt, use_log).astype(np.float32)
         # Per-chunk statistics
         mins = new_bands.min(axis=(1, 2)).astype(np.float32)
         maxs = new_bands.max(axis=(1, 2)).astype(np.float32)
@@ -262,7 +262,7 @@ def _init_normalize_worker(
         band_maxs (np.ndarray): Array of max-value per band.
     """
     # Instantiate global worker variables
-    _worker_state["src"] = unorm_path
+    _worker_state["src"] = rasterio.open(unorm_path, "r")
     _worker_state["band_mins"] = np.asarray(band_mins, dtype=np.float32)
     _worker_state["band_maxs"] = np.asarray(band_maxs, dtype=np.float32)
 
@@ -287,9 +287,9 @@ def _normalize_windows_chunk(
     """
     
     # Get global worker variables for workers to access
-    src:str = _worker_state["src"] # type:ignore
-    mins:np.ndarray = _worker_state["band_mins"] # (bands,)
-    maxs:np.ndarray = _worker_state["band_maxs"] # (bands,)
+    src:rasterio.DatasetReader = _worker_state["src"] # type:ignore
+    mins:np.ndarray = _worker_state["band_mins"]      # (bands,)
+    maxs:np.ndarray = _worker_state["band_maxs"]      # (bands,)
 
     # bandwise calculate denominator; const varaible
     denom = np.maximum(maxs - mins, 1e-8).astype(np.float32) # 1e-8 prevent div 0
@@ -298,7 +298,7 @@ def _normalize_windows_chunk(
     for window in windows_chunk:
             # Read block from window
             (row_off, col_off), (h, w) = window
-            block = src.read(window=Window(col_off, row_off, w, h)).astype(np.float32, copy=False) # type:ignore
+            block = src.read(window=Window(col_off, row_off, w, h)).astype(np.float32) # type:ignore
             # in-place: (block - mins) / denom
             np.subtract(block, mins[:, None, None], out=block)
             np.divide(block, denom[:, None, None], out=block)
@@ -447,7 +447,7 @@ def _scan_window(window: WindowType) -> Tuple[float, int, int, np.ndarray]:
     (row_off, col_off), (_, win_width) = window
     
     # Project block onto P matrix
-    orig_block = reader.read_multiband_block(window).astype(np.float32, copy=False)  # (bands, h, w)
+    orig_block = reader.read_multiband_block(window).astype(np.float32)  # (bands, h, w)
     proj_block = project_block_onto_subspace(block=orig_block, projection_matrix=p_matrix) if p_matrix is not None else orig_block
 
     # Find pixel within tile with largest norm
@@ -457,7 +457,7 @@ def _scan_window(window: WindowType) -> Tuple[float, int, int, np.ndarray]:
     block_row, block_col = divmod(max_px_idx, win_width)
     
     # Return the original spectrum for OPCI/targets
-    bands_orig = orig_block[:, block_row, block_col].astype(np.float32, copy=False)
+    bands_orig = orig_block[:, block_row, block_col].astype(np.float32)
     
     # Return Target dataclass values
     return max_px_val, row_off + block_row, col_off + block_col, bands_orig
