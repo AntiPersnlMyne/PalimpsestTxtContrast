@@ -17,6 +17,7 @@ import numpy as np
 
 from dataclasses import dataclass
 from typing import List, Tuple
+from numba import njit
 
 from ..utils.math_utils import compute_orthogonal_projection_matrix, compute_opci
 from ..gosp.rastio import MultibandBlockReader
@@ -42,6 +43,7 @@ class Target:
 # --------------------------------------------------------------------------------------------
 # Helper Function
 # --------------------------------------------------------------------------------------------
+@njit
 def _make_windows(image_shape: Tuple[int, int], window_shape: Tuple[int, int]):
     """
     Generates all possible windows over an image. Used in _best_target.

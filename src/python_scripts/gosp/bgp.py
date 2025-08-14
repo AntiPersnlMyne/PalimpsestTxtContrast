@@ -156,9 +156,10 @@ def band_generation_process(
 
     # Write unnormalized output, collect global stats
     with MultibandBlockWriter(
-        output_path=output_dir,
+        output_dir=output_dir,
         output_image_shape=input_shape,
         output_image_name=output_unorm_filename,
+        window_shape=window_shape,
         num_bands=num_output_bands,
         output_datatype=np.float32,
     ) as writer:
@@ -195,9 +196,10 @@ def band_generation_process(
 
     # Open the writer
     with MultibandBlockWriter(
-        output_path=output_dir,
+        output_dir=output_dir,
         output_image_shape=input_shape,
         output_image_name=output_norm_filename,
+        window_shape=window_shape,
         num_bands=num_output_bands,
         output_datatype=np.float32
     ) as writer:

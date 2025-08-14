@@ -144,9 +144,10 @@ def target_classification_process(
 
     # Score and label writer
     scores_writer = MultibandBlockWriter(
-        output_path=output_dir,
+        output_dir=output_dir,
         output_image_shape=(img_height, img_width),
         output_image_name=scores_filename,
+        window_shape=window_shape,
         num_bands=k_targets,
         output_datatype=np.float32,
     )

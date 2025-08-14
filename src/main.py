@@ -29,7 +29,7 @@ def main():
     start = time()
     gosp(
         # Input information
-        input_dir="data/input/arch177_365cor_rgb",   
+        input_dir="data/input/arch177_365cor",   
         output_dir="data/output",         
         input_image_types="tif",       
         # BGP and TCP parameters    
