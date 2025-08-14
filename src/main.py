@@ -27,30 +27,24 @@ from time import time
 def main():
     # CLAHE
     start = time()
-    improc.extract_luminous_channel(
-        src_dir="data/input/arch177_rgb",
-        dst_dir="data/input/arch177_lum"
+    gosp(
+        # Input information
+        input_dir="data/input/arch177_365cor_rgb",   
+        output_dir="data/output",         
+        input_image_types="tif",       
+        # BGP and TCP parameters    
+        use_sqrt=False,                   
+        use_log=True,                     
+        max_targets=30,                     
+        opci_threshold=0.01,              
+        # Parallelism fine-tuning
+        window_shape=(512,512),          
+        max_workers=None,                   
+        chunk_size=10,                      
+        inflight=2,                         
+        # Debug
+        verbose=True,                      
     )
-    
-    
-    # gosp(
-    #     # Input information
-    #     input_dir="data/input/arch177_365cor_rgb",   
-    #     output_dir="data/output",         
-    #     input_image_types="tif",       
-    #     # BGP and TCP parameters    
-    #     use_sqrt=False,                   
-    #     use_log=True,                     
-    #     max_targets=20,                     
-    #     opci_threshold=0.01,              
-    #     # Parallelism fine-tuning
-    #     window_shape=(512,512),          
-    #     max_workers=None,                   
-    #     chunk_size=10,                      
-    #     inflight=2,                         
-    #     # Debug
-    #     verbose=True,                      
-    # )
     print(f"\n[main/lum] - Execution finished -\nRuntime = {(time() - start):.2f}")
     
 

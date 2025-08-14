@@ -72,8 +72,8 @@ def gosp(
         use_sqrt (bool, optional): Use square root when creating sythetic bands. May give algorithm better results if True. Defaults to False.
         use_log (bool, optional): Use logarithm when compute synthetic bands. May give algorithm better results if True. Defaults to False.
         
-        max_targets (int, optional): Maximum number of targets for the algorithm to find. Program may end prematurely (i.e. before number of max_targets is reached) if ocpi is set too low. Defaults to 10.
-        ocpi_threshold (float, optional): Target purity score. The lower the value (e.g., 0.001), the more pure the target categories. The larger the value (e.g., 0.1), the less pure the target categories. Larger values capture more noise, but are more forgiving to slight target variations. Defaults to 0.01.
+        max_targets (int, optional): Maximum number of targets for the algorithm to find. Program may end prematurely (i.e. before number of max_targets is reached) if ocpi is set low. Defaults to 10.
+        ocpi_threshold (float, optional): Target purity score. The higher the value (e.g., 0.001), the more pure the target categories. The larger the value (e.g., 0.1), the less pure the target categories. Larger values capture more noise, but are more forgiving to slight target variations. Defaults to 0.01.
     
         use_parallel (bool, optional): Enables/Disables parallel processing. If True, significantly increases RAM usages and algorithm speed.
         max_workers (int, optional): Number of worker processes. If None, defaults to os.cpu_count() (i.e. all of them). Defaults to None.
