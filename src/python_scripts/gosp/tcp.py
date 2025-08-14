@@ -24,86 +24,52 @@ from ..utils.math_utils import compute_orthogonal_projection_matrix, project_blo
 from ..utils.parallel import submit_streaming
 
 
+
 # --------------------------------------------------------------------------------------------
-# Helper Functions
-# --------------------------------------------------------------------------------------------
-def _compute_pk(targets: List[np.ndarray]) -> List[np.ndarray]:
-    """
-    For each target k, build projection matrix P_k that projects out all other (i.e. [0,k-1]) targets .
-
-    targets
-    """
-    if not targets:
-        raise ValueError("[TCP] Empty targets list.")
-    
-    bands = int(targets[0].shape[0])
-    Pk: List[np.ndarray] = []
-    
-    # Iterate targets and create P_matrix(s)
-    for k_target in range(len(targets)):
-        target_list = [targets[k] for k in range(len(targets)) if k != k_target]
-        if not target_list:
-            # No targets to project; return identity matrix
-            P_matrix = np.eye(bands, dtype=np.float32)
-        else:
-            # Project targets
-            P_matrix = compute_orthogonal_projection_matrix(target_list).astype(np.float32)
-        Pk.append(P_matrix)
-        
-    return Pk
-
-
-
-# ============================================================================================
 # Parallel processing
-# ============================================================================================
+# --------------------------------------------------------------------------------------------
+# Worker state reuses a reader
 _worker_state: dict[str, object] = {
-    "paths": None,       # Sequence[str]
-    "targets": None,     # np.ndarray, (K-targets, bands)
-    "Pk": None,          # np.ndarray, (K-targets, bands, bands)
+    "reader": None,     # MultibandBlockReader
+    "targets": None,    # (K, B)
+    "Pk": None,         # (K, B, B)
 }
 
 
 def _init_tcp_worker(paths:Sequence[str], targets:np.ndarray, Pk:np.ndarray) -> None:
     """Initializer: store immutable arrays in each worker to avoid pickling per task."""
-    _worker_state["paths"] = list(paths)
-    _worker_state["targets"] = targets.astype(np.float32)
-    _worker_state["Pk"] = Pk.astype(np.float32)
+    _worker_state["reader"] = MultibandBlockReader(list(paths))
+    _worker_state["targets"] = targets.astype(np.float32, copy=False)
+    _worker_state["Pk"] = Pk.astype(np.float32, copy=False)
 
 
 def _tcp_window(window: WindowType) -> Tuple[WindowType, np.ndarray]:
-    """Compute per-target OSP responses for a single window.
+    """
+    Compute per-target OSP responses for a single window.
 
     Returns:
         Tuple[WindowType, np.ndarray]: (window, scores), where scores are (K-targets, height, width); one band per target.
     """
-    paths:Sequence[str] = _worker_state["paths"]   # type:ignore ;
+    reader:MultibandBlockReader = _worker_state["reader"] # type:ignore ;
     targets:np.ndarray = _worker_state["targets"]  # type:ignore ; (K, B)
     Pk:np.ndarray = _worker_state["Pk"]            # type:ignore ; (K, B, B)
 
-    block = window_imread(paths, window).astype(np.float32)  # (bands, height, width)
+    block = reader.read_multiband_block(window).astype(np.float32, copy=False)  # (bands, height, width)
     (_, _), (win_height, win_width) = window
     
     k_targets, _ = targets.shape
     scores = np.empty((k_targets, win_height, win_width), dtype=np.float32)
 
-    # OSP score per target k: d_k(x) = t_k^T (P_k x)
-    # For each target, project using P_k then compute t_k^T (P_k x)
+    # Calculate OSP score per target k
     for k_target in range(k_targets):
-        # Nothing to project out
+        # Nothing to project out if k_targets == 1
         proj = block if k_targets == 1 else project_block_onto_subspace(block, Pk[k_target])  # (bands, height, width)
-            
-        # Fast, multidimensional dot product over band axis
-        # tensordot: (B,) * (B,height,width) over band axis -> (height,width) 
-        scores[k_target] = np.tensordot(targets[k_target], proj, axes=([0], [0])).astype(np.float32)
+        scores[k_target] = np.tensordot(targets[k_target], proj, axes=([0], [0])).astype(np.float32, copy=False)
 
     return window, scores
 
 
 
-# --------------------------------------------------------------------------------------------
-# Target Classification Process Function
-# --------------------------------------------------------------------------------------------
 def target_classification_process(
     *, # requirement of keyword args
     generated_bands: Sequence[str],
@@ -129,7 +95,7 @@ def target_classification_process(
     # Discover geometry and confirm target dimensionality matches
     with MultibandBlockReader(list(generated_bands)) as reader:
         img_height, img_width = reader.image_shape()
-        sample = reader.read_multiband_block(((0,0), (5,5))) # sample 5x5 block
+        sample = reader.read_multiband_block(((0,0), (2,2))) # sample 2x2 block
         band_count = int(sample.shape[0])
 
     for i, target in enumerate(targets):
@@ -137,7 +103,10 @@ def target_classification_process(
             raise ValueError(f"[TCP] Target {i} shape {target.shape}, expected ({band_count},)")
 
     # Precompute per-target projectors and pack arrays for per-task access
-    Pk_list = _compute_pk(targets)
+    Pk_list = [compute_orthogonal_projection_matrix([targets[j] for j in range(len(targets)) if j != k]).astype(np.float32)
+               if len(targets) > 1 else np.eye(band_count, dtype=np.float32)
+               for k in range(len(targets))]
+    
     targets_arr = np.stack([target.astype(np.float32) for target in targets], axis=0)  # (K,B)
     Pk_arr = np.stack(Pk_list, axis=0).astype(np.float32)                              # (K,B,B)
     k_targets = targets_arr.shape[0]
@@ -155,7 +124,7 @@ def target_classification_process(
     # Build all windows
     windows = _make_windows((img_height, img_width), window_shape)
 
-    # Label (score) all pixels in image
+    # Score ("label") all pixels in image
     with scores_writer as writer:
         def _consume(result: Tuple[WindowType, np.ndarray]) -> None:
             # Consumer executes in parent; safe to write here
