@@ -19,43 +19,34 @@ from python_scripts.gosp import gosp
 from python_scripts import improc 
 from time import time
 
-import cv2 as cv
-import os
-
-
 
 # --------------------------------------------------------------------------------------------
 # Driver Code
 # --------------------------------------------------------------------------------------------
 def main():
-    # CLAHE -> GOSP
-    start = time()    
-    improc.process_images( # CLAHE
-        src_dir="data/input/arch177_lum",
-        dst_dir="data/output/arch177_clahe",
-        file_prefix="clahe_",
-        transform_fn=improc.clahe,
-        transform_kwargs={"tile_grid_size": (1024,1024)}
-    )
-    gosp(
-        # Input information
-        input_dir="data/output/arch177_clahe",   
-        output_dir="data/output",         
-        input_image_types="tif",       
-        # BGP and TCP parameters    
-        use_sqrt=False,                   
-        use_log=False,                     
-        max_targets=20,                     
-        opci_threshold=0.01,              
-        # Parallelism fine-tuning
-        window_shape=(1024,1024),          
-        max_workers=None,                   
-        chunk_size=10,                      
-        inflight=2,                         
-        # Debug
-        verbose=True,                      
-    )
-    print(f"\n[main/365cor-clahe] - Execution finished -\nRuntime = {(time() - start):.2f}")
+    # CLAHE
+    start = time()
+    
+    
+    # gosp(
+    #     # Input information
+    #     input_dir="data/input/arch177_365cor_rgb",   
+    #     output_dir="data/output",         
+    #     input_image_types="tif",       
+    #     # BGP and TCP parameters    
+    #     use_sqrt=False,                   
+    #     use_log=True,                     
+    #     max_targets=20,                     
+    #     opci_threshold=0.01,              
+    #     # Parallelism fine-tuning
+    #     window_shape=(512,512),          
+    #     max_workers=None,                   
+    #     chunk_size=10,                      
+    #     inflight=2,                         
+    #     # Debug
+    #     verbose=True,                      
+    # )
+    print(f"\n[main/lum] - Execution finished -\nRuntime = {(time() - start):.2f}")
     
 
 

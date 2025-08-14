@@ -47,7 +47,7 @@ class BitwiseOperation(IntEnum):
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
-def _read_files(src_dir: str) -> dict[str, np.ndarray]:
+def read_files(src_dir: str) -> dict[str, np.ndarray]:
     """Read all .tif or .tiff files in the directory into a dictionary of {filename: image array}.
 
     Args:
@@ -74,7 +74,7 @@ def _read_files(src_dir: str) -> dict[str, np.ndarray]:
     return images
 
 
-def _write_files(
+def write_files(
     dst_dir: str, 
     dict_of_images: dict[str, np.ndarray], 
     prefix:str = "",
@@ -99,7 +99,7 @@ def _write_files(
             raise IOError(f"Failed to write image: {output_path}")
 
 
-def _normalize_image(img: np.ndarray) -> np.ndarray:
+def normalize_image(img: np.ndarray) -> np.ndarray:
     """_summary_
 
     Args:
@@ -117,7 +117,7 @@ def _normalize_image(img: np.ndarray) -> np.ndarray:
     return norm_img.astype(img.dtype) # Returned normalized as dtype
 
 
-def _normalize_image_range(
+def normalize_image_range(
     img: np.ndarray, 
     min_val: int|None,
     max_val: int|None
@@ -153,13 +153,13 @@ def _normalize_image_range(
         alpha=dtype_min,
         beta=dtype_max,
         norm_type=cv.NORM_MINMAX,
-        dtype=_return_cv_img_dtype(img=img)
+        dtype=return_cv_img_dtype(img=img)
     )
     
     return normalize_image
 
 
-def _clip_or_norm(
+def clip_or_norm(
     img: np.ndarray, 
     dtype: np.dtype, 
     normalize: bool
@@ -175,12 +175,12 @@ def _clip_or_norm(
         np.ndarray(np.ndarray): Clipped or normalized output image as type dtype.
     """
     if normalize:
-        return _normalize_image(img) # Returns as dtype
+        return normalize_image(img) # Returns as dtype
     else:
         return np.clip(img, 0, np.iinfo(dtype).max).astype(dtype)
 
 
-def _return_cv_img_dtype(img:np.ndarray|None = None, np_dtype:np.dtype|None = None) -> int:
+def return_cv_img_dtype(img:np.ndarray|None = None, np_dtype:np.dtype|None = None) -> int:
     """Converts np.dtype to cv.dtype. Pass in one parameter to return the dtype. If both parameters are passed (not None), np_dtype is ignored.
     Args:
         img (np.ndarray | None, optional): Returns the dtype of image as cv.dtype. If None, assumes np.dtype parameter was passed instead. Defaults to None.
@@ -246,7 +246,7 @@ def process_images(
         transform_kwargs = {}
 
     # Read input and Allocate output
-    src_images = _read_files(src_dir)
+    src_images = read_files(src_dir)
     dst_images = {}
 
     # Process all images from source directory
@@ -256,7 +256,7 @@ def process_images(
         except Exception as e:
             warnings.warn(f"Failed to process image '{name}': {e}")
 
-    _write_files(
+    write_files(
         dst_dir=dst_dir, 
         dict_of_images=dst_images, 
         prefix=file_prefix, 

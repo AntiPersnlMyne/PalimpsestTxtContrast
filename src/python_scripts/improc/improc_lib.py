@@ -18,10 +18,9 @@ import numpy as np
 import cv2 as cv
 import warnings
 from typing import Sequence, List
+from ..gosp.rastio import MultibandBlockReader, MultibandBlockWriter
 
 # Helper functions
-from ..utils.improc_utils import _read_files, _write_files, _normalize_image, _normalize_image_range, _clip_or_norm, _return_cv_img_dtype
-# ENUM
 from ..utils.improc_utils import *
 
 
@@ -63,7 +62,7 @@ def clahe(
     if img.ndim > 2: raise Exception(f"Error: CLAHE input image must be grayscale.") 
     
     # Convert float to CLAHE readable uint16, while preserving original range
-    if isinstance(img, float):
+    if not isinstance(img, int):
         img = ((img - img.min()) / (img.max() - img.min()) * 65535).astype(np.uint16)
 
     # Create CLAHE operator 
@@ -148,7 +147,7 @@ def sharpen(
         case SharpenMethod.KERNEL2D: 
             sharp_img = cv.filter2D(float_img, cv.CV_32F, sharpen_kernel)
 
-            return _clip_or_norm(sharp_img, src_dtype, normalize)
+            return clip_or_norm(sharp_img, src_dtype, normalize)
             
         case SharpenMethod.UNSHARP_MASKING: 
             # Low-frequency details
@@ -159,7 +158,7 @@ def sharpen(
             # Combine high-frequency details to enhance edges
             sharp_img = (float_img + s * highpass_img).astype(np.float32)
 
-            return _clip_or_norm(sharp_img, src_dtype, normalize)
+            return clip_or_norm(sharp_img, src_dtype, normalize)
 
         case SharpenMethod.HIGH_BOOST:
             # Low-frequency details
@@ -168,7 +167,7 @@ def sharpen(
             # High-boost apply 
             sharp_img = (s * float_img - lowpass_img).astype(np.float32)
 
-            return _clip_or_norm(sharp_img, src_dtype, normalize)
+            return clip_or_norm(sharp_img, src_dtype, normalize)
             
         case _:
             raise Exception(f"-- Error: Provide valid sharpen method. Use utils.SharpenMethod. --")
@@ -668,7 +667,7 @@ def linear_stretch(
         alpha=out_min,
         beta=out_max,
         norm_type=cv.NORM_MINMAX,
-        dtype=_return_cv_img_dtype(img=img)
+        dtype=return_cv_img_dtype(img=img)
     )
 
     return img_stretched
@@ -707,7 +706,7 @@ def log_stretch(img: np.ndarray) -> np.ndarray:
         alpha=out_min,
         beta=out_max,
         norm_type=cv.NORM_MINMAX,
-        dtype=_return_cv_img_dtype(img=img)
+        dtype=return_cv_img_dtype(img=img)
     )
 
     return img_stretched
@@ -760,7 +759,7 @@ def percentile_stretch(
         alpha=out_min,
         beta=out_max,
         norm_type=cv.NORM_MINMAX,
-        dtype=_return_cv_img_dtype(img=img)
+        dtype=return_cv_img_dtype(img=img)
     )
 
     return stretched
