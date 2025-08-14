@@ -17,6 +17,7 @@ __status__ = "Development" # "Development", or "Production".
 # --------------------------------------------------------------------------------------------
 from python_scripts.gosp import gosp 
 from python_scripts import improc 
+from python_scripts.utils.fileio import discover_image_files
 from time import time
 
 
@@ -26,6 +27,10 @@ from time import time
 def main():
     # CLAHE
     start = time()
+    improc.extract_luminous_channel(
+        src_dir="data/input/arch177_rgb",
+        dst_dir="data/input/arch177_lum"
+    )
     
     
     # gosp(

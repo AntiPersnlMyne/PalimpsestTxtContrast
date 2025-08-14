@@ -18,10 +18,12 @@ import numpy as np
 import cv2 as cv
 import warnings
 from typing import Sequence, List
-from ..gosp.rastio import MultibandBlockReader, MultibandBlockWriter
+import colorspacious as cs
 
 # Helper functions
 from ..utils.improc_utils import *
+from ..gosp.rastio import MultibandBlockReader, MultibandBlockWriter
+from ..utils.fileio import discover_image_files
 
 
 # --------------------------------------------------------------------------------------------
@@ -778,11 +780,12 @@ def draw_contours(img:np.ndarray, contours:List[np.ndarray], color:tuple, thickn
     
     
 # --------------------------------------------------------------------------------------------
-# Color Space
+# Color Space - rastio not OpenCV
 # --------------------------------------------------------------------------------------------
-def extract_luminous(img:np.ndarray) -> np.ndarray:
+def extract_luminous_channel(src_dir:str, dst_dir:str) -> None:
     """
-    Reads in BGR image, converts to CIELAB space, returns the L channel.
+    Reads in image (RGB) from directory, converts to CIELAB space, returns the L channel.
+    Writes output to dst_dir.
 
     Args:
         img (np.ndarray): Input BGR image.
@@ -790,7 +793,46 @@ def extract_luminous(img:np.ndarray) -> np.ndarray:
     Returns:
         np.ndarray: Luminous (L) channel of `img`.
     """
-    return cv.cvtColor(img.astype(np.float32), cv.COLOR_BGR2LAB, None)[:,:,0]
+    # Read filepaths from source directory
+    filepaths = discover_image_files(src_dir)
+    
+    with MultibandBlockReader(filepaths) as reader:
+        # Get full image dimensions
+        img_shape = reader.image_shape()  
+        win_shape = ((0, 0), img_shape)
+        rgb_image = reader.read_multiband_block( ((0, 0), img_shape) )
+        
+        # If integer, cvt to float and normalize to range [0, 1]
+        if np.issubdtype(rgb_image.dtype, np.integer):
+            rgb_image = rgb_image / np.iinfo(rgb_image.dtype).max # Scale down to 0-1
+            
+        # If float, ensure [0,1]
+        if  np.issubdtype(rgb_image.dtype, np.floating):
+            rgb_image = cv.normalize(rgb_image, rgb_image, 0, 1, cv.NORM_MINMAX, cv.CV_32F)
+            
+        # Switch to row-major data-structure
+        rgb_image = rgb_image.transpose(1,2,0) # (bands, rows, cols) -> (rows, cols, bands)
+
+        # Convert RGB [0,1] to CIELAB
+        lab_image = cs.cspace_convert(rgb_image, start={"name":"sRGB1"}, end="CIELab")
+
+        # Extract the L channel
+        l_channel = lab_image[:, :, 0]
+        
+        # Convert to writeable shape. (rows, cols) -> (1-band, rows, cols)
+        l_channel = np.expand_dims(l_channel, axis=0)
+        
+        # Get file's name
+        for filepath in filepaths:
+            # Attaches prefix 'lum_' to all files
+            dst_filename = f"lum_{os.path.basename(filepath)}"
+            # Write output 
+            with MultibandBlockWriter(dst_dir, img_shape, dst_filename, img_shape, np.float32) as writer:
+                writer.write_block(win_shape, l_channel)
+            
+        
+    
+    # return cv.cvtColor(img.astype(np.float32), cv.COLOR_BGR2LAB, None)[:,:,0]
 
 def bgr2gray(img:np.ndarray) -> np.ndarray:
     """

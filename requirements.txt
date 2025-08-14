@@ -1,10 +1,11 @@
-# Requires version: 3.10.x > Python  < 3.12.x
+# Supports Python 3.13.6+
 
 # Data arrays and backbone of every other library
 numpy             
 
 # Image processing
-opencv-python==4.11.0.86 
+opencv-python
+colorspacious
 # scikit-image==0.25.2     
 
 # Scientific computing

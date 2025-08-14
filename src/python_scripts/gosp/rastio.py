@@ -125,9 +125,8 @@ class MultibandBlockReader:
         
         # get window dimensions
         (row_off, col_off), (block_height, block_width) = window
-        
-        if len(self.srcs) == 1 and self.srcs[0].count > 1:
-            # Single multi-band file
+        # Single multi-band file
+        if self.srcs[0].count > 1:
             try:
                 block = self.srcs[0].read(
                     window=Window(col_off, row_off, block_width, block_height) #type:ignore
@@ -135,9 +134,9 @@ class MultibandBlockReader:
                 return block  # shape: (bands, height, width)
             except Exception as e:
                 raise Exception(f"[rastio] Error reading multi-band block:\n{e}")
-
+            
+        # Multiple single-band files (assumes each src is 1-band)
         else:
-            # Multiple single-band files (assumes each src is 1-band)
             multi_band_block = np.empty((len(self.srcs), block_height, block_width), dtype=np.float32)
             for i, src in enumerate(self.srcs):
                 try:
@@ -159,11 +158,11 @@ class MultibandBlockWriter:
     Args:
         output_path (str): The path to the output raster file.
         output_image_shape (Tuple[int, int]): The dimensions (rows, cols) of the output image.
-        output_dtype (type, optional): The data type of the output raster. Defaults to float32.
+        output_dtype (np.type, optional): The data type of the output raster.
     """
     
-    def __init__(self, output_path, output_image_shape, output_image_name, window_shape:Tuple[int,int] = (512,512), num_bands: int|None = None, output_datatype=np.typename):
-        self.output_path = output_path
+    def __init__(self, output_dir:str, output_image_shape:Tuple[int,int], output_image_name:str, window_shape:Tuple[int,int], output_datatype, num_bands: int|None = None):
+        self.output_dir = output_dir
         self.output_shape = output_image_shape
         self.output_name = output_image_name
         self.output_dtype = output_datatype
@@ -186,8 +185,8 @@ class MultibandBlockWriter:
             "BIGTIFF": "YES" # Enables 4+ GB files
         }
 
-        makedirs(self.output_path, exist_ok=True) # Check for valid output path - otherwise create it
-        self.dataset = rasterio.open(self.output_path + '/' + self.output_name, "w", **self.profile)
+        makedirs(self.output_dir, exist_ok=True) # Check for valid output path - otherwise create it
+        self.dataset = rasterio.open(f"{self.output_dir}/{self.output_name}", "w", **self.profile)
         return self # return reference to dataset
 
     def __exit__(self, exc_type, exc_val, exc_tb):
