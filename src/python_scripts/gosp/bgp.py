@@ -15,10 +15,9 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Imports
 # --------------------------------------------------------------------------------------------
 import numpy as np
-
 from typing import Tuple, List
-
-from .rastio import *
+# Pipeline imports
+from .rastio import MultibandBlockReader, MultibandBlockWriter
 from ..utils.fileio import rm
 from ..utils.parallel import parallel_normalize_streaming, parallel_generate_streaming
 
@@ -53,43 +52,36 @@ def _create_bands_from_block(
                     with shape (new_bands, height, width) where (height, width) are
                     determined by the original image_block.
     """
-        
+    src_bands, height, width = image_block.shape 
+    
     # Pre-allocate output size
-    num_bands, height, width = image_block.shape 
-    
-    tot_num_bands = num_bands                           # original
-    tot_num_bands += (num_bands * (num_bands - 1)) // 2 # correlation
-    if use_sqrt: tot_num_bands += num_bands             # sqrt
-    if use_log: tot_num_bands += num_bands              # log
-    
-    new_bands = np.empty((tot_num_bands, height, width), dtype=image_block.dtype) 
+    total = src_bands + (src_bands * (src_bands - 1)) // 2 + (src_bands if use_sqrt else 0) + (src_bands if use_log else 0)
+    generated_bands = np.empty((total, height, width), dtype=np.float32)
 
     idx = 0 # correctly stack new bands to output
     
     # original
-    for band in range(num_bands):
-        new_bands[idx,:,:] = image_block[band,:,:]
-        idx+=1
+    generated_bands[idx:idx + src_bands] = image_block
+    idx += src_bands
 
-    # correlation
-    for band_a_idx in range(num_bands):
-        for band_b_idx in range(band_a_idx + 1, num_bands): # avoids duplicate combinations
-            new_bands[idx,:,:] = image_block[band_a_idx,:,:] * image_block[band_b_idx,:,:]
-            idx+=1
+    # pairwise correlations 
+    for band in range(src_bands - 1):
+        product = image_block[band] * image_block[band + 1:]  # (src_bands-1-band, height, width)
+        na = product.shape[0]
+        generated_bands[idx:idx + na] = product
+        idx += na
 
     # sqrt 
     if use_sqrt:
-        for band in range(num_bands):
-            new_bands[idx,:,:] = np.sqrt(image_block[band,:,:])
-            idx+=1
+        generated_bands[idx:idx + src_bands] = np.sqrt(image_block, dtype=np.float32)
+        idx += src_bands
             
     # log
     if use_log:
-        for band in range(num_bands):
-            new_bands[idx,:,:] = np.log1p(image_block[band,:,:])
-            idx+=1
+        generated_bands[idx:idx + src_bands] = np.log1p(image_block, dtype=np.float32)
+        idx += src_bands
 
-    return new_bands
+    return generated_bands
 
 
 def band_generation_process(
