@@ -56,7 +56,7 @@ def gosp(
     max_targets:int = 10,
     opci_threshold:float = 0.01,
     max_workers:int|None = None,
-    chunk_size:int = 4,
+    chunk_size:int = 8,
     inflight:int = 2,
     verbose:bool = False,
     ) -> None:
@@ -77,9 +77,9 @@ def gosp(
     
         use_parallel (bool, optional): Enables/Disables parallel processing. If True, significantly increases RAM usages and algorithm speed.
         max_workers (int, optional): Number of worker processes. If None, defaults to os.cpu_count() (i.e. all of them). Defaults to None.
-        chunk_size (int, optional): Number of windows processed per task. Increase to reduce overhead. Defaults to 4.
+        chunk_size (int, optional): Number of windows processed per task. Increase to reduce overhead. Defaults to 8.
         inflight (int): 
-            At most inflight * max_workers tasks will be in flight ("worked on") at once.
+            Number of tasks "kept in the chamber" to consistently keep workers busy. 4+ may blow up your RAM.
             Lower to reduce RAM; raise to improve throughput.
             Defaults to 2.
         verbose (bool, optional): Enable/Disable loading bars in terminal.
