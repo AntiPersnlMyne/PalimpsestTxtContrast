@@ -15,7 +15,9 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Imports
 # --------------------------------------------------------------------------------------------
 import numpy as np
+
 from typing import Tuple, List
+
 from .rastio import *
 from ..utils.fileio import rm
 from ..utils.parallel import parallel_normalize_streaming, parallel_generate_streaming
@@ -32,8 +34,6 @@ ImageBlock = np.ndarray
 # --------------------------------------------------------------------------------------------
 # Band Generation Process (BGP)
 # --------------------------------------------------------------------------------------------
-# @njit(parallel=True, fastmath=True, cache=True)
-# @njit
 def _create_bands_from_block(
     image_block: ImageBlock,
     use_sqrt: bool,

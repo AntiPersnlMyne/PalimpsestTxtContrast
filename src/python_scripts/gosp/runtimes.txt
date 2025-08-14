@@ -16,3 +16,9 @@ block=512, band=3 parallel, verbose: 20
 block=512, band=3, parallel, verbose: 24.96
 block=512, band=11, parallel, verbose: 283.57
 block=512, band=rgb, parallel, verbose: 34.26
+
+### @njit addition
+None: 62.12
+bgp::create_bands: 63.62
+tgp::make_windows: 62.81
+

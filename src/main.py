@@ -45,7 +45,7 @@ def main():
         # Debug
         verbose=True,                      
     )
-    print(f"\n[main/lum] - Execution finished -\nRuntime = {(time() - start):.2f}")
+    print(f"\n[main/test] - Execution finished -\nRuntime = {(time() - start):.2f}")
     
 
 
