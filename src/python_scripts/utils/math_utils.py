@@ -76,28 +76,15 @@ def compute_orthogonal_projection_matrix(
     if len(target_vectors) == 0:
         raise ValueError("Must provide at least one target vector")
 
-    # Create the matrix with vectors as columns
-    U = np.stack(target_vectors, axis=1)
-
-    # Compute the projection matrix P_U = U(U^T U)^-1 U^T
-    UtU = U.T @ U
-    
-    # Handle the case where UtU is singular (not invertible)
-    # This check is crucial for stability, especially when a target vector is a zero vector
-    # In a professional context, you would handle this more gracefully.
-    if LA.det(UtU) == 0:
-        num_bands = U.shape[0]
-        I = np.eye(num_bands, dtype=np.float32)
-        return I
-
-    UtU_inv = LA.inv(UtU)
-    P_U = U @ UtU_inv @ U.T
-
-    # The orthogonal projection matrix is P_orth = I - P_U
-    num_bands = U.shape[0]
-    I = np.eye(num_bands, dtype=np.float32)
-    
-    return I - P_U
+    U = np.stack(target_vectors, axis=1).astype(np.float64, copy=False)  # (B, K)
+    # Orthogonal projector onto span(U): P = U @ pinv(U)
+    P = U @ LA.pinv(U)
+    B = U.shape[0]
+    I = np.eye(B, dtype=np.float64)
+    P_orth = I - P
+    # symmetrize & cast once
+    P_orth = 0.5 * (P_orth + P_orth.T)
+    return P_orth.astype(np.float32, copy=False)
 
 
 def project_block_onto_subspace(
@@ -158,7 +145,7 @@ def compute_opci(
         float: OPCI value, representing the residual norm after projection
     """
 
-    # Pixel x from [Ren and Cheng 2000]
+    # Pixel vector 'x'
     x = np.asarray(spectrum, dtype=np.float32).reshape(-1)
     # Clean up potential NaNs/Inf
     if not np.isfinite(spectrum).all():
