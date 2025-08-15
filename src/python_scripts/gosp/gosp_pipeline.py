@@ -17,10 +17,10 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "2.0.1"
+__version__ = "3.0.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Development" # "Prototype", "Development", "Production"
+__status__ = "Production" # "Prototype", "Development", "Production"
 
 
 
@@ -35,6 +35,7 @@ from numpy import ndarray
 from .bgp import band_generation_process
 from .tgp import target_generation_process
 from .tcp import target_classification_process
+from .skip_bgp import write_original_multiband
 from ..utils.fileio import discover_image_files
 
 # GeoTIFF warning suppression
@@ -51,8 +52,8 @@ def gosp(
     output_dir:str, 
     input_image_types:str|tuple[str, ...] = "tif",
     window_shape:tuple = (512,512),
-    use_sqrt:bool = False,
-    use_log:bool = False,
+    full_synthetic:bool = False,
+    skip_bgp:bool = False,
     max_targets:int = 10,
     opci_threshold:float = 0.01,
     max_workers:int|None = None,
@@ -64,26 +65,42 @@ def gosp(
     Runs the Generalized Orthogonal Subspace Projection pipeline (GOSP)
 
     Args:
-        input_dir (str): Directory containing raw imagery. Accepts multiple single-band or multi-band image.
-        output_dir (str): Output directory for processed image(s).
-        input_image_type (str | tuple[str, ...], optional): File extension of image type without the `.` (e.g. tif, png, jpg). If set to tuple (i.e. list of types), will read all images of those types. Defaults to "tif".
-        window_shape (tuple, optional): Size of block to process each image, in a tile-wise operation. The larger the tile, the *faster* the operation, but the heavier the load on your PC's memory. May cause program to crash -- via unsufficient memory -- if set too large. Defaults to (512,512).
+        input_dir (str): 
+            Directory containing raw imagery. Accepts multiple single-band or multi-band image.
+        output_dir (str): 
+            Output directory for processed image(s).
+        input_image_type (str | tuple[str, ...], optional): 
+            File extension of image type without the `.` (e.g. tif, png, jpg). If set to tuple (i.e. list of types), will read all images of those types. Defaults to "tif".
+        window_shape (tuple, optional): 
+            Size of block to process each image, in a tile-wise operation. The larger the tile, the *faster* the operation, but the heavier the load on your PC's memory. May cause program to crash -- via unsufficient memory -- if set too large. Defaults to (512,512).
         
-        use_sqrt (bool, optional): Use square root when creating sythetic bands. May give algorithm better results if True. Defaults to False.
-        use_log (bool, optional): Use logarithm when compute synthetic bands. May give algorithm better results if True. Defaults to False.
+        full_synthetic (bool, optional): 
+            Adds optional square root and log when creating sythetic bands. May give algorithm better results if True. Defaults to False.
+        skip_bgp (bool, optional): 
+            Skips generating synthetic bands. Set to true if synthetic data exceeds your PC disc storage. Defaults to False.
         
-        max_targets (int, optional): Maximum number of targets for the algorithm to find. Program may end prematurely (i.e. before number of max_targets is reached) if ocpi is set low. Defaults to 10.
-        ocpi_threshold (float, optional): Target purity score. The higher the value (e.g., 0.001), the more pure the target categories. The larger the value (e.g., 0.1), the less pure the target categories. Larger values capture more noise, but are more forgiving to slight target variations. Defaults to 0.01.
+        max_targets (int, optional): 
+            Maximum number of targets for the algorithm to find. Program may end prematurely (i.e. before number of max_targets is reached) if ocpi is set low. Defaults to 10.
+        ocpi_threshold (float, optional): 
+            Target purity score. The higher the value (e.g., 0.001), the more pure the target categories. The larger the value (e.g., 0.1), the less pure the target categories. Larger values capture more noise, but are more forgiving to slight target variations. Defaults to 0.01.
     
-        use_parallel (bool, optional): Enables/Disables parallel processing. If True, significantly increases RAM usages and algorithm speed.
-        max_workers (int, optional): Number of worker processes. If None, defaults to os.cpu_count() (i.e. all of them). Defaults to None.
-        chunk_size (int, optional): Number of windows processed per task. Increase to reduce overhead. Defaults to 8.
+        use_parallel (bool, optional): 
+            Enables/Disables parallel processing. If True, significantly increases RAM usages and algorithm speed.
+        max_workers (int, optional): 
+            Number of worker processes. If None, defaults to os.cpu_count() (i.e. all of them). Defaults to None.
+        chunk_size (int, optional): 
+            Number of windows processed per task. Increase to reduce overhead. Defaults to 8.
         inflight (int): 
             Number of tasks "kept in the chamber" to consistently keep workers busy. 4+ may blow up your RAM.
             Lower to reduce RAM; raise to improve throughput.
             Defaults to 2.
-        verbose (bool, optional): Enable/Disable loading bars in terminal.
+        verbose (bool, optional): 
+            Enable/Disable loading bars in terminal.
     """
+    # Check input variables are positive
+    assert window_shape[0]>0 and window_shape[1]>0 \
+    and opci_threshold>0 and chunk_size>0 and inflight>0 \
+    , f"[gosp] Input parameters must have positive values"
     
     # IO variables
     input_files = discover_image_files(input_dir, input_image_types)
@@ -99,18 +116,29 @@ def gosp(
     
 
     logging.info("[GOSP] Running Band Generation Process (BGP)...")
-        
-    band_generation_process(
-        input_image_paths=input_files,
-        output_dir=output_dir,
-        window_shape=window_shape,
-        use_sqrt=use_sqrt,
-        use_log=use_log,
-        max_workers=max_workers,
-        chunk_size=chunk_size,
-        inflight=inflight,
-        show_progress=verbose
-    )
+    
+    if not skip_bgp:
+        band_generation_process(
+            input_image_paths=input_files,
+            output_dir=output_dir,
+            window_shape=window_shape,
+            full_synthetic=full_synthetic,
+            max_workers=max_workers,
+            chunk_size=chunk_size,
+            inflight=inflight,
+            show_progress=verbose
+        )
+    else:
+        # Change TGP to read input files instead of synthetic bands
+        write_original_multiband(
+            input_image_paths=input_files,
+            output_dir=output_dir,
+            window_shape=window_shape,
+            max_workers=max_workers,
+            inflight=inflight,
+            chunk_size=chunk_size,
+            show_progress=verbose
+        )
 
 
     logging.info("[GOSP] Running Target Generation Process (TGP)...")

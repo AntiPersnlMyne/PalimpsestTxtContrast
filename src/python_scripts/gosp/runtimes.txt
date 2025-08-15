@@ -22,3 +22,6 @@ None: 62.12
 bgp::create_bands: 63.62
 tgp::make_windows: 62.81
 
+### Greek Letter Tests
+test-alpha: 2579
+

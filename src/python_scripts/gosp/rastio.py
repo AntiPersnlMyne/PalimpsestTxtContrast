@@ -4,10 +4,10 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "2.0.0"
+__version__ = "3.0.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Development" # "Prototype", "Development", "Production"
+__status__ = "Production" # "Prototype", "Development", "Production"
 
 
 
@@ -39,27 +39,45 @@ def window_imread(filepaths: Sequence[str], window: WindowType) -> np.ndarray:
 
     Returns:
         np.ndarray: block (bands, height, width)
-    """
+    """    
+    # Assert input is not empty
+    assert len(filepaths) != 0, "[rastio] window_imread: empty input file list"
+    
     (row_off, col_off), (win_height, win_width) = window
-    
-    # One file - optimized return
+        
+    # One file optimized return
     if len(filepaths) == 1:
-        with rasterio.open(filepaths[0], "r") as src:
-            return src.read(window=Window(col_off, row_off, width, height)) #type:ignore
-        
-    # Check output dtype
-    with rasterio.open(filepaths[0], "r") as file:
-        dtype = file.dtypes[0]
-        
-    # Instantiate bandstack output 
-    band_stack: np.ndarray = np.empty((len(filepaths), win_height, win_width), dtype=dtype)
+        with rasterio.open(filepaths[0], 'r') as src:
+            return src.read(window=Window(col_off, row_off, win_width, win_height)) #type:ignore
+     
+    # Variables verify file shapes match across files
+    with rasterio.open(filepaths[0], 'r') as src0:
+        height0, width0 = src0.shape    
     
-    # Many single-band files
-    for i, path in enumerate(filepaths):
-        with rasterio.open(path, "r") as src:
-            band = src.read(window=Window(col_off, row_off, width, height)) #type:ignore
-            band_stack[i] = band
-                
+    # Preallocate output band-major order; size: (#-bands, height, width)
+    total_bands:int = 0
+    for file in filepaths:
+        with rasterio.open(file) as src:
+            total_bands += int(src.count)
+    
+    band_stack:np.ndarray = np.empty((total_bands, win_height, win_width), dtype=np.float32)
+    
+    idx:int = 0 # Ensure bands dont overlap
+    for path in enumerate(filepaths):
+        # Accepts single-band or multi-band
+        with rasterio.open(path, 'r') as src:
+            # Assert consistent image shape across inputs
+            assert src.shape != (height0, width0), f"[rastio] All inputs must share shape. Got {src.shape} vs expected {(height0, width0)} for {src}"
+            
+            # Read in data as block
+            block = src.read(window=Window(col_off, row_off, win_width, win_height)) #type:ignore
+            b = block.shape[0] # b = number of bands
+            
+            # Add block to output, cvt float32 for downstream math
+            band_stack[idx:idx+b] = block.astype(np.float32, copy=False) 
+            
+            idx += b
+            
     return band_stack
 
 
@@ -85,30 +103,42 @@ class MultibandBlockReader:
         Args:
             filepaths (List[str]): A list of path(s) to the raster files.
         """
+        # Assert filepaths isn't empty
+        assert filepaths is not None, f"[rastio] MultibandBlockReader: empty file list"
+        
+        # Read in all files from filepaths
         self.filepaths = filepaths
         self.srcs = []
         for filepath in self.filepaths:
             try:
-                src = rasterio.open(filepath, 'r')
-                self.srcs.append(src)
+                self.srcs.append(rasterio.open(filepath, 'r'))
             except rasterio.RasterioIOError as e:
-                raise Exception(f"[rastio] Error in MultibandBlockReader when opening {filepath}: {e}") # Re-raise the exception to halt execution
+                raise Exception(f"[rastio] MultibandBlockReader: Error opening {filepath}: {e}") 
+        
+        # Validate consistent data shape and compute total bands
+        height0, width0 = self.srcs[0].shape
+        for src in self.srcs[1:]:
+            if src.shape != (height0, width0):
+                raise ValueError(f"[rastio] Input shapes must match. Got {src.shape} vs {(height0, width0)} ({src.name})")
+        self._shape = (height0, width0)
+        self.total_bands = int(sum(src.count for src in self.srcs))
         
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Closes all open raster files."""
+        """Closes all open raster files"""
         for src in self.srcs:
             src.close()
             
     def __del__(self):
-        """Closes all open raster files when object is no longer referenced"""
+        """Closes all open raster files"""
         for src in self.srcs:
-            src.close()
+            try: src.close()
+            except: pass # quietly exit
     
     def image_shape(self) -> Tuple[int, int]:
-        return self.srcs[0].shape  # (height, width)
+        return self._shape  # (height, width)
             
     def read_multiband_block(
         self,
@@ -122,31 +152,26 @@ class MultibandBlockReader:
 
         Returns:
             np.ndarray: A multiband Numpy array representing the block of data 
-                with shape (height, width, bands), where (height, width) defined by window.
+                with shape (bands, height, width), where (height, width) defined by window.
         """
         
-        # Get window dimensions
         (row_off, col_off), (win_height, win_width) = window
         
-        # Single multi-band file
-        if self.srcs[0].count > 1:
-            try:
-                block = self.srcs[0].read(window=Window(col_off, row_off, win_width, win_height)) #type:ignore
-                return block  # shape: (bands, height, width)
-            except Exception as e:
-                raise Exception(f"[rastio] Error reading multi-band block:\n{e}")
-            
-        # Multiple single-band files (assumes each src is 1-band)
-        else:
-            multi_band_block = np.empty((len(self.srcs), win_height, win_width), dtype=np.float32)
-            for i, src in enumerate(self.srcs):
-                try:
-                    band = src.read(1, window=Window(col_off, row_off, win_width, win_height)) #type:ignore
-                    multi_band_block[i] = band
-                except Exception as e:
-                    raise Exception(f"[rastio] Error reading band {i} from {src.name}:\n{e}")
-            
-            return multi_band_block # shape: (bands, height, width)
+        # Preallocate output
+        band_stack = np.empty((self.total_bands, win_height, win_width), dtype=np.float32)
+        
+        # Add blocks to bandstack
+        idx = 0
+        for s in self.srcs:
+            block = s.read(window=Window(col_off, row_off, win_width, win_height)) # type:ignore
+            b = block.shape[0]
+            band_stack[idx:idx+b] = block.astype(np.float32, copy=False)
+            idx+=b
+
+        # Check expected output size
+        assert idx == self.total_bands, f"[rastio] Filled {idx} of expected {self.total_bands} bands; input changed?"
+        
+        return band_stack
 
 
 # --------------------------------------------------------------------------------------------
@@ -162,7 +187,15 @@ class MultibandBlockWriter:
         output_dtype (np.type, optional): The data type of the output raster.
     """
     
-    def __init__(self, output_dir:str, output_image_shape:Tuple[int,int], output_image_name:str, window_shape:Tuple[int,int], output_datatype, num_bands: int|None = None):
+    def __init__(
+        self, 
+        output_dir:str, 
+        output_image_shape:Tuple[int,int], 
+        output_image_name:str, 
+        window_shape:Tuple[int,int], 
+        output_datatype,
+        num_bands: int|None = None
+    ):
         self.output_dir = output_dir
         self.output_shape = output_image_shape
         self.output_name = output_image_name
@@ -178,7 +211,7 @@ class MultibandBlockWriter:
             "width": self.output_shape[1],
             "count": self.num_bands, 
             "dtype": self.output_dtype,
-            "compress": None, # change to zstd later
+            "compress": None, # zstd if file-size becomes issue 
             "tiled": True,
             "blockxsize": self.window_shape[1], 
             "blockysize": self.window_shape[0],
@@ -186,14 +219,15 @@ class MultibandBlockWriter:
             "BIGTIFF": "YES" # Enables 4+ GB files
         }
 
-        makedirs(self.output_dir, exist_ok=True) # Check for valid output path - otherwise create it
+        # Check for valid output path for intermediate dataset file,
+        # otherwise create it
+        makedirs(self.output_dir, exist_ok=True) 
         self.dataset = rasterio.open(f"{self.output_dir}/{self.output_name}", "w", **self.profile)
-        return self # return reference to dataset
+        return self 
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Closes dataset after finished writing to it"""
-        if self.dataset:
-            self.dataset.close() 
+        if self.dataset: self.dataset.close() 
 
     def write_block(self, window:WindowType, block:np.ndarray):
         """
@@ -203,20 +237,17 @@ class MultibandBlockWriter:
             window (WindowType): Section of output dataset to write block to. Size: ( (row_off, col_off), (win_height, win_width) )
             block (np.ndarray): Block of data to be written. Size: (bands, win_height, win_width).
         """
-        # Set write parameters
-        (row_off, col_off), (height, width) = window
+        (row_off, col_off), (win_height, win_width) = window
         
-        # Check expected write shape before writings
-        expected_shape = (self.profile["count"], height, width)
+        # Check expected write shape
+        # size: (#-bands, height, width)
+        expected_shape = (self.profile["count"], win_height, win_width)
         assert block.shape == expected_shape, f"[rastio] Shape mismatch: {block.shape} vs expected: {expected_shape}"
 
-        win = Window(col_off, row_off, width, height) #type:ignore
-        indexes = list(range(1, block.shape[0] + 1)) # rasterio 1-indexes its bands
+        win = Window(col_off, row_off, win_width, win_height) #type:ignore
 
-        if self.dataset:
-            self.dataset.write(block, window=win, indexes=indexes)
-        else:
-            raise Exception(f"[rastio] Attempted to write but dataset is not initialized")
-
+        assert self.dataset, "[rastio] Attempted to write but dataset is not initialized"
+        
+        self.dataset.write(block, window=win, indexes=list(range(1, block.shape[0] + 1)))
 
 

@@ -4,10 +4,10 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "2.2.1"
+__version__ = "3.0.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Development" # "Prototype", "Development", "Production"
+__status__ = "Production" # "Prototype", "Development", "Production"
 
 
 
@@ -30,71 +30,87 @@ WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
 ImageBlock = np.ndarray
 
 
+
+# --------------------------------------------------------------------------------------------
+# Helper Functions
+# --------------------------------------------------------------------------------------------
+def _expected_total_bands(n: int, full_synthetic: bool) -> int:
+    """Returns expected output size (i.e. number of bands) from band generation process"""
+    total = n + (n * (n - 1)) // 2
+    if full_synthetic: total += 2*n
+    return total
+
+
+
 # --------------------------------------------------------------------------------------------
 # Band Generation Process (BGP)
 # --------------------------------------------------------------------------------------------
 def _create_bands_from_block(
     image_block: ImageBlock,
-    use_sqrt: bool,
-    use_log: bool
+    full_synthetic: bool,
 ) -> np.ndarray:
     """
     Creates new, non-linear bands from existing bands for the GOSP algorithm.
 
     Args:
-        image_block (np.ndarray): A 3D numpy array representing a block of the image,
-                                  with shape (bands, height, width).
-        use_sqrt (bool): Flag to indicate if sqrt bands should be generated.
-        use_log (bool): Flag to indicate if log bands should be generated.
+        image_block (np.ndarray): 
+            A 3D numpy array representing a block of the image,
+            with shape (bands, height, width).
+        use_sqrt (bool): 
+            Flag to indicate if sqrt bands should be generated.
+        use_log (bool): 
+            Flag to indicate if log bands should be generated.
 
     Returns:
-        np.ndarray: A 3D numpy array containing old and the newly generated correlated bands,
-                    with shape (new_bands, height, width) where (height, width) are
-                    determined by the original image_block.
+        np.ndarray: 
+            A 3D numpy array containing old and the newly generated correlated bands,
+            with shape (new_bands, height, width) where (height, width) are
+            determined by the original image_block.
     """
-    src_bands, height, width = image_block.shape 
+    src_bands, src_height, src_width = image_block.shape 
     
     # Pre-allocate output size
-    total = src_bands + (src_bands * (src_bands - 1)) // 2 + (src_bands if use_sqrt else 0) + (src_bands if use_log else 0)
-    generated_bands = np.empty((total, height, width), dtype=np.float32)
+    total = _expected_total_bands(src_bands, full_synthetic)
+    band_stack = np.empty((total, src_height, src_width), dtype=np.float32)
 
-    idx = 0 # correctly stack new bands to output
+    # idx prevents bands from overlapping
+    idx = 0 
     
     # original
-    generated_bands[idx:idx + src_bands] = image_block
+    band_stack[idx:idx+src_bands] = image_block
     idx += src_bands
 
     # pairwise correlations 
     for band in range(src_bands - 1):
-        product = image_block[band] * image_block[band + 1:]  # (src_bands-1-band, height, width)
-        na = product.shape[0]
-        generated_bands[idx:idx + na] = product
-        idx += na
+        count = src_bands - 1 - band
+        band_stack[idx:idx+count] = image_block[band] * image_block[band+1:]
+        idx += count
 
-    # sqrt 
-    if use_sqrt:
-        generated_bands[idx:idx + src_bands] = np.sqrt(image_block, dtype=np.float32)
+    # Optional, sqrt and log
+    if full_synthetic:
+        # Square root 
+        np.sqrt(image_block, out=band_stack[idx:idx+src_bands])
         idx += src_bands
-            
-    # log
-    if use_log:
-        generated_bands[idx:idx + src_bands] = np.log1p(image_block, dtype=np.float32)
+        
+        # Natural log
+        np.log1p(image_block, out=band_stack[idx:idx+src_bands])
         idx += src_bands
 
-    return generated_bands
+
+    # Check output matches expected size
+    assert idx==total, f"[BGP] Created bands #={idx} does not match expected={total}"
+    return band_stack
 
 
 def band_generation_process(
     input_image_paths:List[str],
     output_dir:str,
     window_shape:Tuple[int,int],
-    use_sqrt:bool,
-    use_log:bool,
-    max_workers:int|None = None,
-    chunk_size:int = 4,
-    inflight:int = 2,
-    show_progress:bool = True
-    
+    full_synthetic:bool,
+    max_workers:int|None,
+    chunk_size:int,
+    inflight:int,
+    show_progress:bool,
     ) -> None:
     """
     The Band Generation Process. Generates synthetic, non-linear bands as combinations of existing bands. 
@@ -123,8 +139,8 @@ def band_generation_process(
     win_height, win_width = window_shape    
     
     # Determine number of bands up front by using a preview block
-    dummy_block = input_dataset.read_multiband_block(((0, 0), (5,5)))
-    sample_bands = _create_bands_from_block(dummy_block, use_sqrt, use_log)
+    dummy_block = input_dataset.read_multiband_block(((0, 0), (1,1)))
+    sample_bands = _create_bands_from_block(dummy_block, full_synthetic)
     num_output_bands = sample_bands.shape[0]
     del dummy_block, sample_bands # free memory
     
@@ -142,9 +158,9 @@ def band_generation_process(
     windows = []
     for row_off in range(0, src_height, win_height):
         for col_off in range(0, src_width, win_width):
-            h = min(win_height, src_height - row_off)
-            w = min(win_width, src_width - col_off)
-            windows.append(((row_off, col_off), (h, w)))
+            actual_height = min(win_height, src_height - row_off)
+            actual_width = min(win_width, src_width - col_off)
+            windows.append(((row_off, col_off), (actual_height, actual_width)))
 
     # Write unnormalized output, collect global stats
     with MultibandBlockWriter(
@@ -156,16 +172,15 @@ def band_generation_process(
         output_datatype=np.float32,
     ) as writer:
         band_stats = parallel_generate_streaming(
-            input_paths=input_image_paths,          # list[str]; one multiband or many single-band
+            input_paths=input_image_paths,
             windows=windows,
             writer=writer,
-            func_module="python_scripts.gosp.bgp", # module path where _create_bands_from_block lives
-            func_name="_create_bands_from_block",   # function name, without parentheses
-            use_sqrt=use_sqrt,
-            use_log=use_log,
+            func_module="python_scripts.gosp.bgp", 
+            func_name="_create_bands_from_block",   
+            full_synthetic=full_synthetic,
             max_workers=max_workers,                       
             chunk_size=chunk_size,
-            inflight=2,                             # tune for RAM vs throughput
+            inflight=inflight,                            
             show_progress=show_progress
         )
 
@@ -182,9 +197,9 @@ def band_generation_process(
     windows = []
     for row_off in range(0, src_height, win_height):
         for col_off in range(0, src_width, win_width):
-            h = min(win_height, src_height - row_off)
-            w = min(win_width, src_width - col_off)
-            windows.append(((row_off, col_off), (h, w)))
+            actual_height = min(win_height, src_height - row_off)
+            actual_width = min(win_width, src_width - col_off)
+            windows.append(((row_off, col_off), (actual_height, actual_width)))
 
     # Open the writer
     with MultibandBlockWriter(
@@ -202,16 +217,22 @@ def band_generation_process(
             band_mins=band_mins,
             band_maxs=band_maxs,
             writer=writer,
-            max_workers=max_workers,  # use all cores
-            inflight=inflight,               # cap RAM: ~workers*inflight blocks in memory
+            max_workers=max_workers, 
+            inflight=inflight,
             chunk_size=chunk_size,
             show_progress=show_progress
         )
                     
     rm(unorm_path) # delete unnorm data
     
-    
 
-
-
-
+# Optional quick self-check (not used by pipeline)
+if __name__ == "__main__":
+    # Tiny sanity test ensures counts & ordering fill
+    rng = np.random.default_rng(0)
+    block = rng.random((4, 3, 2), dtype=np.float32)  # (bands, H, W)
+    for full_synthetic in (False, True):
+        out = _create_bands_from_block(block, full_synthetic)
+        expected = _expected_total_bands(4, full_synthetic)
+        assert out.shape == (expected, 3, 2)
+            

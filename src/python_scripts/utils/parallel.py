@@ -8,16 +8,16 @@ Notes
 - Avoids sending large numpy arrays over IPC; sends only small window tuples.
 """
 
-from __future__ import annotations  # must be first
+from __future__ import annotations  
 
 __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "2.2.0" 
+__version__ = "3.0.0" 
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Development"  # "Prototype", "Development", "Production"
+__status__ = "Production"  # "Prototype", "Development", "Production"
 
 # --------------------------------------------------------------------------------------------
 # Imports & thread oversubscription guards (safe defaults)
@@ -90,11 +90,9 @@ class Target:
 # --------------------------------------------------------------------------------------
 
 _gen_state: dict[str, Any] = {
-    "paths": None,       # List[str]
-    "use_sqrt": False,   # use square root in bgp
-    "use_log": False,    # use log in bgp
-    "bands_fn": None,    # callable(image_block, use_sqrt, use_log) -> np.ndarray (bands, h, w)
-    "reader": None,      # MultibandBlockReader per worker
+    "full_synthetic": False,    # Optional log and sqrt in bgp
+    "bands_fn": None,           # callable(image_block, use_sqrt, use_log) -> np.ndarray (bands, h, w)
+    "reader": None,             # MultibandBlockReader per worker
 }
 
 
@@ -102,8 +100,7 @@ def _init_generate_worker(
     input_paths: List[str], 
     func_module: str, 
     func_name: str, 
-    use_sqrt: bool, 
-    use_log: bool
+    full_synthetic: bool, 
     ) -> None:
     """
     Initializer for Pass 1 workers.
@@ -114,38 +111,26 @@ def _init_generate_worker(
         func_name: Top-level function name to call, e.g. "_create_bands_from_block".
         use_sqrt, use_log: Flags forwarded to the band-generation function.
     """
-    _gen_state["paths"] = list(input_paths)
-    _gen_state["use_sqrt"] = bool(use_sqrt)
-    _gen_state["use_log"] = bool(use_log)
-    mod = importlib.import_module(func_module)
-    _gen_state["bands_fn"] = getattr(mod, func_name)
+    _gen_state["full_synthetic"] = full_synthetic
+    _gen_state["bands_fn"] = getattr(importlib.import_module(func_module), func_name)
     _gen_state["reader"] = MultibandBlockReader(list(input_paths))
-
-
-def _read_input_window(window: WindowType) -> np.ndarray:
-    reader: MultibandBlockReader = _gen_state["reader"]  # type: ignore
-    block = reader.read_multiband_block(window)
-    # ensure float32 for downstream math
-    return np.asarray(block, dtype=np.float32)
 
 
 def _generate_windows_chunk(windows_chunk: List[WindowType]) -> List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]]:
     """Worker: read inputs, create synthetic bands for a chunk of windows."""
+    reader = _gen_state["reader"]
     use_sqrt = _gen_state["use_sqrt"]
     use_log = _gen_state["use_log"]
     bands_fn = _gen_state["bands_fn"]
 
-    out: List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]] = []
+    band_stack = []
     for window in windows_chunk:
-        # Read block and calculate new bands
-        block = _read_input_window(window)
+        block = reader.read_multiband_block(window).astype(np.float32)
         new_bands = bands_fn(block, use_sqrt, use_log).astype(np.float32)
-        # Per-chunk statistics
         mins = new_bands.min(axis=(1, 2)).astype(np.float32)
         maxs = new_bands.max(axis=(1, 2)).astype(np.float32)
-        # Add window, bands, and statistics to output stream
-        out.append((window, new_bands, mins, maxs))
-    return out
+        band_stack.append((window, new_bands, mins, maxs))
+    return band_stack
 
 
 def parallel_generate_streaming(
@@ -155,8 +140,7 @@ def parallel_generate_streaming(
     writer: SupportsWriteBlock,
     func_module: str,
     func_name: str,
-    use_sqrt: bool,
-    use_log: bool,
+    full_synthetic: bool,
     max_workers: int | None = None,
     inflight: int = 2,
     chunk_size: int = 4,
@@ -178,7 +162,7 @@ def parallel_generate_streaming(
     with ProcessPoolExecutor(
         max_workers=max_workers,
         initializer=_init_generate_worker,
-        initargs=(list(input_paths), func_module, func_name, use_sqrt, use_log),
+        initargs=(list(input_paths), func_module, func_name, full_synthetic),
     ) as exec:
         # "todo" list of all future tasks
         pending: set[Future] = set()

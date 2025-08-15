@@ -6,10 +6,10 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone", "Douglas Tavolette", "Roger Easton Jr.", "David Messinger", "Julie Decker"]
 __license__ = "MIT"
-__version__ = "1.0.2"
+__version__ = "3.0.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Development" # "Development", or "Production". 
+__status__ = "Production" # "Development", or "Production". 
 
 
 # --------------------------------------------------------------------------------------------
@@ -29,23 +29,23 @@ def main():
     start = time()
     gosp(
         # Input information
-        input_dir="data/input/arch177_365cor",   
+        input_dir="data/input/arch177_rgb_365cor_lum",   
         output_dir="data/output",         
         input_image_types="tif",       
         # BGP and TCP parameters    
-        use_sqrt=False,                   
-        use_log=True,                     
-        max_targets=30,                     
+        full_synthetic=False,                   
+        skip_bgp=True,                 
+        max_targets=10,                     
         opci_threshold=0.01,              
         # Parallelism fine-tuning
         window_shape=(512,512),          
         max_workers=None,                   
-        chunk_size=10,                      
-        inflight=2,                         
+        chunk_size=16,                      
+        inflight=3,                         
         # Debug
         verbose=True,                      
     )
-    print(f"\n[main/test] - Execution finished -\nRuntime = {(time() - start):.2f}")
+    print(f"\n[main/rgb_365cor_lum] - Execution finished -\nRuntime = {(time() - start):.2f}")
     
 
 
