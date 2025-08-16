@@ -30,18 +30,18 @@ def main():
     gosp(
         # Input information
         input_dir="data/input/arch177_rgb_365cor_lum",   
-        output_dir="data/output",         
+        output_dir="/media/g-m/FixedDisk/",         
         input_image_types="tif",       
         # BGP and TCP parameters    
-        full_synthetic=False,                   
-        skip_bgp=True,                 
+        full_synthetic=True,                   
+        skip_bgp=False,                 
         max_targets=10,                     
         opci_threshold=0.01,              
         # Parallelism fine-tuning
-        window_shape=(512,512),          
+        window_shape=(128,128),          
         max_workers=None,                   
-        chunk_size=16,                      
-        inflight=3,                         
+        chunk_size=4,                      
+        inflight=2,                         
         # Debug
         verbose=True,                      
     )

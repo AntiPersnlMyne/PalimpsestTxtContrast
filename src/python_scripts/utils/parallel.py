@@ -91,7 +91,7 @@ class Target:
 
 _gen_state: dict[str, Any] = {
     "full_synthetic": False,    # Optional log and sqrt in bgp
-    "bands_fn": None,           # callable(image_block, use_sqrt, use_log) -> np.ndarray (bands, h, w)
+    "bands_fn": None,           # callable(image_block, full_synthetic) -> np.ndarray (bands, h, w)
     "reader": None,             # MultibandBlockReader per worker
 }
 
@@ -109,7 +109,7 @@ def _init_generate_worker(
         input_paths: Paths to input rasters. One multiband or many single-band files.
         func_module: Absolute module path, e.g. "python_scripts.gosp.bgp".
         func_name: Top-level function name to call, e.g. "_create_bands_from_block".
-        use_sqrt, use_log: Flags forwarded to the band-generation function.
+        full_synthetic: Flag forwarded to the band-generation function.
     """
     _gen_state["full_synthetic"] = full_synthetic
     _gen_state["bands_fn"] = getattr(importlib.import_module(func_module), func_name)
@@ -119,14 +119,13 @@ def _init_generate_worker(
 def _generate_windows_chunk(windows_chunk: List[WindowType]) -> List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]]:
     """Worker: read inputs, create synthetic bands for a chunk of windows."""
     reader = _gen_state["reader"]
-    use_sqrt = _gen_state["use_sqrt"]
-    use_log = _gen_state["use_log"]
+    full_synthetic = _gen_state["full_synthetic"]
     bands_fn = _gen_state["bands_fn"]
 
     band_stack = []
     for window in windows_chunk:
         block = reader.read_multiband_block(window).astype(np.float32)
-        new_bands = bands_fn(block, use_sqrt, use_log).astype(np.float32)
+        new_bands = bands_fn(block, full_synthetic).astype(np.float32)
         mins = new_bands.min(axis=(1, 2)).astype(np.float32)
         maxs = new_bands.max(axis=(1, 2)).astype(np.float32)
         band_stack.append((window, new_bands, mins, maxs))
