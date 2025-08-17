@@ -17,6 +17,7 @@ colorspacious           # 16-bit color space transformations
 
 # Optimization
 cython           # Static c-typing
+cython-lint      # Linter for Cython
 setuptools       # Build Cython
 numba==2.2.6     # JIT compiler
 dask[complete]   # Parallel processing

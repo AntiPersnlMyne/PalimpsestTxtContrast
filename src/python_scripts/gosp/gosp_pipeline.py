@@ -13,16 +13,6 @@ Stages:
     3. Target Classification Process (TCP) - Classify image using discovered targets
 """
 
-__author__ = "Gian-Mateo (GM) Tifone"
-__copyright__ = "2025, RIT MISHA"
-__credits__ = ["Gian-Mateo Tifone"]
-__license__ = "MIT"
-__version__ = "3.0.0"
-__maintainer__ = "MISHA Team"
-__email__ = "mt9485@rit.edu"
-__status__ = "Production" # "Prototype", "Development", "Production"
-
-
 
 # --------------------------------------------------------------------------------------------
 # Imports Pipeline Modules
@@ -30,6 +20,7 @@ __status__ = "Production" # "Prototype", "Development", "Production"
 import logging
 import os
 import warnings
+from subprocess import run
 from numpy import ndarray
 
 from .bgp import band_generation_process
@@ -37,6 +28,20 @@ from .tgp import target_generation_process
 from .tcp import target_classification_process
 from .skip_bgp import write_original_multiband
 from ..utils.fileio import discover_image_files
+
+
+# --------------------------------------------------------------------------------------------
+# Doc Header
+# --------------------------------------------------------------------------------------------
+__author__ = "Gian-Mateo (GM) Tifone"
+__copyright__ = "2025, RIT MISHA"
+__credits__ = ["Gian-Mateo Tifone"]
+__license__ = "MIT"
+__version__ = "3.1.0"
+__maintainer__ = "MISHA Team"
+__email__ = "mt9485@rit.edu"
+__status__ = "Production" # "Prototype", "Development", "Production"
+
 
 # GeoTIFF warning suppression
 warnings.filterwarnings("ignore", category=UserWarning, message="Dataset has no geotransform, gcps, or rpcs.*")
@@ -169,6 +174,4 @@ def gosp(
     os.remove(generated_bands_dir) # Cleanup temp file
 
     logging.info(f"[GOSP] Complete. Results written to: {targets_classified_dir}")
-
-
 

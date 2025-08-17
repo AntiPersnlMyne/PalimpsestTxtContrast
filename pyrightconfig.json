@@ -1,0 +1,14 @@
+// This config tells Pylance to ignore .pyx (Cython) files
+// Otherwise, all .pyx will flag Pylance, throwing errors
+
+// deleting this file will not prevent the scripts from compiling
+// only that it will clutter the `problems` pannel with errors
+
+{
+  "exclude": [
+    "src/python_scripts/gosp/**/*.pyx",
+    "**/*.pyx"
+  ],
+  "reportMissingImports": false,
+  "reportMissingTypeStubs": false
+}

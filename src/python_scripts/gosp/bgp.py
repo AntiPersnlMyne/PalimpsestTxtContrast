@@ -16,7 +16,9 @@ from .parallel import parallel_normalize_streaming, parallel_generate_streaming
 
 import cython
 
-my_type = cython.fused_type(cython.int, cython.double, cython.longlong)
+cint = cython.int
+cfloat = cython.float
+cbool = cython.bint
 
 # --------------------------------------------------------------------------------------------
 # Doc Header
@@ -41,9 +43,10 @@ ImageBlock = np.ndarray
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
-def _expected_total_bands(n: int, full_synthetic: bool) -> int:
+@cython.cfunc # Convert to C function
+def _expected_total_bands(n: cint, full_synthetic: cbool) -> cint:
     """Returns expected output size (i.e. number of bands) from band generation process"""
-    total = n + (n * (n - 1)) // 2
+    total:cint = n + (n * (n - 1)) // 2
     if full_synthetic: total += 2*n
     return total
 
