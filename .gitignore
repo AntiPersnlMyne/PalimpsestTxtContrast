@@ -8,6 +8,7 @@
 # Any Python cache
 **/__pycache__
 
-# Manually imported IDL library
-idlbs
-envi_output
+# Cython build files
+build
+**/*.c
+**/*.so

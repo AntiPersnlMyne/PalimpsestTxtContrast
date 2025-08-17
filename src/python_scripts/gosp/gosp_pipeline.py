@@ -1,6 +1,4 @@
-"""gosp.py: 
-
-GOSP: Stands for Generalized Orthogonal Subspace Projection.
+"""gosp.py: GOSP (Generalized Orthogonal Subspace Projection)
 
 Implements: The OSP-based, automatic target detection workflow laid out by Chang and Ren.
 [Ref] Hsuan Ren, Student Member, IEEE, and Chein-I Chang, Senior Member, IEEE 2000
@@ -8,19 +6,28 @@ Implements: The OSP-based, automatic target detection workflow laid out by Chang
 Does: Automatically finds K (integer > 1) likely targets in image and classififes all pixels to a target likelihood.
                             
 Stages:
-    1. Band Generation Process (BGP)    - Create synthetic bands from raw imagery
-    2. Target Generation Process (TGP)  - Iteratively discover target spectra using OSP
-    3. Target Classification Process (TCP) - Classify image using discovered targets
+    0. Compile BGP, TGP, TCP Cython code
+    1. Band Generation Process (BGP)        - Create synthetic bands from raw imagery
+    2. Target Generation Process (TGP)      - Iteratively discover target spectra using OSP
+    3. Target Classification Process (TCP)  - Classify image using discovered targets
 """
+
+# --------------------------------------------------------------------------------------------
+# Compile Pipeline Code (so it can be imported)
+# --------------------------------------------------------------------------------------------
+try:
+    from os import system
+    system("python setup.py build_ext --inplace")
+except Exception as e:
+    print(f"Error compiling Cython script:\n{e}")
 
 
 # --------------------------------------------------------------------------------------------
 # Imports Pipeline Modules
 # --------------------------------------------------------------------------------------------
 import logging
-import os
-import warnings
-from subprocess import run
+from warnings import filterwarnings
+from os import remove
 from numpy import ndarray
 
 from .bgp import band_generation_process
@@ -37,14 +44,14 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.0"
+__version__ = "3.1.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Production" # "Prototype", "Development", "Production"
 
 
 # GeoTIFF warning suppression
-warnings.filterwarnings("ignore", category=UserWarning, message="Dataset has no geotransform, gcps, or rpcs.*")
+filterwarnings("ignore", category=UserWarning, message="Dataset has no geotransform, gcps, or rpcs.*")
 logging.disable(logging.WARNING)
 
 
@@ -118,7 +125,7 @@ def gosp(
     # Verbose enables debug, else prints warnings/errors only
     if verbose: logging.basicConfig(level=logging.INFO)
     else: logging.basicConfig(level=logging.WARNING)  
-    
+
 
     logging.info("[GOSP] Running Band Generation Process (BGP)...")
     
@@ -171,7 +178,7 @@ def gosp(
         show_progress=verbose
     )
     
-    os.remove(generated_bands_dir) # Cleanup temp file
+    remove(generated_bands_dir) # Cleanup temp file
 
     logging.info(f"[GOSP] Complete. Results written to: {targets_classified_dir}")
 

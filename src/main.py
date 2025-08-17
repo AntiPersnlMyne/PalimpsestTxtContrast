@@ -15,8 +15,8 @@ __status__ = "Production" # "Development", or "Production".
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
-from python_scripts.gosp import gosp 
-from python_scripts import improc 
+from python_scripts.gosp import gosp
+# from python_scripts import improc 
 from time import time
 
 
@@ -27,23 +27,27 @@ def main():
     # CLAHE
     start = time()
     gosp(
-        # Input information
-        input_dir="data/input/arch177_rgb_365cor_lum",   
-        output_dir="/media/g-m/FixedDisk/",         
-        input_image_types="tif",       
-        # BGP and TCP parameters    
-        full_synthetic=True,                   
-        skip_bgp=False,                 
-        max_targets=40,                     
-        opci_threshold=0.01,              
-        # Parallelism fine-tuning
-        window_shape=(128,128),          
-        max_workers=None,                   
-        chunk_size=4,                      
-        inflight=2,                         
-        # Debug
-        verbose=True,                      
+        input_dir="data/input/test",
+        output_dir="data/output"
     )
+    # gosp(
+    #     # Input information
+    #     input_dir="data/input/arch177_rgb_365cor_lum",   
+    #     output_dir="/media/g-m/FixedDisk/",         
+    #     input_image_types="tif",       
+    #     # BGP and TCP parameters    
+    #     full_synthetic=True,                   
+    #     skip_bgp=False,                 
+    #     max_targets=40,                     
+    #     opci_threshold=0.01,              
+    #     # Parallelism fine-tuning
+    #     window_shape=(128,128),          
+    #     max_workers=None,                   
+    #     chunk_size=4,                      
+    #     inflight=2,                         
+    #     # Debug
+    #     verbose=True,                      
+    # )
     print(f"\n[main/rgb_365cor_lum] - Execution finished -\nRuntime = {(time() - start):.2f}")
     
 
