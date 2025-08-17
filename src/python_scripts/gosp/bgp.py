@@ -1,26 +1,34 @@
-"""bgp.py: Band Generation Process, crated new non-linear bondinations of existing bands"""
+# cython: infer_types=True
 
-__author__ = "Gian-Mateo (GM) Tifone"
-__copyright__ = "2025, RIT MISHA"
-__credits__ = ["Gian-Mateo Tifone"]
-__license__ = "MIT"
-__version__ = "3.0.0"
-__maintainer__ = "MISHA Team"
-__email__ = "mt9485@rit.edu"
-__status__ = "Production" # "Prototype", "Development", "Production"
-
-
+"""bgp.py: Band Generation Process, creates new non-linear bondinations of existing bands"""
 
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
 import numpy as np
 from typing import Tuple, List
+
 # Pipeline imports
 from .rastio import MultibandBlockReader, MultibandBlockWriter
 from ..utils.fileio import rm
 from .parallel import parallel_normalize_streaming, parallel_generate_streaming
 
+
+import cython
+
+my_type = cython.fused_type(cython.int, cython.double, cython.longlong)
+
+# --------------------------------------------------------------------------------------------
+# Doc Header
+# --------------------------------------------------------------------------------------------
+__author__ = "Gian-Mateo (GM) Tifone"
+__copyright__ = "2025, RIT MISHA"
+__credits__ = ["Gian-Mateo Tifone"]
+__license__ = "MIT"
+__version__ = "3.0.1"
+__maintainer__ = "MISHA Team"
+__email__ = "mt9485@rit.edu"
+__status__ = "Production" # "Prototype", "Development", "Production"
 
 
 # --------------------------------------------------------------------------------------------
@@ -28,7 +36,6 @@ from .parallel import parallel_normalize_streaming, parallel_generate_streaming
 # --------------------------------------------------------------------------------------------
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
 ImageBlock = np.ndarray
-
 
 
 # --------------------------------------------------------------------------------------------

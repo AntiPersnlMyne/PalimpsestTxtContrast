@@ -4,22 +4,25 @@
 numpy             
 
 # Image processing
-opencv-python
-colorspacious
-# scikit-image==0.25.2     
+opencv-python           # Prebuild improc functions
+colorspacious           # 16-bit color space transformations
+# scikit-image==0.25.2    #
 
 # Scientific computing
-# scipy                    
+# scipy              #        
 # scipy-stubs[scipy] # Syntax highlighting
 
 # Optical Character Recognition (OCR)
 # pytesseract==0.3.13
 
 # Optimization
-cython==3.1.2 # Static c-typing
-numba==2.2.6  # Pre-compile
-# dask          # Parallelism
-rasterio      # Tilewise processing
+cython           # Static c-typing
+setuptools       # Build Cython
+numba==2.2.6     # JIT compiler
+dask[complete]   # Parallel processing
+cupy-cuda12x
+dask-cuda        # GPU parallel processing
+rasterio         # Raster dataset I/O
 
 # Graphical User Interface 
 screeninfo==0.8.1 # Screen resolution

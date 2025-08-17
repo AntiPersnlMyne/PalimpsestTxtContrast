@@ -1,16 +1,20 @@
-from setuptools import setup
+from setuptools import Extension, setup
 from Cython.Build import cythonize
 import numpy as np
 
+extensions = [
+    Extension("*", ["*.pyx"],
+        include_dirs=[np.get_include()]),
+]
+# Build Cython
 setup(
-    ext_modules = cythonize(
-        "bgp_cython.pyx", # name of cython file
-        compiler_directives={'boundscheck': False, 'wraparound': False}),
-    include_dirs=[np.get_include()]
+    name="bgp.py",
+    ext_modules=cythonize(extensions),
+    compiler_directives={'boundscheck': False, 'wraparound': False}
 )
 
 '''Run the following:
 
-python setup.py build_ext --inplace
+python src/python_scripts/gosp/setup.py build_ext --inplace
 
 '''
