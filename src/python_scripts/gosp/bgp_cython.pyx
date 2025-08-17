@@ -5,9 +5,11 @@ cimport cython
 from libc.math cimport sqrt, log1p
 
 @cython.wraparound(False)
-def cpy_create_bands_from_block(np.ndarray[cnp.float32_t, ndim=3] image_block,
-                               bint full_synthetic,
-                               int n_threads=4):
+def cpy_create_bands_from_block(
+    np.ndarray[cnp.float32_t, ndim=3] image_block,
+    bint full_synthetic,
+    int n_threads=4
+    ) -> np.ndarray:
     """
     Fully Cython-optimized version of _create_bands_from_block.
     Generates original bands, correlations, and optional sqrt/log bands.

@@ -19,7 +19,7 @@ from typing import Tuple, List
 # Pipeline imports
 from .rastio import MultibandBlockReader, MultibandBlockWriter
 from ..utils.fileio import rm
-from ..utils.parallel import parallel_normalize_streaming, parallel_generate_streaming
+from .parallel import parallel_normalize_streaming, parallel_generate_streaming
 
 
 

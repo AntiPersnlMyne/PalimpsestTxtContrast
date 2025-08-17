@@ -20,7 +20,7 @@ from typing import List, Tuple
 
 from ..utils.math_utils import compute_orthogonal_projection_matrix, compute_opci
 from ..gosp.rastio import MultibandBlockReader
-from ..utils.parallel import best_target_parallel
+from .parallel import best_target_parallel
 
 
 

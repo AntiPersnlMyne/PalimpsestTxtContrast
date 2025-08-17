@@ -21,7 +21,7 @@ from typing import List, Sequence, Tuple
 from .rastio import MultibandBlockReader, MultibandBlockWriter, window_imread
 from .tgp import _make_windows, WindowType  
 from ..utils.math_utils import compute_orthogonal_projection_matrix, project_block_onto_subspace
-from ..utils.parallel import submit_streaming
+from .parallel import submit_streaming
 
 
 
