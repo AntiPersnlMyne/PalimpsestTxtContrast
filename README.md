@@ -1,5 +1,5 @@
 # Palimpsest Text Contrast
-An implementation of the Orthoginal Subspace Projection (OSP) target detection method on multi-spectral, historical document imaging. A student contribution to the MISHA project. 
+An implementation of the Generalized Orthoginal Subspace Projection (GOSP) target detection method on multi-spectral, historical document imaging.
 
 
 ## Setup
@@ -90,4 +90,5 @@ Roger Easton Jr.(rlepci@rit.edu) | My excellent adviser and project sponsor, MIS
 
 
 David Messinger(dwmpci@rit.edu) | Another adviser and mentor, MISHA personell
+
 
