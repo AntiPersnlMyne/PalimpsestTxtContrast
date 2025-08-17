@@ -8,7 +8,6 @@ import numpy as np
 import rasterio
 from concurrent.futures import ProcessPoolExecutor, as_completed, Future
 from typing import List, Tuple, Iterable, Any, Sequence
-from rasterio.windows import Window
 from tqdm import tqdm
 
 from .rastio import MultibandBlockReader, MultibandBlockWriter
