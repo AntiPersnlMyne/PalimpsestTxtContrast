@@ -16,7 +16,7 @@ colorspacious
 # pytesseract==0.3.13
 
 # Optimization
-# cython==3.1.2 # Static c-typing
+cython==3.1.2 # Static c-typing
 numba==2.2.6  # Pre-compile
 # dask          # Parallelism
 rasterio      # Tilewise processing

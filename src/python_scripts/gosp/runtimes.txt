@@ -26,3 +26,22 @@ tgp::make_windows: 62.81
 test-alpha::ver2.0: 2579
 test-alpha::ver3.0: 671
 
+### BGP Bottlenecks in 3.0
+3 bands
+Read: 0.00033s
+Compute: 0.00120s
+Stats: 0.00008s
+~Compute dominates (but all trivial at this scale).
+
+11 bands
+Read: 0.00077s
+Compute: 0.00269s
+Stats: 0.00026s
+~Compute still dominates slightly, but all tiny.
+
+47 bands
+Read: 0.94764s
+Compute: 0.04150s
+Stats: 0.01044s
+~Read completely dominates.
+

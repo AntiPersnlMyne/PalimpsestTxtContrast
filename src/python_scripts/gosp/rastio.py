@@ -19,6 +19,7 @@ import rasterio
 from typing import List, Tuple, Sequence
 from os import makedirs
 from rasterio.windows import Window
+from rasterio.vrt import WarpedVRT
 
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
 
@@ -48,36 +49,40 @@ def window_imread(filepaths: Sequence[str], window: WindowType) -> np.ndarray:
     # One file optimized return
     if len(filepaths) == 1:
         with rasterio.open(filepaths[0], 'r') as src:
-            return src.read(window=Window(col_off, row_off, win_width, win_height)) #type:ignore
-     
-    # Variables verify file shapes match across files
+            return np.asarray(
+                src.read(window=Window(col_off, row_off, win_width, win_height)),#type:ignore
+                dtype=np.float32, 
+                order="C" # channel-major; size: (#-bands, height, width)
+            )     
+            
+    # Check all file shapes (height,width) against first file (file 0)
     with rasterio.open(filepaths[0], 'r') as src0:
         height0, width0 = src0.shape    
     
-    # Preallocate output band-major order; size: (#-bands, height, width)
+    # Precompute total band count
     total_bands:int = 0
     for file in filepaths:
         with rasterio.open(file) as src:
+            assert src.shape == (height0, width0), f"[rastio] All inputs must have same shape. Got {src.shape} and expected {(height0, width0)} for {src.name}"
             total_bands += int(src.count)
     
+    # Preallocate output in band-major; size: (#-bands, height, width)
     band_stack:np.ndarray = np.empty((total_bands, win_height, win_width), dtype=np.float32)
     
     idx:int = 0 # Ensure bands dont overlap
     for path in enumerate(filepaths):
         # Accepts single-band or multi-band
-        with rasterio.open(path, 'r') as src:
-            # Assert consistent image shape across inputs
-            assert src.shape != (height0, width0), f"[rastio] All inputs must share shape. Got {src.shape} vs expected {(height0, width0)} for {src}"
-            
-            # Read in data as block
+        with rasterio.open(path, 'r') as src:            
+            # Read in data 
             block = src.read(window=Window(col_off, row_off, win_width, win_height)) #type:ignore
-            b = block.shape[0] # b = number of bands
-            
+            b = int(block.shape[0]) # b = number of bands in this file
             # Add block to output, cvt float32 for downstream math
-            band_stack[idx:idx+b] = block.astype(np.float32, copy=False) 
-            
+            band_stack[idx:idx+b, :, :] = np.asarray(block, dtype=np.float32, order="C")
             idx += b
             
+    # Check bands filled matches expected total_bands
+    assert idx == total_bands, f"[rastio] Filled {idx} of expected {total_bands} bands"
+    
     return band_stack
 
 
@@ -91,12 +96,17 @@ class MultibandBlockReader:
     Supports both single-band files (multiple files) and true multiband files.
 
     Attributes:
-        filenames (List[str]): A list of paths to the raster file.
-        tile_size (Tuple[int, int]): The size of each block to read.  Defaults to (256, 256).
-        srcs (List[rasterio.DatasetReader]): Dataset objects (images), one for each input file. 
+        filenames (List[str]): 
+            A list of paths to the raster file.
+        srcs (List[rasterio.DatasetReader]): 
+            Dataset objects (images), one for each input file. 
+        use_vrt (bool): 
+            VRT (virtual raster title) is an XML that essentially creates 
+            a bandstack, eliminating intermediate rasters that would otherwise 
+            be deleted.
     """
     
-    def __init__(self, filepaths: List[str]):
+    def __init__(self, filepaths: List[str], use_vrt:bool = False):
         """
         Initializes the MultiBandBlockReader object. Reads blocks of data from specifed window ("mask") of raster.
 
@@ -108,20 +118,27 @@ class MultibandBlockReader:
         
         # Read in all files from filepaths
         self.filepaths = filepaths
-        self.srcs = []
-        for filepath in self.filepaths:
-            try:
-                self.srcs.append(rasterio.open(filepath, 'r'))
-            except rasterio.RasterioIOError as e:
-                raise Exception(f"[rastio] MultibandBlockReader: Error opening {filepath}: {e}") 
+        self.use_vrt = use_vrt
+        self.srcs:list[rasterio.DatasetReader] = []
+        self.vrt = WarpedVRT
         
-        # Validate consistent data shape and compute total bands
+        # Create virtual "bandstack" with VRT
+        if use_vrt and len(filepaths) > 1:
+            self.srcs = [rasterio.open(file, 'r') for file in filepaths]
+            self.vrt = WarpedVRT(self.srcs[0])
+        # Append all sources into list to later reference
+        else:
+            for filepath in self.filepaths:
+                try:
+                    self.srcs.append(rasterio.open(filepath, 'r'))
+                except rasterio.RasterioIOError as e:
+                    raise Exception(f"[rastio] MultibandBlockReader: Error opening {filepath}: {e}") 
+            
+        # Image shape to test against
         height0, width0 = self.srcs[0].shape
-        for src in self.srcs[1:]:
-            if src.shape != (height0, width0):
-                raise ValueError(f"[rastio] Input shapes must match. Got {src.shape} vs {(height0, width0)} ({src.name})")
-        self._shape = (height0, width0)
-        self.total_bands = int(sum(src.count for src in self.srcs))
+        self._shape:tuple = (height0, width0)
+        # Total output bands
+        self.total_bands:int = int( sum(src.count for src in self.srcs) )
         
     def __enter__(self):
         return self
@@ -130,6 +147,8 @@ class MultibandBlockReader:
         """Closes all open raster files"""
         for src in self.srcs:
             src.close()
+        if hasattr(self, "vrt"):
+            self.vrt.close()
             
     def __del__(self):
         """Closes all open raster files"""
@@ -138,7 +157,10 @@ class MultibandBlockReader:
             except: pass # quietly exit
     
     def image_shape(self) -> Tuple[int, int]:
-        return self._shape  # (height, width)
+        # Returns (height, width) of VRT (if enabled) or shape of first file 
+        if self.use_vrt and hasattr(self, "vrt"):
+            return self.vrt.shape 
+        return self.srcs[0].shape
             
     def read_multiband_block(
         self,
@@ -157,16 +179,23 @@ class MultibandBlockReader:
         
         (row_off, col_off), (win_height, win_width) = window
         
+        # # If VRT, read the "unified" VRT block 
+        if self.use_vrt and hasattr(self, "vrt"):
+            block = self.vrt.read(window=Window(col_off, row_off, win_width, win_height))#type:ignore
+            return block.astype(np.float32, copy=False)
+        
+        # If !VRT, read in files manually (below)
+        
         # Preallocate output
         band_stack = np.empty((self.total_bands, win_height, win_width), dtype=np.float32)
         
         # Add blocks to bandstack
         idx = 0
-        for s in self.srcs:
-            block = s.read(window=Window(col_off, row_off, win_width, win_height)) # type:ignore
-            b = block.shape[0]
-            band_stack[idx:idx+b] = block.astype(np.float32, copy=False)
-            idx+=b
+        for src in self.srcs:
+            block = src.read(window=Window(col_off, row_off, win_width, win_height)) # type:ignore  
+            b = int(block.shape[0]) 
+            band_stack[idx:idx+b, :, :] = np.asarray(block, dtype=np.float32, order="C")
+            idx += b
 
         # Check expected output size
         assert idx == self.total_bands, f"[rastio] Filled {idx} of expected {self.total_bands} bands; input changed?"

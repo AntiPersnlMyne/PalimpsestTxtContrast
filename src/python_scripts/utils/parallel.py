@@ -26,6 +26,7 @@ import numpy as np
 import os
 import rasterio
 import importlib
+from time import time
 
 from concurrent.futures import ProcessPoolExecutor, as_completed, Future
 from typing import Iterable, Iterator, List, Sequence, Tuple, Protocol, Any, Callable
@@ -141,9 +142,9 @@ def parallel_generate_streaming(
     func_name: str,
     full_synthetic: bool,
     max_workers: int | None = None,
-    inflight: int = 2,
-    chunk_size: int = 4,
-    show_progress: bool = True,
+    inflight: int,
+    chunk_size: int,
+    show_progress: bool,
     desc: str = "[BGP] First pass - create",
 ) -> np.ndarray:
     """
