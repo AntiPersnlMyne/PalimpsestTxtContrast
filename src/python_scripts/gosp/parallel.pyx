@@ -8,6 +8,11 @@ Notes
 - Workers re-open rasters locally (safe across processes).
 - Parent process writes results immediately to avoid concurrent writes.
 - Avoids sending large numpy arrays over IPC; sends only small window tuples.
+
+Cython notes 
+------------ 
+- Heavy numeric work is implemented with nogil on float32 memoryviews. 
+- IO (rasterio) stays under the GIL; seemed like something bad would happen.
 """
 
 # --------------------------------------------------------------------------------------------
@@ -15,10 +20,13 @@ Notes
 # --------------------------------------------------------------------------------------------
 from __future__ import annotations  
 
-import numpy as np
 import os
-import rasterio
 import importlib
+import rasterio
+cimport numpy as np
+import numpy as np
+
+from libc.math cimport fmaxf, fminf
 
 from concurrent.futures import ProcessPoolExecutor, as_completed, Future
 from typing import Iterable, Iterator, List, Sequence, Tuple, Protocol, Any, Callable
@@ -37,7 +45,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.0" 
+__version__ = "3.1.1" 
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development"  # "Prototype", "Development", "Production"
@@ -47,39 +55,110 @@ __status__ = "Development"  # "Prototype", "Development", "Production"
 for _var in ("OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS", "OMP_NUM_THREADS"):
     os.environ.setdefault(_var, "1")
 
+ctypedef np.float32_t float_t
+WindowType = Tuple[Tuple, Tuple] # ((row_off, col_off), (height, width))
+
 
 # --------------------------------------------------------------------------------------
-# Data Structure-like-things
+# Helper functions
 # --------------------------------------------------------------------------------------
-WindowType = Tuple[Tuple[int, int], Tuple[int, int]]  # ((row_off, col_off), (height, width))
-
-
-class SupportsWriteBlock(Protocol):
-    """Protocol for writer objects that expose a `write_block` method.
-
-    Your writer (e.g., MultibandBlockWriter) should implement:
-        write_block(window: WindowType, block: np.ndarray) -> None
-    """
-
-    def write_block(self, window: WindowType, block: np.ndarray) -> None:  # pragma: no cover (protocol)
-        ...
-
-
-def _chunked(iterable: Iterable[Any], size: int) -> Iterator[List[Any]]:
-    """Yield lists of up to `size` items from `iterable`.
-    Coarsens submission to reduce scheduling/pickling overhead.
-    """
-    it = iter(iterable)
-    while True:
-        chunk: List[Any] = []
-        for _ in range(size):
-            try:
-                chunk.append(next(it))
-            except StopIteration:
-                break
-        if not chunk:
-            return
+def _chunked(
+    iterable: Iterable[Any], 
+    size: int
+) -> Iterator[List[Any]]: 
+    """Yield lists of up to size items from iterable. Coarsens submission to reduce scheduling/pickling overhead. """ 
+    it = iter(iterable) 
+    while True: 
+        chunk:List[Any] = [] 
+        for _ in range(size): 
+            try: chunk.append(next(it)) 
+            except StopIteration: break 
+        
+        # No more windows to put into chunk
+        if not chunk: 
+            return 
+            
         yield chunk
+
+
+cdef inline float _clampf(const float x) nogil: 
+    # Clamp to [0,1] 
+    return fminf(1.0, fmaxf(0.0, x)) 
+
+
+cdef void _bandwise_minmax( 
+    float_t[:, :, :] band_data, 
+    float_t[:] out_mins, 
+    float_t[:] out_maxs, 
+) nogil: 
+    cdef:
+        Py_ssize_t bands  = band_data.shape[0] 
+        Py_ssize_t height = band_data.shape[1] 
+        Py_ssize_t width  = band_data.shape[2] 
+        Py_ssize_t b, row, col 
+        float_t px_val 
+    
+    for b in range(bands): 
+        out_mins[b] = band_data[b, 0, 0] 
+        out_maxs[b] = band_data[b, 0, 0] 
+        
+        for row in range(height): 
+            for col in range(width): 
+                px_val = band_data[b, row, col] 
+                # Set new min
+                if px_val < out_mins[b]: 
+                    out_mins[b] = px_val 
+                # Set new max
+                elif px_val > out_maxs[b]: 
+                    out_maxs[b] = px_val 
+
+
+cdef void _normalize_inplace(
+    float_t[:, :, :] block, 
+    const float_t[:] mins, 
+    const float_t[:] denom
+) nogil:
+    cdef:
+        Py_ssize_t bands = block.shape[0] 
+        Py_ssize_t height = block.shape[1] 
+        Py_ssize_t width = block.shape[2] 
+        Py_ssize_t b, row, col 
+        float_t min_val, dnom, px_val 
+    
+    for b in range(bands): 
+        min_val = mins[b] 
+        dnom = denom[b] 
+        for row in range(height): 
+            for col in range(width): 
+                px_val = (block[b, row, col] - min_val) / dnom
+                block[b, row, col] = _clampf(px_val) 
+                
+
+cdef void _argmax_l2_norms(
+    float_t[:, :, :] block,
+    Py_ssize_t width, 
+    float_t* out_max_val, 
+    Py_ssize_t* out_flat_idx, 
+) nogil:
+    cdef:
+        Py_ssize_t band = block.shape[0] 
+        Py_ssize_t height = block.shape[1] 
+        Py_ssize_t width = block.shape[2] 
+        Py_ssize_t b, row, col 
+        float_t acc, best = -np.inf 
+        Py_ssize_t best_idx = 0, idx = 0 
+    
+    for row in range(height): 
+        for col in range(width): 
+            acc = 0.0 
+            for i in range(b): 
+                acc += block[b, row, col] * block[b, row, col] 
+            if acc > best: 
+                best = acc 
+                best_idx = idx 
+            idx += 1 
+        out_max_val[0] = best 
+        out_flat_idx[0] = best_idx
 
 
 @dataclass
@@ -94,7 +173,6 @@ class Target:
 # --------------------------------------------------------------------------------------
 # Pass 1: read -> create synthetic bands (generation)
 # --------------------------------------------------------------------------------------
-
 _gen_state: dict[str, Any] = {
     "full_synthetic": False,    # Optional log and sqrt in bgp
     "bands_fn": None,           # callable(image_block, full_synthetic) -> np.ndarray (bands, h, w)
@@ -107,49 +185,65 @@ def _init_generate_worker(
     func_module: str, 
     func_name: str, 
     full_synthetic: bool, 
-    ) -> None:
+) -> None:
     """
     Initializer for Pass 1 workers.
 
-    Args:
-        input_paths: Paths to input rasters. One multiband or many single-band files.
-        func_module: Absolute module path, e.g. "python_scripts.gosp.bgp".
-        func_name: Top-level function name to call, e.g. "_create_bands_from_block".
-        full_synthetic: Flag forwarded to the band-generation function.
+    Parameters
+    ----------
+        input_paths (list[str]): 
+            Paths to input rasters. One multiband or many single-band files.
+        func_module (str): 
+            Absolute module path, e.g. "python_scripts.gosp.bgp".
+        func_name (str): 
+            Top-level function name to call, e.g. "_create_bands_from_block".
+        full_synthetic (bool): 
+            Flag forwarded to the band-generation function.
     """
     _gen_state["full_synthetic"] = full_synthetic
     _gen_state["bands_fn"] = getattr(importlib.import_module(func_module), func_name)
     _gen_state["reader"] = MultibandBlockReader(list(input_paths))
 
 
-def _generate_windows_chunk(windows_chunk: List[WindowType]) -> List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]]:
+def _generate_windows_chunk(
+    windows_chunk: List[tuple]
+) -> List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]]:
     """Worker: read inputs, create synthetic bands for a chunk of windows."""
+    # Get worker varaibles
     reader = _gen_state["reader"]
     full_synthetic = _gen_state["full_synthetic"]
     bands_fn = _gen_state["bands_fn"]
 
-    band_stack = []
+    # Generate bandstack
+    band_stack:List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]] = []
     for window in windows_chunk:
+        # Generate new bands
         block = reader.read_multiband_block(window).astype(np.float32)
         new_bands = bands_fn(block, full_synthetic).astype(np.float32)
-        mins = new_bands.min(axis=(1, 2)).astype(np.float32)
-        maxs = new_bands.max(axis=(1, 2)).astype(np.float32)
-        band_stack.append((window, new_bands, mins, maxs))
+        # Compute per-band mins/max
+        cdef float_t[:, :, :] mv = new_bands 
+        cdef np.ndarray mins_np = np.empty(mv.shape[0], dtype=np.float32) 
+        cdef np.ndarray maxs_np = np.empty(mv.shape[0], dtype=np.float32) 
+        # Compute min/max in noGIL, keep it on otherwise
+        with nogil:  
+            _bandwise_minmax(mv, mins_np, maxs_np) 
+        band_stack.append((window, new_bands, mins_np, maxs_np))
+    
     return band_stack
 
 
 def parallel_generate_streaming(
     *,
-    input_paths: Sequence[str],
-    windows: Iterable[WindowType],
-    writer: SupportsWriteBlock,
-    func_module: str,
-    func_name: str,
-    full_synthetic: bool,
-    max_workers: int | None = None,
-    inflight: int,
-    chunk_size: int,
-    show_progress: bool,
+    input_paths:Sequence[str],
+    windows:Iterable[WindowType],
+    writer:object,
+    func_module:str,
+    func_name:str,
+    full_synthetic:bool,
+    max_workers:int|None = None,
+    inflight:int,
+    chunk_size:int,
+    show_progress:bool,
     desc: str = "[BGP] First pass - create",
 ) -> np.ndarray:
     """
@@ -161,29 +255,27 @@ def parallel_generate_streaming(
     windows_list = list(windows)
     chunks = list(_chunked(windows_list, chunk_size))
 
-    global_mins: np.ndarray | None = None
-    global_maxs: np.ndarray | None = None
+    cdef np.ndarray global_mins = None
+    cdef np.ndarray global_maxs = None
 
     with ProcessPoolExecutor(
         max_workers=max_workers,
         initializer=_init_generate_worker,
         initargs=(list(input_paths), func_module, func_name, full_synthetic),
     ) as exec:
-        # "todo" list of all future tasks
         pending: set[Future] = set()
-        # Prevent inflight from being negative
         target_inflight = max(1, (max_workers or 1) * max(1, inflight))
 
         chunk_iter = iter(chunks)
         for _ in range(target_inflight):
-            # Submit as many chunks to pool as inflight permits
-            try: chunk = next(chunk_iter)
-            except StopIteration: break
+            try:
+                chunk = next(chunk_iter)
+            except StopIteration:
+                break
             pending.add(exec.submit(_generate_windows_chunk, chunk))
 
-        # Instantiate terminal progress bar if user-specified
         prog_bar = tqdm(total=len(windows_list), desc=desc, unit="win", colour="CYAN") if show_progress else None
-
+        
         try:
             # Process all tasks in "todo" list
             while pending:
@@ -241,12 +333,10 @@ def _init_normalize_worker(
     band_maxs: np.ndarray
     ) -> None:
     """
-    Initalizes worker process by
-    1. Setup global information accessable to the worker
-    2. Ensure any BLAS pools are initalized and resources ready
+    Initalizes worker process by setting global information accessable to the worker
 
     Args:
-        unorm_path (str): Path to unnormalized dataset.
+        unorm_path (str): Path to unnormalized dataset (filename not included).
         band_mins (np.ndarray): Array of min-value per band.
         band_maxs (np.ndarray): Array of max-value per band.
     """
@@ -276,7 +366,7 @@ def _normalize_windows_chunk(
     """
     
     # Get global worker variables for workers to access
-    src:rasterio.DatasetReader = _worker_state["src"] # type:ignore
+    src:rasterio.DatasetReader = _worker_state["src"] # DatasetReader
     mins:np.ndarray = _worker_state["band_mins"]      # (bands,)
     maxs:np.ndarray = _worker_state["band_maxs"]      # (bands,)
 
@@ -285,16 +375,17 @@ def _normalize_windows_chunk(
     output:List[Tuple[WindowType, np.ndarray]] = []
 
     for window in windows_chunk:
-            # Read block from window
-            (row_off, col_off), (h, w) = window
-            block = src.read(window=Window(col_off, row_off, w, h)).astype(np.float32) # type:ignore
-            # in-place: (block - mins) / denom
-            np.subtract(block, mins[:, None, None], out=block)
-            np.divide(block, denom[:, None, None], out=block)
-            # Check [0,1] bounds
-            np.clip(block, 0.0, 1.0, out=block)
-            # Append current block to output stream
-            output.append((window, block))
+        # Read block from window
+        (row_off, col_off), (win_height, win_width) = window
+        block = src.read(window=Window(col_off, row_off, win_width, win_height)).astype(np.float32)
+        # Cythonized in-place normalization + clamp
+        cdef np.float32_t[:, :, :] mv = block
+        cdef np.float32_t[:] mins_mv = mins
+        cdef np.float32_t[:] denom_mv = denom
+        with nogil:
+            _normalize_inplace(mv, mins_mv, denom_mv)
+
+        output.append((window, block))
 
     return output
 
@@ -305,11 +396,11 @@ def parallel_normalize_streaming(
     windows: Iterable[WindowType],
     band_mins: np.ndarray,
     band_maxs: np.ndarray,
-    writer: SupportsWriteBlock,
+    writer,
     max_workers: int | None = None,
-    inflight: int = 2,
-    chunk_size: int = 4,
-    show_progress:bool = False
+    inflight:int,
+    chunk_size:int,
+    show_progress:bool
     ) -> None:
     """
     Orchestrates the parallel processing using submit_streaming. 
@@ -319,17 +410,25 @@ def parallel_normalize_streaming(
     `NOTE`: keyword arguments required; This means that you cannot pass these arguments positionally; you must use their names.
 
     Args:
-        unorm_path (str): Path to the unnormalized dataset (multiband TIFF) written in Pass 1.
-        windows (Iterable[WindowType]): Sequence of windows to process. Order is not required.
-        band_mins (np.ndarray): 1-D array of band maximums.
-        band_maxs (np.ndarray): 1-D array of band maximums.
-        writer (SupportsWriteBlock): Writer object that will receive each normalized block.
-        max_workers (int, optional): Number of worker processes. If None, defaults to os.cpu_count() (i.e. all of them). Defaults to None.
-        chunk_size (int, optional): Number of windows processed per task. Increase to reduce overhead. Defaults to 4.
+        unorm_path (str): 
+            Path to the unnormalized dataset (multiband TIFF) written in Pass 1.
+        windows (list(tuple)): 
+            Sequence of windows to process. Order is not required.
+        band_mins (np.ndarray): 
+            1-D array of band maximums.
+        band_maxs (np.ndarray): 
+            1-D array of band maximums.
+        writer (MultibandBlockWriter): 
+            Writer object that will receive each normalized block.
+        max_workers (int): 
+            Number of worker processes. If None, defaults to os.cpu_count() (i.e. all of them). Defaults to None.
+        chunk_size (int): 
+            Number of windows processed per task. Increase to reduce overhead.
         inflight (int): 
             At most inflight * max_workers tasks will be in flight ("worked on") at once.
             Lower to reduce RAM; raise to improve throughput.
-            Defaults to 2.
+        show_progress (bool, optional):
+            If true, display progress bar
     """
     windows_list = list(windows)
     chunks = list(_chunked(windows_list, chunk_size))
@@ -367,8 +466,7 @@ def parallel_normalize_streaming(
                 # Doing the task: write blocks and update progress
                 for window, norm_block in results:
                     writer.write_block(window=window, block=norm_block)
-                    if prog_bar is not None:
-                        prog_bar.update(1)
+                    if prog_bar is not None: prog_bar.update(1)
 
                 
                 try: chunk = next(chunk_iter)       # Get next chunk to process
@@ -381,7 +479,7 @@ def parallel_normalize_streaming(
         
         # Catch any errors/exceptions during processing the 'todo' list
         except Exception as e:
-            for f in pending: f.cancel()
+            for task in pending: task.cancel()
             raise Exception(f"[parallel] Error during Pass 2:\n{e}")
         
         
@@ -412,7 +510,7 @@ def _init_scan_worker(paths: Sequence[str], projection: np.ndarray|None) -> None
     _scan_state["reader"] = MultibandBlockReader(list(paths))
 
 
-def _scan_window(window: WindowType) -> Tuple[float, int, int, np.ndarray]:
+def _scan_window(window: WindowType) -> Tuple[float_t, int, int, np.ndarray]:
     """
     (per worker) Scan a single window and return its best candidate.
 
@@ -422,34 +520,32 @@ def _scan_window(window: WindowType) -> Tuple[float, int, int, np.ndarray]:
     Returns:
         Tuple[float,int,int,np.ndarray]: Values of a Target dataclass: (value, row, col, band_spectrum)
     """
-    # 
     assert (
         isinstance(window, tuple)
         and len(window) == 2
         and isinstance(window[0], tuple)
         and isinstance(window[1], tuple)
     ), f"Band WindowType: {window!r}"
-        
-    # Get worker varaibles
-    reader:MultibandBlockReader = _scan_state["reader"] #type:ignore 
+
+    reader: MultibandBlockReader = _scan_state["reader"]  # type:ignore 
     p_matrix = _scan_state["projection_matrix"]
     (row_off, col_off), (_, win_width) = window
-    
-    # Project block onto P matrix
+
     orig_block = reader.read_multiband_block(window).astype(np.float32)  # (bands, h, w)
     proj_block = project_block_onto_subspace(block=orig_block, projection_matrix=p_matrix) if p_matrix is not None else orig_block
 
-    # Find pixel within tile with largest norm
-    norms = block_l2_norms(proj_block)  # shape: (h, w)
-    max_px_idx = int(np.argmax(norms))
-    max_px_val = float(norms.flat[max_px_idx])
-    block_row, block_col = divmod(max_px_idx, win_width)
-    
-    # Return the original spectrum for OPCI/targets
+    # Fast argmax of L2 norms
+    cdef float_t[:, :, :] mv = proj_block
+    cdef float_t max_px_val
+    cdef Py_ssize_t max_px_idx
+    with nogil:
+        _argmax_l2_norms(mv, mv.shape[2], &max_px_val, &max_px_idx)
+
+    block_row, block_col = divmod(int(max_px_idx), int(win_width))
+
     bands_orig = orig_block[:, block_row, block_col].astype(np.float32)
-    
-    # Return Target dataclass values
-    return max_px_val, row_off + block_row, col_off + block_col, bands_orig
+
+    return float(max_px_val), row_off + block_row, col_off + block_col, bands_orig
 
 
 def best_target_parallel(
