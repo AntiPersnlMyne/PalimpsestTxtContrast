@@ -12,5 +12,6 @@
     "**/*.pyx"
   ],
   "reportMissingImports": false,
-  "reportMissingTypeStubs": false
+  "reportMissingTypeStubs": false,
+  "reportGeneralTypeIssues": false,
 }

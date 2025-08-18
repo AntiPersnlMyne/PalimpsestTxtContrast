@@ -6,13 +6,16 @@
 # Imports
 # --------------------------------------------------------------------------------------------
 import numpy as np
-import rasterio
-from typing import List, Tuple, Sequence
+cimport numpy as np
+from rasterio.vrt import buildvrt
 from os import makedirs
-from rasterio.windows import Window
-from rasterio.vrt import WarpedVRT
 
-WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
+import rasterio
+from rasterio.windows import Window
+cdef extern from "Python.h":
+    pass  # silence “Python.h” warning when using only typed calls
+
+
 
 
 # --------------------------------------------------------------------------------------------
@@ -22,266 +25,318 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.0"
+__version__ = "3.1.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
 
 
 # --------------------------------------------------------------------------------------------
+# Custom Datatypes
+# --------------------------------------------------------------------------------------------
+np.import_array()
+
+WindowType = tuple[tuple[int, int], tuple[int, int]]
+
+ctypedef np.float32_t float_t
+ctypedef np.uint16_t uint16_t
+
+
+
+# --------------------------------------------------------------------------------------------
 # Imread by window (for tcp.pyx)
 # --------------------------------------------------------------------------------------------
-def window_imread(filepaths: Sequence[str], window: WindowType) -> np.ndarray:
-    """
-    Reads a tile from a single window (bands, height, width).
-    Handles both one multiband file (one path) or many single-band files (many paths).
+# cdef np.ndarray[float_t, ndim=3] window_imread(
+#     list filepaths,
+#     tuple window
+#     ):
+#     """
+#     Read in a block of data from a window window
 
-    Args:
-        filepaths (Sequence[str]): 
-            Path to a file, including filename and extension. 
-            If given one path, assumes one single-band or one multiband.
-            If given multiple paths, assumes many single-bands.
-        window (WindowType): 
-            Dimensions and locaiton of window to read data from raster. 
-            Format: (col_off, row_off, width, height).
+#     Parameters
+#     ----------
+#     filepaths : list of str
+#         Paths, plus filenames, to source rasters.
+#     window : tuple
+#         ((row_off, col_off), (win_height, win_width))
 
-    Returns:
-        np.ndarray: block (bands, height, width)
-    """    
-    # Assert input is not empty
-    assert len(filepaths) != 0, "[rastio] window_imread: empty input file list"
-    
-    (row_off, col_off), (win_height, win_width) = window
-        
-    # One file optimized return
-    if len(filepaths) == 1:
-        with rasterio.open(filepaths[0], 'r') as src:
-            return np.asarray(
-                src.read(window=Window(col_off, row_off, win_width, win_height)),#type:ignore
-                dtype=np.float32, 
-                order="C" # channel-major; size: (#-bands, height, width)
-            )     
-            
-    # Check all file shapes (height,width) against first file (file 0)
-    with rasterio.open(filepaths[0], 'r') as src0:
-        num_rows, num_cols = src0.shape    
-    
-    # Precompute total band count
-    total_bands:int = 0
-    for file in filepaths:
-        with rasterio.open(file) as src:
-            assert src.shape == (num_rows, num_cols), f"[rastio] All inputs must have same shape. Got {src.shape} and expected {(num_rows, num_cols)} for {src.name}"
-            total_bands += int(src.count)
-    
-    # Preallocate output in band-major; size: (#-bands, height, width)
-    band_stack:np.ndarray = np.empty((total_bands, win_height, win_width), dtype=np.float32)
-    
-    idx:int = 0 # Ensure bands dont overlap
-    for path in enumerate(filepaths):
-        # Accepts single-band or multi-band
-        with rasterio.open(path, 'r') as src:            
-            # Read in data 
-            block = src.read(window=Window(col_off, row_off, win_width, win_height)) #type:ignore
-            b = int(block.shape[0]) # b = number of bands in this file
-            # Add block to output, cvt float32 for downstream math
-            band_stack[idx:idx+b, :, :] = np.asarray(block, dtype=np.float32, order="C")
-            idx += b
-            
-    # Check bands filled matches expected total_bands
-    assert idx == total_bands, f"[rastio] Filled {idx} of expected {total_bands} bands"
-    
-    return band_stack
+#     Returns
+#     -------
+#     np.ndarray[float32, ndim=3]
+#         Array of shape (bands, win_height, win_width) with float32 values.
+#     """
+#     cdef:
+#         uint16_t nfiles = <uint16_t>len(filepaths)
+#         tuple offsets   = window[0]
+#         tuple win_dims  = window[1]
+#         int row_off     = offsets[0]
+#         int col_off     = offsets[1]
+#         int win_h       = win_dims[0]
+#         int win_w       = win_dims[1]
+
+#         # Block: (bands, rows, cols)
+#         np.ndarray[float_t, ndim=3] block
+#         np.ndarray[float_t, ndim=3] block_stack
+#         # `range` compatability
+#         int i, b, idx
+
+#         # rasterio.blockreader, total bands aggregate all files
+#         object src
+#         uint16_t total_bands
+
+#     # ============================================================================================
+#     # Precompute total band count
+#     # ============================================================================================
+#     # If n = 1, # output bands = # src bands
+#     if nfiles == 1:
+#         src = rasterio.open(filepaths[0], 'r')
+#         # Explicit cast to float32
+#         block = src.read(window=Window(col_off, row_off, win_w, win_h)).astype(float_t, copy=False) #type:ignore
+#         src.close()
+#         return block
+#     # If n > 1 ; Precompute total band count
+#     else:
+#         for i in range(nfiles):
+#             src = rasterio.open(filepaths[i], 'r')
+#             total_bands += <uint16_t> src.count
+#             src.close() 
+
+#     # C-order permutes bands as contiguous in memory ; shape={bands,height,width}
+#     block_stack = np.empty((total_bands, win_h, win_w), dtype=float_t, order="C")
+
+#     # Loop over the other files
+#     idx = 0
+#     for i in range(nfiles):
+#         src = rasterio.open(filepaths[i])
+#         block = src.read(window=Window(col_off, row_off, win_w, win_h)) 
+#         # Number of bands in file
+#         b = block.shape[0]
+#         # Copy the data into the pre‑allocated array via memory‑view slice
+#         block_stack[idx:idx+b, :, :] = block.astype(float_t, copy=False)
+#         src.close()
+#         idx += b
+
+#     assert idx == total_bands, "Band count mismatch after reading windows"
+#     return block
 
 
 
 # --------------------------------------------------------------------------------------------
 # Reader (Input)
 # --------------------------------------------------------------------------------------------
-class MultibandBlockReader:
+cdef class MultibandBlockReader:
     """
     A class for reading multi-band raster datasets in blocks (windows).
-    Supports both single-band files (multiple files) and true multiband files.
+    Supports both single-band files and multiband files.
 
     Attributes:
-        filenames (List[str]): 
+        filepaths (list): 
             A list of paths to the raster file.
-        srcs (List[rasterio.DatasetReader]): 
-            Dataset objects (images), one for each input file. 
-        use_vrt (bool): 
-            VRT (virtual raster title) is an XML that essentially creates 
-            a bandstack, eliminating intermediate rasters that would otherwise 
-            be deleted.
+        total_bands (int):
+            Aggregate number of bands from all files
+        win_shape (tuple):
+            Window (win_height, win_width)
     """
+    cdef:
+        object vrt # VRT dataset
+        int total_bands
+        tuple win_shape
     
-    def __init__(self, filepaths: List[str], use_vrt:bool = False):
+    def __cinit__(self, list filepaths):
         """
-        Initializes the MultiBandBlockReader object. Reads blocks of data from specifed window ("mask") of raster.
+        Initializes the reader.
 
-        Args:
+        Parameters
+        ----------
             filepaths (List[str]): A list of path(s) to the raster files.
         """
-        # Assert filepaths isn't empty
-        assert filepaths is not None, f"[rastio] MultibandBlockReader: empty file list"
+        # Check filepaths isn't empty
+        assert filepaths is not None, "[rastio] MultibandBlockReader: empty file list"
         
-        # Read in all files from filepaths
         self.filepaths = filepaths
-        self.use_vrt = use_vrt
-        self.srcs:list[rasterio.DatasetReader] = []
-        self.vrt = WarpedVRT
-        
-        # Create virtual "bandstack" with VRT
-        if use_vrt and len(filepaths) > 1:
-            self.srcs = [rasterio.open(file, 'r') for file in filepaths]
-            self.vrt = WarpedVRT(self.srcs[0])
-        # Append all sources into list to later reference
-        else:
-            for filepath in self.filepaths:
-                try:
-                    self.srcs.append(rasterio.open(filepath, 'r'))
-                except rasterio.RasterioIOError as e:
-                    raise Exception(f"[rastio] MultibandBlockReader: Error opening {filepath}: {e}") 
-            
-        # Image shape to test against
-        num_rows, num_cols = self.srcs[0].shape
-        self._shape:tuple = (num_rows, num_cols)
-        # Total output bands
-        self.total_bands:int = int( sum(src.count for src in self.srcs) )
+        # Comverge rasters into "one" dataset 
+        try:
+            self.vrt = buildvrt([rasterio.open(p) for p in self.filepaths])
+            self.total_bands = self.vrt.count 
+            self.win_shape = rasterio.open(self.vrt).read(1).shape
+        except: 
+            raise Exception (f"[rastio] MultibandBlockReader: Error opening files during __init__")
+
         
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Closes all open raster files"""
-        for src in self.srcs:
-            src.close()
-        if hasattr(self, "vrt"):
-            self.vrt.close()
+        """Closes open raster files"""
+        try: self.vrt.close()
+        except: pass # quietly exit
             
     def __del__(self):
-        """Closes all open raster files"""
-        for src in self.srcs:
-            try: src.close()
-            except: pass # quietly exit
+        """Closes open raster files"""
+        try: self.vrt.close()
+        except: pass # quietly exit
     
-    def image_shape(self) -> Tuple[int, int]:
+    cdef tuple image_shape(self):
         """Returns (win_height, win_width)"""
-        return self._shape
+        return self.win_shape
             
-    def read_multiband_block(
+    cdef np.ndarray[float_t, ndim=3] tupleread_multiband_block(
         self,
-        window:WindowType
-        ) -> np.ndarray:
+        tuple window
+        ):
         """
         Reads a block of data from each raster file and combines them into a single multi-band array.
-
-        Args:
+        
+        Parameters
+        ----------
             window (WindowType): Region of raster to pull data: ( (row_off, col_off), (win_height, win_width) )
 
-        Returns:
+        Returns
+        ----------
             np.ndarray: A multiband Numpy array representing the block of data 
                 with shape (bands, height, width), where (height, width) defined by window.
         """
-        
-        (row_off, col_off), (win_height, win_width) = window
-        
-        # # If VRT, read the "unified" VRT block 
-        if self.use_vrt and hasattr(self, "vrt"):
-            block = self.vrt.read(window=Window(col_off, row_off, win_width, win_height))#type:ignore
-            return block.astype(np.float32, copy=False)
-        
-        # If !VRT, read in files manually (below)
-        
-        # Preallocate output
-        band_stack = np.empty((self.total_bands, win_height, win_width), dtype=np.float32)
-        
-        # Add blocks to bandstack
-        idx = 0
-        for src in self.srcs:
-            block = src.read(window=Window(col_off, row_off, win_width, win_height)) # type:ignore  
-            b = int(block.shape[0]) 
-            band_stack[idx:idx+b, :, :] = np.asarray(block, dtype=np.float32, order="C")
-            idx += b
+        cdef:
+            tuple offsets   = window[0]
+            tuple win_dims  = window[1]
+            int row_off     = offsets[0]
+            int col_off     = offsets[1]
+            int win_h       = win_dims[0]
+            int win_w       = win_dims[1]
 
-        # Check expected output size
-        assert idx == self.total_bands, f"[rastio] Filled {idx} of expected {self.total_bands} bands; input changed?"
+            # Block: (bands, rows, cols)
+            np.ndarray[float_t, ndim=3] block
         
-        return band_stack
+        
+        # Preallocate output array
+        # C-order permutes bands as contiguous in memory ; shape={bands,height,width}
+        block_stack = np.empty((self.total_bands, win_h, win_w), dtype=float_t, order="C")
+
+        # ============================================================================================
+        # Read & Return Multiband Block
+        # ============================================================================================
+        src = rasterio.open(self.vrt)
+        block = src.read(window=Window(col_off, row_off, win_w, win_h)) 
+
+        assert block.count == self.total_bands, "Band count mismatch after reading window"
+        return block
 
 
 # --------------------------------------------------------------------------------------------
 # Writer (Output)
 # --------------------------------------------------------------------------------------------
-class MultibandBlockWriter:
+cdef class MultibandBlockWriter:
     """
     A class that handles writing blocks of data to an output raster file.
 
-    Args:
-        output_path (str): The path to the output raster file.
-        output_image_shape (Tuple[int, int]): The dimensions (rows, cols) of the output image.
-        output_dtype (np.type, optional): The data type of the output raster.
+    Attributes
+    ----------
+        output_dir (str): 
+            The path to the output raster directory (filename not included).
+        output_image_shape (tuple): 
+            The dimensions (rows, cols) of the output image.
+        output_image_name (str):
+            filename.ext of output file. E.g., `raster.tif`.
+        window_shape (tuple):
+            Window dimensions (height, width).
+        output_dtype (np.type, optional): 
+            The data type of the output raster. Defaults to np.float32.
+        num_bands (int):
+            Number of output bands.
+        compress_zstd (bint):
+            Compresses output file with ZSTD compression. Smaller file = slower IO speed.
     """
+    cdef:
+        str output_dir
+        tuple output_image_shape
+        str output_image_name
+        tuple window_shape
+        object output_datatype
+        int num_bands
+        object dataset
     
-    def __init__(
+    def __cinit__(
         self, 
-        output_dir:str, 
-        output_image_shape:Tuple[int,int], 
-        output_image_name:str, 
-        window_shape:Tuple[int,int], 
-        output_datatype,
-        num_bands: int|None = None
+        str output_dir, 
+        tuple output_image_shape, 
+        str output_image_name, 
+        tuple window_shape, 
+        object output_datatype,
+        int num_bands,
     ):
-        self.output_dir = output_dir
-        self.output_shape = output_image_shape
-        self.output_name = output_image_name
-        self.output_dtype = output_datatype
-        self.window_shape = window_shape
-        self.dataset = None 
-        self.num_bands = num_bands or 1
+        self.output_dir     = output_dir
+        self.output_shape   = output_image_shape
+        self.output_name    = output_image_name
+        self.window_shape   = window_shape
+        self.output_dtype   = output_datatype
+        self.num_bands      = num_bands
+        self.dataset        = None
+
 
     def __enter__(self):      
         self.profile = {
-            "driver": "GTiff", # Supports 4+ GB TIFF files
+            # GTFF (BIGTIFF) supports 4+ GB TIFF files
+            "driver": "GTiff", 
             "height": self.output_shape[0],
             "width": self.output_shape[1],
             "count": self.num_bands, 
             "dtype": self.output_dtype,
-            "compress": None, # zstd if file-size becomes issue 
             "tiled": True,
             "blockxsize": self.window_shape[1], 
             "blockysize": self.window_shape[0],
             "interleave": "band",
-            "BIGTIFF": "YES" # Enables 4+ GB files
+            "BIGTIFF": "YES",
+
+            # use if ZSTD
+            "compress": None, # ZSTD
+            # "zlevel": 10,
         }
 
         # Check for valid output path for intermediate dataset file,
         # otherwise create it
         makedirs(self.output_dir, exist_ok=True) 
         self.dataset = rasterio.open(f"{self.output_dir}/{self.output_name}", "w", **self.profile)
+        
         return self 
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Closes dataset after finished writing to it"""
         if self.dataset: self.dataset.close() 
 
-    def write_block(self, window:WindowType, block:np.ndarray):
+    def write_block(
+        self, 
+        tuple window, 
+        np.ndarray[output_datatype, ndim=3] block
+    ):
         """
         Write block of data to dataset
 
-        Args:
-            window (WindowType): Section of output dataset to write block to. Size: ( (row_off, col_off), (win_height, win_width) )
-            block (np.ndarray): Block of data to be written. Size: (bands, win_height, win_width).
+        Parameters
+        ----------
+            window (tuple[tuple, tuple]): 
+                Section of output dataset to write block to. shape=( (row_off, col_off), (win_height, win_width) )
+            block (np.ndarray): 
+                Block of data to be written. Size: (bands, win_height, win_width).
         """
-        (row_off, col_off), (win_height, win_width) = window
+        cdef:
+            tuple offs   = window[0]
+            tuple dims   = window[1]
+            int row_off  = offs[0]
+            int col_off  = offs[1]
+            int win_h    = dims[0]
+            int win_w    = dims[1]
         
-        # Check expected write shape
-        # size: (#-bands, height, width)
-        expected_shape = (self.profile["count"], win_height, win_width)
-        assert block.shape == expected_shape, f"[rastio] Shape mismatch: {block.shape} vs expected: {expected_shape}"
-
-        win = Window(col_off, row_off, win_width, win_height) #type:ignore
-
+        # ============================================================================================
+        # Shape Checking
+        # ============================================================================================
+        expected_shape = (self.num_bands, win_h, win_w)
+        assert block.shape == expected_shape, f"[rastio] Shape mismatch: got {block.shape} vs expected: {expected_shape}"
         assert self.dataset, "[rastio] Attempted to write but dataset is not initialized"
-        
-        self.dataset.write(block, window=win, indexes=list(range(1, block.shape[0] + 1)))
+
+        # ============================================================================================
+        # Write & Return Multiband Block
+        # ============================================================================================
+        win = Window(col_off, row_off, win_w, win_h) 
+        self.dataset.write(block, window=win, indexes=range(1, self.num_bands + 1))
 
 
