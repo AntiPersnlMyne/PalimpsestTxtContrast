@@ -14,11 +14,20 @@ pyx_files = [
     "skip_bgp.pyx",
 ]
 
+cython_directives = {
+    "boundscheck": False,
+    "wraparound":  False,
+    "nonecheck":   False,
+    "language_level": 3
+}
+
 extensions = cythonize(
-    pyx_files,              
-    compiler_directives={"language_level": "3"},  # Python 3 syntax
-    include_path=[get_include()],            # NumPy headers
+    pyx_files,
+    compiler_directives=cython_directives,
+    include_path=[get_include()],  # NumPy headers
 )
+
+
 
 setup(
     name="gosp",

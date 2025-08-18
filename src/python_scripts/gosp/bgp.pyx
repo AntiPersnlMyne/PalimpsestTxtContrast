@@ -50,21 +50,17 @@ def _expected_total_bands(int n, bint full_synthetic) -> int:
 # --------------------------------------------------------------------------------------------
 # Band Generation Process (BGP)
 # --------------------------------------------------------------------------------------------
-def _create_bands_from_block(
-    image_block:np.ndarray,
-    full_synthetic:bint,
-) -> np.ndarray:
+cpdef np.ndarray[float, ndim=3] _create_bands_from_block(
+    np.ndarray[float, ndim=3] image_block,
+    bint full_synthetic):
     """
     Creates new, non-linear bands from existing bands for the GOSP algorithm.
 
     Args:
-        image_block (np.ndarray): 
+        image_block (np.ndarray, float32): 
             A 3D numpy array representing a block of the image,
             with shape (bands, height, width).
-        use_sqrt (bint): 
-            Flag to indicate if sqrt bands should be generated.
-        use_log (bint): 
-            Flag to indicate if log bands should be generated.
+        use_sqrt (bint): Flag to indicate if sqrt and log bands should be generated.
 
     Returns:
         np.ndarray: 
@@ -72,18 +68,15 @@ def _create_bands_from_block(
             with shape (new_bands, height, width) where (height, width) are
             determined by the original image_block.
     """
-    cpdef np.ndarray[float32_t, ndim=3] _create_bands_from_block(
-        np.ndarray[float32_t, ndim=3] image_block,
-        bint full_synthetic):
-
-    cdef Py_ssize_t src_bands = image_block.shape[0]
-    cdef Py_ssize_t src_height = image_block.shape[1]
-    cdef Py_ssize_t src_width  = image_block.shape[2]
+    cdef size_t src_bands = image_block.shape[0]
+    cdef size_t src_height = image_block.shape[1]
+    cdef size_t src_width  = image_block.shape[2]
     cdef int total = _expected_total_bands(<int>src_bands, full_synthetic)
 
     cdef np.ndarray[float32_t, ndim=3] band_stack = np.empty(
         (total, src_height, src_width), dtype=np.float32
     )
+    cdef 
 
     cdef float32_t[:, :, :] src_view = image_block
     cdef float32_t[:, :, :] stack_view = band_stack
