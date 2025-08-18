@@ -6,6 +6,7 @@
 # Imports
 # --------------------------------------------------------------------------------------------
 import numpy as np
+cimport numpy as np
 
 from dataclasses import dataclass
 from typing import List, Tuple
@@ -22,7 +23,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.0"
+__version__ = "3.1.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -32,14 +33,13 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Custom Datatypes
 # --------------------------------------------------------------------------------------------
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
-ImageBlock = np.ndarray
 
 @dataclass
 class Target:
     value: float
     row: int
     col: int
-    band_spectrum: np.ndarray  # shape (bands,)
+    band_spectrum: np.ndarray  # shape=(bands,)
 
 
 
@@ -54,20 +54,29 @@ def _make_windows(image_shape: Tuple[int, int], window_shape: Tuple[int, int]):
         image_shape (Tuple[int,int]): (height,width) of entire source image.
         window_shape (Tuple[int,int]): (height,width) of window.
     """
-    # Get image and window dimensions
-    img_height, img_width = image_shape
-    win_height, win_width = window_shape
-    windows:List[WindowType] = []
-    
+   # Get image and window dimensions
+    cdef:
+        Py_ssize_t img_height, img_width
+        Py_ssize_t win_height, win_width
+        Py_ssize_t row_off, col_off
+        Py_ssize_t actual_height, actual_width
+
+    img_height = image_shape[0]
+    img_width  = image_shape[1]
+    win_height = window_shape[0]
+    win_width  = window_shape[1]
+
+    windows: List[WindowType] = []
+
+    # Create windows
     for row_off in range(0, img_height, win_height):
         for col_off in range(0, img_width, win_width):
-            
             # Prevent window from out-of-bounds
-            actual_height = min(win_height, img_height - row_off)
-            actual_width = min(win_width, img_width - col_off)
+            actual_height = win_height if win_height < (img_height - row_off) else (img_height - row_off)
+            actual_width = win_width if win_width < (img_width - col_off) else (img_width - col_off)
             
             # Create window and append to list
-            windows.append( ((row_off, col_off), (actual_height, actual_width)) )
+            windows.append( ((<int>row_off, <int>col_off), (<int>actual_height, <int>actual_width)) )
     
     return windows
 
@@ -80,12 +89,12 @@ def target_generation_process(
     *,
     generated_bands:List[str],
     window_shape:Tuple[int,int],
-    max_targets:int = 10,
-    opci_threshold:float = 0.01,        
+    max_targets:int,
+    opci_threshold:float,        
     max_workers:int|None = None,  # vvv Parallelization parameters vvv
     inflight:int,
     show_progress:bool
-    ) -> List[np.ndarray]:
+) -> List[np.ndarray]:
     """
     Target Generation Process (TGP).
 
@@ -93,10 +102,14 @@ def target_generation_process(
     until OPCI falls below a threshold or a max target count is reached.
 
     Args:
-        generated_bands (Sequence[str]): Either </path/to/gen_band_norm.tif> (multiband) or a list of single-band files.
-        window_shape (Tuple[int,int]): Size of tile ("block") of data to process.
-        max_targets (int, optional): Max number of targets to extract. Defaults to 10.
-        opci_threshold (float, optional): Stop if OPCI of target falls below this. Defaults to 0.01.
+        generated_bands (List[str]): 
+            Path to gen_band_norm.tif i.e. </path/to/gen_band_norm.tif>
+        window_shape (Tuple[int,int]):
+            Size of tile ("block") of data to process.
+        max_targets (int, optional): 
+            Max number of targets to extract. Defaults to 10.
+        opci_threshold (float, optional): 
+            Stop if OPCI of target falls below this. Bigger number = less targets.
             Higher threshold (e.g. 0.1) creates less pure targets.
             Lower threshold (e.g. 0.001) creates more pure targets.
 
