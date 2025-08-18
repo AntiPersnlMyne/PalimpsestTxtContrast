@@ -20,18 +20,16 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.0.0"
+__version__ = "3.0.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Production" # "Prototype", "Development", "Production"
 
 
 
-
-
-
-
-
+# ===============================
+# Delete Temporary File from BGP
+# ===============================
 def rm(filepath:str) -> None:
     """Deletes file from directory"""
     if os.path.exists(filepath):
@@ -39,7 +37,9 @@ def rm(filepath:str) -> None:
     else:
         warn("[fileio] Filepath does not exist")
 
-
+# =========================================
+# Return Path to Input Bands from Directory
+# =========================================
 def discover_image_files(
     input_dir: str,
     input_image_type: str|Tuple[str, ...] = "tif"
