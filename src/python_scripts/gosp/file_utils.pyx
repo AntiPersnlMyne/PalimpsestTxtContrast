@@ -5,8 +5,6 @@
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
-import cv2 as cv
-import numpy as np
 from typing import List, Tuple
 from glob import glob
 import os
@@ -63,19 +61,5 @@ def discover_image_files(
 
     input_files.sort()
     return input_files
-
-
-# --------------------------------------------------------------------------------------------
-# Output
-# --------------------------------------------------------------------------------------------
-def imwrite(filepath:str, image:np.ndarray) -> None:
-        # Check filepath validity
-    if filepath is None:
-        raise ValueError("[FILEIO] Filepath cannot be None")
-    if not isinstance(filepath, str):
-        raise TypeError("[FILEIO] Provide absolute (e.g. C:Users/.../) or relative (e.g. ../data/) \
-                        path to image location on your drive.")
-    
-    cv.imwrite(filepath, image)
 
 
