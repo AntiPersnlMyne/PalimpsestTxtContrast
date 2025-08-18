@@ -37,10 +37,13 @@ def window_imread(filepaths: Sequence[str], window: WindowType) -> np.ndarray:
     Handles both one multiband file (one path) or many single-band files (many paths).
 
     Args:
-        filepaths (Sequence[str]): Path to a file, including filename and extension. 
+        filepaths (Sequence[str]): 
+            Path to a file, including filename and extension. 
             If given one path, assumes one single-band or one multiband.
             If given multiple paths, assumes many single-bands.
-        window (WindowType): Dimensions and locaiton of window to read data from raster. Format: (row_off, col_off, width, height).
+        window (WindowType): 
+            Dimensions and locaiton of window to read data from raster. 
+            Format: (col_off, row_off, width, height).
 
     Returns:
         np.ndarray: block (bands, height, width)
@@ -61,13 +64,13 @@ def window_imread(filepaths: Sequence[str], window: WindowType) -> np.ndarray:
             
     # Check all file shapes (height,width) against first file (file 0)
     with rasterio.open(filepaths[0], 'r') as src0:
-        height0, width0 = src0.shape    
+        num_rows, num_cols = src0.shape    
     
     # Precompute total band count
     total_bands:int = 0
     for file in filepaths:
         with rasterio.open(file) as src:
-            assert src.shape == (height0, width0), f"[rastio] All inputs must have same shape. Got {src.shape} and expected {(height0, width0)} for {src.name}"
+            assert src.shape == (num_rows, num_cols), f"[rastio] All inputs must have same shape. Got {src.shape} and expected {(num_rows, num_cols)} for {src.name}"
             total_bands += int(src.count)
     
     # Preallocate output in band-major; size: (#-bands, height, width)
@@ -139,8 +142,8 @@ class MultibandBlockReader:
                     raise Exception(f"[rastio] MultibandBlockReader: Error opening {filepath}: {e}") 
             
         # Image shape to test against
-        height0, width0 = self.srcs[0].shape
-        self._shape:tuple = (height0, width0)
+        num_rows, num_cols = self.srcs[0].shape
+        self._shape:tuple = (num_rows, num_cols)
         # Total output bands
         self.total_bands:int = int( sum(src.count for src in self.srcs) )
         
@@ -161,10 +164,8 @@ class MultibandBlockReader:
             except: pass # quietly exit
     
     def image_shape(self) -> Tuple[int, int]:
-        # Returns (height, width) of VRT (if enabled) or shape of first file 
-        if self.use_vrt and hasattr(self, "vrt"):
-            return self.vrt.shape 
-        return self.srcs[0].shape
+        """Returns (win_height, win_width)"""
+        return self._shape
             
     def read_multiband_block(
         self,
