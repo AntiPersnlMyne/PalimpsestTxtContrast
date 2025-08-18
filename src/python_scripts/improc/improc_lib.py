@@ -23,7 +23,7 @@ import colorspacious as cs
 # Helper functions
 from ..utils.improc_utils import *
 from ..gosp.rastio import MultibandBlockReader, MultibandBlockWriter
-from ..utils.fileio import discover_image_files
+from ..gosp.fileio import discover_image_files
 
 
 # --------------------------------------------------------------------------------------------

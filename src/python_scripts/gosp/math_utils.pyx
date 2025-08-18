@@ -1,7 +1,21 @@
+#!/usr/bin/env python3
+
 """math_utils.py: Linear algebra, matrix, and calculus helper functions"""
 
+# --------------------------------------------------------------------------------------------
+# Imports
+# --------------------------------------------------------------------------------------------
 from __future__ import annotations
+from numpy import linalg as LA
+from numpy.typing import NDArray
+from typing import List, Tuple
 
+import numpy as np
+
+
+# --------------------------------------------------------------------------------------------
+# Authorship Information
+# --------------------------------------------------------------------------------------------
 __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
@@ -14,16 +28,8 @@ __status__ = "Production" # "Prototype", "Development", "Production"
 
 
 # --------------------------------------------------------------------------------------------
-# Imports
+# Constants (to prevent DIV0)
 # --------------------------------------------------------------------------------------------
-from numpy import linalg as LA
-from numpy.typing import NDArray
-from typing import List, Tuple
-
-import numpy as np
-
-
-# Constants to prevent div0
 OPCI_EPS = 1e-12   # denom floor
 OPCI_TOL = 1e-9    # clamp tolerance
 
@@ -33,7 +39,6 @@ OPCI_TOL = 1e-9    # clamp tolerance
 # --------------------------------------------------------------------------------------------
 SpectralVector = NDArray[np.float32]
 SpectralVectors = Tuple[List[SpectralVector], List[Tuple[int, int]]]
-
 
 
 # --------------------------------------------------------------------------------------------
@@ -54,7 +59,6 @@ def block_l2_norms(block:np.ndarray) -> np.ndarray:
     # return normalize(block, block, norm_type=NORM_L2) # opencv
     norms = np.sum(block.astype(np.float32) ** 2, axis=0, dtype=np.float32)
     return np.sqrt(norms, dtype=np.float32)
-
 
 
 # --------------------------------------------------------------------------------------------

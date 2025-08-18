@@ -11,5 +11,5 @@ __status__ = "Production" # "Development", or "Production".
 
 
 from .improc_utils import *
-from .math_utils import *
-from .fileio import *
+from ..gosp.math_utils import *
+from ..gosp.fileio import *

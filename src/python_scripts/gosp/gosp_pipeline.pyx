@@ -36,7 +36,7 @@ from .bgp import band_generation_process
 from .tgp import target_generation_process
 from .tcp import target_classification_process
 from .skip_bgp import write_original_multiband
-from ..utils.fileio import discover_image_files
+from .file_utils import discover_image_files
 
 
 # --------------------------------------------------------------------------------------------

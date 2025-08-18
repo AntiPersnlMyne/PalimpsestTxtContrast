@@ -35,7 +35,7 @@ from rasterio.windows import Window
 from dataclasses import dataclass
 
 from .rastio import MultibandBlockReader
-from ..utils.math_utils import project_block_onto_subspace, block_l2_norms
+from .math_utils import project_block_onto_subspace, block_l2_norms
 
 
 # --------------------------------------------------------------------------------------------

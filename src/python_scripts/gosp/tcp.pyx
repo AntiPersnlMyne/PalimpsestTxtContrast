@@ -15,7 +15,7 @@ from libc.math cimport fmaf # fused multiply-add-function
 # Project modules
 from .rastio import MultibandBlockReader, MultibandBlockWriter
 from .tgp import _make_windows, WindowType  
-from ..utils.math_utils import compute_orthogonal_projection_matrix, project_block_onto_subspace
+from .math_utils import compute_orthogonal_projection_matrix, project_block_onto_subspace
 from .parallel import submit_streaming
 
 

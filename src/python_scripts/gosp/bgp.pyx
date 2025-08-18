@@ -18,7 +18,7 @@ cdef extern from "your_helpers_module.h":
 
 from .rastio import MultibandBlockReader, MultibandBlockWriter
 from .parallel import parallel_normalize_streaming, parallel_generate_streaming
-from ..utils.fileio import rm
+from .file_utils import rm
 
 
 # --------------------------------------------------------------------------------------------
