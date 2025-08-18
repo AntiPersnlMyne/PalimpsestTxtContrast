@@ -8,7 +8,9 @@
 from __future__ import annotations
 
 import numpy as np
+cimport numpy as np
 from typing import List, Sequence, Tuple
+from libc.math cimport fmaf # fused multiply-add-function
 
 # Project modules
 from .rastio import MultibandBlockReader, MultibandBlockWriter
@@ -24,10 +26,16 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.0"
+__version__ = "3.1.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
+
+
+# --------------------------------------------------------------------------------------------
+# Custom Datatypes
+# --------------------------------------------------------------------------------------------
+ctypedef np.float32_t float_t
 
 
 # --------------------------------------------------------------------------------------------
@@ -36,16 +44,52 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Worker state reuses a reader
 _worker_state: dict[str, object] = {
     "reader": None,     # MultibandBlockReader
-    "targets": None,    # (K, B)
-    "Pk": None,         # (K, B, B)
+    "targets": None,    # (targets, bands)
+    "Pk": None,         # (targets, bands, bands)
 }
 
 
 def _init_tcp_worker(paths:Sequence[str], targets:np.ndarray, Pk:np.ndarray) -> None:
     """Initializer: store immutable arrays in each worker to avoid pickling per task."""
-    _worker_state["reader"] = MultibandBlockReader(list(paths))
+    _worker_state["reader"]  = MultibandBlockReader(list(paths))
     _worker_state["targets"] = targets.astype(np.float32, copy=False)
-    _worker_state["Pk"] = Pk.astype(np.float32, copy=False)
+    _worker_state["Pk"]      = Pk.astype(np.float32, copy=False)
+
+
+
+cdef inline void _compute_scores_inner(
+    double[:, :, :] proj_mv,           # (bands, h, w)
+    const double[:] targ_mv,           # (bands,)
+    double[:, :, :] out_mv             # (h, w) mapped as out_mv[target, row, col] in caller ordering
+) nogil:
+    """
+    Compute dot(targets[k], proj[:, r, c]) for each pixel (r,c) and store into out_mv.
+    
+    Parameters
+    ----------
+    proj_mv (float64):
+        Memory view of projection matrix
+    targ_mv (const float64):
+        Memory view of targets (to be classified)
+    out_mv (float64):
+        Memory view of 
+    
+    """
+    cdef:
+        Py_ssize_t bands = proj_mv.shape[0]
+        Py_ssize_t height = proj_mv.shape[1]
+        Py_ssize_t width = proj_mv.shape[2]
+        Py_ssize_t b, row, col
+        double acc
+    
+    for row in range(height):
+        for col in range(width):
+            acc = 0.0
+            # accumulate dot product over bands
+            for b in range(bands):
+                acc == fmaf(targ_mv[b], proj_mv[b, row, col], acc)
+            out_mv[row, col] = acc
+
 
 
 def _tcp_window(window: WindowType) -> Tuple[WindowType, np.ndarray]:
@@ -55,21 +99,53 @@ def _tcp_window(window: WindowType) -> Tuple[WindowType, np.ndarray]:
     Returns:
         Tuple[WindowType, np.ndarray]: (window, scores), where scores are (K-targets, height, width); one band per target.
     """
-    reader:MultibandBlockReader = _worker_state["reader"] # type:ignore ;
-    targets:np.ndarray = _worker_state["targets"]  # type:ignore ; (K, B)
-    Pk:np.ndarray = _worker_state["Pk"]            # type:ignore ; (K, B, B)
+    # Grab worker-shared objects (reader, targets, Pk)
+    reader: MultibandBlockReader = _worker_state["reader"] 
+    targets: np.ndarray = _worker_state["targets"]  # (k-targets, bands)
+    Pk: np.ndarray = _worker_state["Pk"]            # (k-targets, bands, bands)
 
-    block = reader.read_multiband_block(window).astype(np.float32, copy=False)  # (bands, height, width)
+    # Read block: (bands, height, width)
+    block = reader.read_multiband_block(window).astype(np.float32, copy=False)
     (_, _), (win_height, win_width) = window
-    
+
+    # Prepare shapes
     k_targets, _ = targets.shape
+    # Preallocate scores: shape (K, h, w)
     scores = np.empty((k_targets, win_height, win_width), dtype=np.float32)
 
-    # Calculate OSP score per target k
-    for k_target in range(k_targets):
-        # Nothing to project out if k_targets == 1
-        proj = block if k_targets == 1 else project_block_onto_subspace(block, Pk[k_target])  # (bands, height, width)
-        scores[k_target] = np.tensordot(targets[k_target], proj, axes=([0], [0])).astype(np.float32, copy=False)
+    # Ensure targets are contiguous ; memoryview for fast access in nogil loops
+    if not targets.flags['C_CONTIGUOUS']:
+        targets = np.ascontiguousarray(targets, dtype=np.float32)
+    cdef float_t[:, :] targets_mv = targets  # (K, B)
+
+    # Ensure block is contiguous
+    if not block.flags['C_CONTIGUOUS']:
+        block = np.ascontiguousarray(block, dtype=np.float32)
+
+    # For each target, compute projected block (if needed) and then per-pixel dot product
+    cdef Py_ssize_t k
+    for k in range(k_targets):
+        # If only one target, projecting out nothing saves a call; keep same semantics
+        if k_targets == 1:
+            proj_block = block
+        else:
+            # Project block into subspace, excluding target k
+            proj_block = project_block_onto_subspace(block, Pk[k])
+
+        # Ensure proj_block is float32 contiguous ndarray
+        if not proj_block.flags['C_CONTIGUOUS'] or proj_block.dtype != np.float32:
+            proj_block = np.ascontiguousarray(proj_block, dtype=np.float32)
+
+        # Create memoryviews for nogil kernel
+        cdef float_t[:, :, :] proj_mv = proj_block
+        # Note: targets_mv[k] is a 1D view; cast to contiguous float[:] for nogil
+        cdef float_t[:] targ_mv = targets_mv[k]
+        # Prepare a 2D view for the output slice (h, w)
+        cdef float_t[:, :] out_mv = scores[k]
+
+        # Call the inner C kernel without the GIL
+        with nogil:
+            _compute_scores_inner(proj_mv, targ_mv, out_mv)
 
     return window, scores
 
