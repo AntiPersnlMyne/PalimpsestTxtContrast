@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+# distutils: language = c
+# cython: boundscheck=False, wraparound=False, nonecheck=False
+
 
 """bgp.py: Band Generation Process, creates new non-linear bondinations of existing bands"""
 
@@ -6,6 +8,7 @@
 # Imports
 # --------------------------------------------------------------------------------------------
 import numpy as np
+cimport numpy as np
 from typing import Tuple, List
 
 from .rastio import MultibandBlockReader, MultibandBlockWriter
@@ -58,9 +61,9 @@ def _create_bands_from_block(
         image_block (np.ndarray): 
             A 3D numpy array representing a block of the image,
             with shape (bands, height, width).
-        use_sqrt (bool): 
+        use_sqrt (bint): 
             Flag to indicate if sqrt bands should be generated.
-        use_log (bool): 
+        use_log (bint): 
             Flag to indicate if log bands should be generated.
 
     Returns:
@@ -69,38 +72,45 @@ def _create_bands_from_block(
             with shape (new_bands, height, width) where (height, width) are
             determined by the original image_block.
     """
-    src_bands, src_height, src_width = image_block.shape 
-    
-    # Pre-allocate output size
-    total = _expected_total_bands(src_bands, full_synthetic)
-    band_stack = np.empty((total, src_height, src_width), dtype=np.float32)
+    cpdef np.ndarray[float32_t, ndim=3] _create_bands_from_block(
+        np.ndarray[float32_t, ndim=3] image_block,
+        bint full_synthetic):
 
-    # idx prevents bands from overlapping
-    idx = 0 
-    
-    # original
-    band_stack[idx:idx+src_bands] = image_block
+    cdef Py_ssize_t src_bands = image_block.shape[0]
+    cdef Py_ssize_t src_height = image_block.shape[1]
+    cdef Py_ssize_t src_width  = image_block.shape[2]
+    cdef int total = _expected_total_bands(<int>src_bands, full_synthetic)
+
+    cdef np.ndarray[float32_t, ndim=3] band_stack = np.empty(
+        (total, src_height, src_width), dtype=np.float32
+    )
+
+    cdef float32_t[:, :, :] src_view = image_block
+    cdef float32_t[:, :, :] stack_view = band_stack
+
+    cdef Py_ssize_t idx = 0
+    # Copy original bands
+    stack_view[idx:idx+src_bands, :, :] = src_view
     idx += src_bands
 
-    # pairwise correlations 
+    # Pairwise correlations
+    cdef int band, count
     for band in range(src_bands - 1):
         count = src_bands - 1 - band
-        band_stack[idx:idx+count] = image_block[band] * image_block[band+1:]
+        stack_view[idx:idx+count, :, :] = src_view[band, :, :] * src_view[band+1:, :, :]
         idx += count
 
-    # Optional, sqrt and log
     if full_synthetic:
-        # Square root 
-        np.sqrt(image_block, out=band_stack[idx:idx+src_bands])
+        # sqrt
+        np.sqrt(src_view, out=stack_view[idx:idx+src_bands, :, :])
         idx += src_bands
-        
-        # Natural log
-        np.log1p(image_block, out=band_stack[idx:idx+src_bands])
+        # log1p
+        np.log1p(src_view, out=stack_view[idx:idx+src_bands, :, :])
         idx += src_bands
 
-
-    # Check output matches expected size
-    assert idx==total, f"[BGP] Created bands #={idx} does not match expected={total}"
+    if idx != total:
+        raise AssertionError(f"[BGP] Created bands #={idx} does not match expected={total}")
+    
     return band_stack
 
 
