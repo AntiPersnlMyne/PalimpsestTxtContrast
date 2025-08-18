@@ -40,16 +40,17 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 np.import_array()
 
-ctypedef tuple[int, int, int, int] cwindow # ((row_off, col_off), (height, width))
-ctypedef np.float32_t cfloat
+ctypedef tuple[tuple[int,int], tuple[int,int]] window_t # [(col_off, row_off), (width, height)]
+ctypedef np.float32 float_t
+ctypedef np.uint16 uint16_t
 
 
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
-cdef size_t _expected_total_bands(size_t n, bint full_synthetic) noexcept nogil:
+cdef uint16_t _expected_total_bands(uint16_t n, bint full_synthetic) noexcept nogil:
     """Returns expected output size (i.e. number of bands) from band generation process"""
-    cdef size_t total = n + (n * (n - 1)) // 2
+    cdef uint16_t total = n + (n * (n - 1)) // 2
     if full_synthetic: total += 2*n
     return total
 
@@ -58,8 +59,8 @@ cdef size_t _expected_total_bands(size_t n, bint full_synthetic) noexcept nogil:
 # --------------------------------------------------------------------------------------------
 # Band Generation Process (BGP)
 # --------------------------------------------------------------------------------------------
-cdef np.ndarray[cfloat, cast=False] _create_bands_from_block (
-    np.ndarray[cfloat, cast=False] image_block,
+cdef np.ndarray[float_t, cast=False] _create_bands_from_block (
+    np.ndarray[float_t, cast=False] image_block,
     bint full_synthetic
     ) noexcept nogil:
     """
@@ -79,29 +80,40 @@ cdef np.ndarray[cfloat, cast=False] _create_bands_from_block (
             determined by the original image_block.
     """
     cdef: 
-        size_t src_bands = <size_t>image_block.shape[0]     # type: ignore[reportGeneralTypeIssues]
-        size_t src_height = <size_t>image_block.shape[1]    # type: ignore[reportGeneralTypeIssues]
-        size_t src_width  = <size_t>image_block.shape[2]    # type: ignore[reportGeneralTypeIssues]
-        size_t total = _expected_total_bands(src_bands, full_synthetic)
+        uint16_t src_bands = <uint16_t>image_block.shape[0]     # type: ignore[reportGeneralTypeIssues]
+        uint16_t src_height = <uint16_t>image_block.shape[1]    # type: ignore[reportGeneralTypeIssues]
+        uint16_t src_width  = <uint16_t>image_block.shape[2]    # type: ignore[reportGeneralTypeIssues]
+        uint16_t total = _expected_total_bands(src_bands, full_synthetic)
 
-    cdef np.ndarray[cfloat, ndim=3] band_stack = \
-        np.empty((total, src_height, src_width), dtype=np.float32)
+    cdef np.ndarray[float_t, ndim=3] band_stack = \
+        np.empty((total, src_height, src_width), dtype=float_t)
 
-    cdef cfloat[:, :, :] src_view = image_block  # type:ignore[reportGeneralTypeIssues]
-    cdef cfloat[:, :, :] stack_view = band_stack # type:ignore[reportGeneralTypeIssues]
-
-    cdef size_t idx = 0 # type:ignore
-    # Copy original bands
+    cdef float_t[:, :, :] src_view = image_block  # type:ignore[reportGeneralTypeIssues]
+    cdef float_t[:, :, :] stack_view = band_stack # type:ignore[reportGeneralTypeIssues]
+    # Ensure bands dont overlap when written to array
+    cdef uint16_t idx = <uint16_t> 0 
+    
+    # ============================================================================================
+    # Original Bands
+    # ============================================================================================
     stack_view[idx:idx+src_bands, :, :] = src_view # type:ignore[reportGeneralTypeIssues]
     idx += src_bands
 
-    # Pairwise correlations
-    cdef int band, count
+    # ============================================================================================
+    # Pairwise Correlations
+    # ============================================================================================\
+    cdef: 
+        int band  # int compatible with range
+        uint16_t count
+
     for band in range(src_bands - 1):
         count = src_bands - 1 - band
         stack_view[idx:idx+count, :, :] = src_view[band, :, :] * src_view[band+1:, :, :] # type:ignore[reportGeneralTypeIssues]
         idx += count
 
+    # ============================================================================================
+    # "full_synthetic" -- ln and sqrt
+    # ============================================================================================\
     if full_synthetic:
         # sqrt
         np.sqrt(src_view, out=stack_view[idx:idx+src_bands, :, :]) # type:ignore[reportGeneralTypeIssues]
@@ -119,11 +131,11 @@ cdef np.ndarray[cfloat, cast=False] _create_bands_from_block (
 cpdef None band_generation_process(
     List[str] input_image_paths,
     str output_dir,
-    Tuple[int,int] window_shape,
+    Tuple[uint16_t,uint16_t] window_shape,
     bint full_synthetic,
-    int max_workers,
-    int chunk_size,
-    int inflight,
+    uint16_t max_workers,
+    uint16_t chunk_size,
+    uint16_t inflight,
     bint show_progress
     ):
     """
@@ -152,17 +164,16 @@ cpdef None band_generation_process(
         verbose (bint): 
             If true, shows progress bars.
     """
-        
     # ============================================================
     # Scan the input to obtain image size & window dimensions
     # ============================================================
     cdef MultibandBlockReader input_dataset = MultibandBlockReader(input_image_paths)
-    cdef tuple[int,int] input_shape = input_dataset.image_shape()
-    
-    cdef src_height = input_shape[0]
-    cdef src_width = input_shape[1]
-    cdef win_height = window_shape[0]
-    cdef win_width = window_shape[1]     
+    cdef tuple[np.uint16_t,np.uint16_t] input_shape = input_dataset.image_shape()
+    # Extract dimensions
+    cdef np.uint16_t src_height = input_shape[0]
+    cdef np.uint16_t src_width = input_shape[1]
+    cdef np.uint16_t win_height = window_shape[0]
+    cdef np.uint16_t win_width = window_shape[1]     
     
     # ============================================================
     # Peek one-pixel block to calculate tot num output bands

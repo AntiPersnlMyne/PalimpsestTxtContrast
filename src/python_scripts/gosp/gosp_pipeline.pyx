@@ -111,11 +111,6 @@ def gosp(
         verbose (bool, optional): 
             Enable/Disable loading bars in terminal.
     """
-    # Check input variables are positive
-    assert window_shape[0]>0 and window_shape[1]>0 \
-    and opci_threshold>0 and chunk_size>0 and inflight>0 \
-    , f"[gosp] Input parameters must have positive values"
-    
     # IO variables
     input_files = discover_image_files(input_dir, input_image_types)
     generated_bands_dir = f"{output_dir}/gen_band_norm.tif"
