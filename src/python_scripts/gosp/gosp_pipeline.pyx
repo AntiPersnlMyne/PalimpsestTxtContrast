@@ -21,7 +21,7 @@ try:
     from os import system
     system("python setup.py build_ext --inplace")
 except Exception as e:
-    print(f"Error compiling Cython script:\n{e}")
+    print(f"Error compiling Cython scripts:\n{e}")
 
 
 # --------------------------------------------------------------------------------------------
@@ -40,16 +40,16 @@ from ..utils.fileio import discover_image_files
 
 
 # --------------------------------------------------------------------------------------------
-# Doc Header
+# Authorship Information
 # --------------------------------------------------------------------------------------------
 __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.1"
+__version__ = "3.2.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
-__status__ = "Production" # "Prototype", "Development", "Production"
+__status__ = "Development" # "Prototype", "Development", "Production"
 
 
 # GeoTIFF warning suppression

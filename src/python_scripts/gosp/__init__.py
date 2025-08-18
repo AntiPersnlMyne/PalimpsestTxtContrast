@@ -1,4 +1,8 @@
-"""atdca/__init.py: Import header for atdca pipeline"""
+#!/usr/bin/env python3
+
+"""atdca/__init.py: Import header for GOSP pipeline"""
+
+from .gosp_pipeline import *
 
 __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
@@ -10,7 +14,7 @@ __email__ = "mt9485@rit.edu"
 __status__ = "Production" # "Prototype", "Development", "Production"
 
 
-from .gosp_pipeline import *
+
 
 
 
