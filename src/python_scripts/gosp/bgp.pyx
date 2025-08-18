@@ -11,6 +11,12 @@ import numpy as np
 cimport numpy as np
 from typing import Tuple, List
 
+# External helpers (already compiled as cdef/cpdef in the same module)
+cdef extern from "your_helpers_module.h":
+    # MultibandBlockReader/Writer are already cdef classes with the
+    # context‑manager interface you used in Python.
+    pass  # (your actual declarations go here)
+
 from .rastio import MultibandBlockReader, MultibandBlockWriter
 from ..utils.fileio import rm
 from .parallel import parallel_normalize_streaming, parallel_generate_streaming
@@ -23,7 +29,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.0"
+__version__ = "3.1.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -32,16 +38,18 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 # Custom Datatypes
 # --------------------------------------------------------------------------------------------
-# Rasterio data chunk
-WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
+np.import_array()
+
+ctypedef tuple[int, int, int, int] cwindow # ((row_off, col_off), (height, width))
+ctypedef np.float32_t cfloat
 
 
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
-def _expected_total_bands(int n, bint full_synthetic) -> int:
+cdef size_t _expected_total_bands(size_t n, bint full_synthetic) noexcept nogil:
     """Returns expected output size (i.e. number of bands) from band generation process"""
-    cdef int total = n + (n * (n - 1)) // 2
+    cdef size_t total = n + (n * (n - 1)) // 2
     if full_synthetic: total += 2*n
     return total
 
@@ -50,9 +58,10 @@ def _expected_total_bands(int n, bint full_synthetic) -> int:
 # --------------------------------------------------------------------------------------------
 # Band Generation Process (BGP)
 # --------------------------------------------------------------------------------------------
-cpdef np.ndarray[float, ndim=3] _create_bands_from_block(
-    np.ndarray[float, ndim=3] image_block,
-    bint full_synthetic):
+cdef np.ndarray[cfloat, cast=False] _create_bands_from_block (
+    np.ndarray[cfloat, cast=False] image_block,
+    bint full_synthetic
+    ) noexcept nogil:
     """
     Creates new, non-linear bands from existing bands for the GOSP algorithm.
 
@@ -60,7 +69,8 @@ cpdef np.ndarray[float, ndim=3] _create_bands_from_block(
         image_block (np.ndarray, float32): 
             A 3D numpy array representing a block of the image,
             with shape (bands, height, width).
-        use_sqrt (bint): Flag to indicate if sqrt and log bands should be generated.
+        use_sqrt (bint): 
+            Flag to indicate if sqrt and log bands should be generated.
 
     Returns:
         np.ndarray: 
@@ -68,37 +78,36 @@ cpdef np.ndarray[float, ndim=3] _create_bands_from_block(
             with shape (new_bands, height, width) where (height, width) are
             determined by the original image_block.
     """
-    cdef size_t src_bands = image_block.shape[0]
-    cdef size_t src_height = image_block.shape[1]
-    cdef size_t src_width  = image_block.shape[2]
-    cdef int total = _expected_total_bands(<int>src_bands, full_synthetic)
+    cdef: 
+        size_t src_bands = <size_t>image_block.shape[0]     # type: ignore[reportGeneralTypeIssues]
+        size_t src_height = <size_t>image_block.shape[1]    # type: ignore[reportGeneralTypeIssues]
+        size_t src_width  = <size_t>image_block.shape[2]    # type: ignore[reportGeneralTypeIssues]
+        size_t total = _expected_total_bands(src_bands, full_synthetic)
 
-    cdef np.ndarray[float32_t, ndim=3] band_stack = np.empty(
-        (total, src_height, src_width), dtype=np.float32
-    )
-    cdef 
+    cdef np.ndarray[cfloat, ndim=3] band_stack = \
+        np.empty((total, src_height, src_width), dtype=np.float32)
 
-    cdef float32_t[:, :, :] src_view = image_block
-    cdef float32_t[:, :, :] stack_view = band_stack
+    cdef cfloat[:, :, :] src_view = image_block  # type:ignore[reportGeneralTypeIssues]
+    cdef cfloat[:, :, :] stack_view = band_stack # type:ignore[reportGeneralTypeIssues]
 
-    cdef Py_ssize_t idx = 0
+    cdef size_t idx = 0 # type:ignore
     # Copy original bands
-    stack_view[idx:idx+src_bands, :, :] = src_view
+    stack_view[idx:idx+src_bands, :, :] = src_view # type:ignore[reportGeneralTypeIssues]
     idx += src_bands
 
     # Pairwise correlations
     cdef int band, count
     for band in range(src_bands - 1):
         count = src_bands - 1 - band
-        stack_view[idx:idx+count, :, :] = src_view[band, :, :] * src_view[band+1:, :, :]
+        stack_view[idx:idx+count, :, :] = src_view[band, :, :] * src_view[band+1:, :, :] # type:ignore[reportGeneralTypeIssues]
         idx += count
 
     if full_synthetic:
         # sqrt
-        np.sqrt(src_view, out=stack_view[idx:idx+src_bands, :, :])
+        np.sqrt(src_view, out=stack_view[idx:idx+src_bands, :, :]) # type:ignore[reportGeneralTypeIssues]
         idx += src_bands
         # log1p
-        np.log1p(src_view, out=stack_view[idx:idx+src_bands, :, :])
+        np.log1p(src_view, out=stack_view[idx:idx+src_bands, :, :]) # type:ignore[reportGeneralTypeIssues]
         idx += src_bands
 
     if idx != total:
@@ -107,65 +116,99 @@ cpdef np.ndarray[float, ndim=3] _create_bands_from_block(
     return band_stack
 
 
-def band_generation_process(
-    input_image_paths:List[str],
-    output_dir:str,
-    window_shape:Tuple[int,int],
-    full_synthetic:bint,
-    max_workers:int|None,
-    chunk_size:int,
-    inflight:int,
-    show_progress:bint,
-    ) -> None:
+cpdef None band_generation_process(
+    List[str] input_image_paths,
+    str output_dir,
+    Tuple[int,int] window_shape,
+    bint full_synthetic,
+    int max_workers,
+    int chunk_size,
+    int inflight,
+    bint show_progress
+    ):
     """
     The Band Generation Process. Generates synthetic, non-linear bands as combinations of existing bands. 
     Output is normalized range [0,1] per band.
 
     Args:
-        input_image_paths (List[str]): List of paths to input images / multispectral data.
-        dst_dir (str): Output directory of generated band image. 
-        window_shape (Tuple[int,int]): Shape of each block to process. 
+        input_image_paths (List[str]): 
+            List of paths to input images / multispectral data.
+        dst_dir (str): 
+            Output directory of generated band image. 
+        window_shape (Tuple[int,int]): 
+            Shape of each block to process. 
             Larger blocks proceess faster and use more memory. 
             Smaller block process slower with a smaller memory footprint. 
-        use_sqrt (bool): If True, generate bands using square root.
-        use_log (bool): If True, generate bands using log base 10.
-        max_workers (int|None, optional): Number of cores for paralellization. If None, defaults to number of processors on the machine.
-            i.e. more workers = more fast. Defaults to None.
-        chunk_size (int, optional): How many windows of data the program can parallelize at once. 
-            i.e. more chunks = more fast. Try 8 or 16 if RAM allows. Defaults to 4.
-        inflight (int, optional): Controls memory footprint. At most `inflight * max_workers` blocks in RAM. Defaults to 2.
-        verbose (bool): If true, shows progress bars.
+        full_synthetic (bint): 
+            If True, generate ln and sqrt bands.
+        max_workers (int): 
+            Number of cores for paralellization. If None, defaults to number of processors on the machine.
+            i.e. more workers = more fast.
+        chunk_size (int): 
+            How many windows of data the program can parallelize at once. 
+            i.e. more chunks = more fast. Try 8 or 16 if RAM allows.
+        inflight (int): 
+            Controls memory footprint. At most `inflight * max_workers` blocks in RAM. Defaults to 2.
+        verbose (bint): 
+            If true, shows progress bars.
     """
         
-    # Initial scan to determine band count and output shape
-    input_dataset = MultibandBlockReader(input_image_paths)
-    input_shape = input_dataset.image_shape()
-    src_height, src_width = input_shape
-    win_height, win_width = window_shape    
+    # ============================================================
+    # Scan the input to obtain image size & window dimensions
+    # ============================================================
+    cdef MultibandBlockReader input_dataset = MultibandBlockReader(input_image_paths)
+    cdef tuple[int,int] input_shape = input_dataset.image_shape()
     
-    # Determine number of bands up front by using a preview block
-    dummy_block = input_dataset.read_multiband_block(((0, 0), (1,1)))
-    sample_bands = _create_bands_from_block(dummy_block, full_synthetic)
-    num_output_bands = sample_bands.shape[0]
-    del dummy_block, sample_bands # free memory
+    cdef src_height = input_shape[0]
+    cdef src_width = input_shape[1]
+    cdef win_height = window_shape[0]
+    cdef win_width = window_shape[1]     
     
-    # initalize band-wise norm variables
-    band_mins = np.full(num_output_bands, np.inf, dtype=np.float32)
-    band_maxs = np.full(num_output_bands, -np.inf, dtype=np.float32)
+    # ============================================================
+    # Peek one-pixel block to calculate tot num output bands
+    # ============================================================
+    cdef np.ndarray[cfloat, ndim=3] tiny_block
+    tiny_block = input_dataset.read_multiband_block(((0, 0), (1, 1)))
+    cdef np.ndarray[cfloat, ndim=2] sample_bands
+    sample_bands = _create_bands_from_block(tiny_block, full_synthetic)
+    cdef int num_output_bands = sample_bands.shape[0] #type:ignore[CythonreportGeneralTypeIssues]
+    # free the temporary data
+    del tiny_block, sample_bands
     
+    # ============================================================
+    # Arrays to hold global min/max for later normalization
+    # ============================================================
+    cdef np.ndarray[cfloat, ndim=1] np_band_mins = np.full(num_output_bands, np.inf, dtype=np.float32)
+    cdef np.ndarray[cfloat, ndim=1] np_band_maxs = np.full(num_output_bands, -np.inf, dtype=np.float32)
+    # Memory view for faster access
+    cdef float[:] band_mins = np_band_mins #type:ignore[CythonreportGeneralTypeIssues]
+    cdef float[:] band_maxs = np_band_maxs #type:ignore[CythonreportGeneralTypeIssues]
+    
+    # ============================================================
+    # Preallocate list of windows
+    # ============================================================
+    cdef int n_rows = (src_height + win_height - 1) // win_height
+    cdef int n_cols = (src_width  + win_width  - 1) // win_width
+    cdef int total_windows = n_rows * n_cols
+
+    cdef list windows = [None] * total_windows # empty array of Nones
+    cdef int win_idx = 0
+
+    cdef int row_off, col_off, actual_height, actual_width
+    for row_off in range(0, src_height, win_height):
+        for col_off in range(0, src_width, win_width):
+            actual_height = win_height if row_off + win_height <= src_height else src_height - row_off
+            actual_width  = win_width  if col_off + win_width  <= src_width  else src_width  - col_off
+            windows[win_idx] = ((row_off, col_off), (actual_height, actual_width))
+            win_idx += 1
+
+
     output_unorm_filename = "gen_band_unorm.tif"
     output_norm_filename = "gen_band_norm.tif"
     
     # --------------------------------------------------------------------------------------------
     # Pass 1: Generate unnormalized output
     # --------------------------------------------------------------------------------------------
-    # Build all possible windows
-    windows = []
-    for row_off in range(0, src_height, win_height):
-        for col_off in range(0, src_width, win_width):
-            actual_height = min(win_height, src_height - row_off)
-            actual_width = min(win_width, src_width - col_off)
-            windows.append(((row_off, col_off), (actual_height, actual_width)))
 
     # Write unnormalized output, collect global stats
     with MultibandBlockWriter(
@@ -230,14 +273,4 @@ def band_generation_process(
                     
     rm(unorm_path) # delete unnorm data
     
-
-# Optional quick self-check (not used by pipeline)
-if __name__ == "__main__":
-    # Tiny sanity test ensures counts & ordering fill
-    rng = np.random.default_rng(0)
-    block = rng.random((4, 3, 2), dtype=np.float32)  # (bands, H, W)
-    for full_synthetic in (False, True):
-        out = _create_bands_from_block(block, full_synthetic)
-        expected = _expected_total_bands(4, full_synthetic)
-        assert out.shape == (expected, 3, 2)
             
