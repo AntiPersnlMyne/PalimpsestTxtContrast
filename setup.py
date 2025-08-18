@@ -1,6 +1,6 @@
 """setup.py: Builds Cython (.pyx) files into importable Python modules"""
 
-from setuptools import setup, Extension
+from setuptools import setup
 from Cython.Build import cythonize
 from numpy import get_include
 
