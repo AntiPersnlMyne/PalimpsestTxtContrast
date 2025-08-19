@@ -32,6 +32,7 @@ import logging
 from warnings import filterwarnings
 from os import remove
 from numpy import ndarray
+import multiprocessing
 
 from .bgp import band_generation_process
 from .tgp import target_generation_process
@@ -56,6 +57,9 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # GeoTIFF warning suppression
 filterwarnings("ignore", category=UserWarning, message="Dataset has no geotransform, gcps, or rpcs.*")
 logging.disable(logging.WARNING)
+
+# Prevent linux/windows compatibility issues from "fork"
+multiprocessing.set_start_method("spawn", force=False)
 
 
 

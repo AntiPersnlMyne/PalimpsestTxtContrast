@@ -228,8 +228,8 @@ def _generate_windows_chunk(
     for window in windows_chunk:
         
         # Generate new bands
-        block = reader.read_multiband_block(window).astype(np.float32)
-        new_bands = bands_fn(block, full_synthetic).astype(np.float32)
+        block = reader.read_multiband_block(window)
+        new_bands = bands_fn(block, full_synthetic)
         
         # Compute per-band mins/max
         nb_mv = new_bands 
@@ -553,7 +553,7 @@ def _scan_window(window: WindowType) -> Tuple[float_t, int, int, np.ndarray]:
     p_matrix = _scan_state["projection_matrix"]
     (row_off, col_off), (_, win_width) = window
 
-    orig_block = reader.read_multiband_block(window).astype(np.float32)  # (bands, h, w)
+    orig_block = reader.read_multiband_block(window)  # (bands, h, w)
     proj_block = project_block_onto_subspace(block=orig_block, projection_matrix=p_matrix) if p_matrix is not None else orig_block
 
     # Fast argmax of L2 norms
@@ -565,7 +565,7 @@ def _scan_window(window: WindowType) -> Tuple[float_t, int, int, np.ndarray]:
 
     block_row, block_col = divmod(int(max_px_idx), int(win_width))
 
-    bands_orig = orig_block[:, block_row, block_col].astype(np.float32)
+    bands_orig = orig_block[:, block_row, block_col]
 
     return float(max_px_val), row_off + block_row, col_off + block_col, bands_orig
 

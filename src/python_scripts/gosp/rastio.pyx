@@ -245,10 +245,11 @@ cdef class MultibandBlockWriter:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close() 
 
-    cdef void close(self) noexcept:
+    def close(self):
         try:
             if self.dataset: self.dataset.close()
         except: 
+            if self.dataset is not None: self.dataset = None
             pass
 
     def write_block(

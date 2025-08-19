@@ -1,3 +1,4 @@
+import sys
 from setuptools import setup, Extension
 from Cython.Build import cythonize
 from numpy import get_include
@@ -25,11 +26,25 @@ cython_directives = {
     "cdivision": True,
 }
 
+# Platform-specific OpenMP flags
+extra_compile_args = []
+extra_link_args = []
+if sys.platform == "win32":
+    # MSVC: use /openmp
+    extra_compile_args = ["/openmp"]
+    extra_link_args = []
+else:
+    # GCC/Clang: use -fopenmp
+    extra_compile_args = ["-fopenmp"]
+    extra_link_args = ["-fopenmp"]
+
 extensions = [
     Extension(
         "gosp." + fn[:-4],
         [join(PYX_DIR, fn)],
         include_dirs=[get_include()], 
+        extra_compile_args=extra_compile_args,
+        extra_link_args=extra_link_args,
     )
     for fn in [
         "bgp.pyx",
@@ -45,7 +60,7 @@ extensions = [
 
 setup(
     name="gosp",
-    version="1.4",
+    version="1.5",
     packages=["gosp"],
     package_dir={"gosp": PYX_DIR},
     ext_modules=cythonize(extensions, compiler_directives=cython_directives),

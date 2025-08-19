@@ -26,10 +26,12 @@ from time import time
 def main():
     # CLAHE
     start = time()
-    gosp(
-        input_dir="data/input/test",
-        output_dir="data/output"
-    )
+    from python_scripts.gosp import test
+    test.test_read_write_roundtrip("", 3, 100,100)
+    # gosp(
+        # input_dir="data/input/test",
+        # output_dir="data/output"
+    # )
     # gosp(
     #     # Input information
     #     input_dir="data/input/arch177_rgb_365cor_lum",   

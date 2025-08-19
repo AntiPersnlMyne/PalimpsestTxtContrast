@@ -8,9 +8,12 @@
 # --------------------------------------------------------------------------------------------
 import numpy as np
 cimport numpy as np
-from libc.math cimport sqrtf, log1pf
+
 from typing import Tuple, List
 from os.path import join
+
+from cython.parallel import prange
+from libc.math cimport sqrtf, log1pf
 
 from .rastio import MultibandBlockReader, MultibandBlockWriter
 from .parallel import parallel_normalize_streaming, parallel_generate_streaming
@@ -61,9 +64,9 @@ cdef inline psize_t _expected_total_bands_cy(
     return total
 
 
-cdef void _create_bands_from_block_kernel(
+cdef void _create_bands_from_block_cy(
     float_t[:, :, :] src_mv,        # (bands, height, width)
-    float_t[:, :, :] bandstack_mv,        # (total_bands, h, w) preallocated
+    float_t[:, :, :] bandstack_mv,  # (total_bands, h, w) preallocated
     bint full_synthetic
 ) noexcept nogil:
     """
@@ -85,7 +88,8 @@ cdef void _create_bands_from_block_kernel(
     # Original Bands
     # ==============
     for b in range(bands):
-        for row in range(height):
+        # prange is safe when C-contiguous
+        for row in prange(height, nogil=True, schedule="static"):
             for col in range(width):
                 bandstack_mv[dst_idx+b, row, col] = src_mv[b, row, col]
     dst_idx += bands
@@ -97,7 +101,7 @@ cdef void _create_bands_from_block_kernel(
     for i in range(bands - 1):
         for j in range(i + 1, bands):
             # Correlation multiplication
-            for row in range(height):
+            for row in prange(height, nogil=True, schedule="static"):
                 for col in range(width):
                     bandstack_mv[dst_idx, row, col] = src_mv[i, row, col] * src_mv[j, row, col]
             dst_idx += 1
@@ -108,7 +112,7 @@ cdef void _create_bands_from_block_kernel(
     if full_synthetic:
         # sqrt bands
         for b in range(bands):
-            for row in range(height):
+            for row in prange(height, nogil=True, schedule="static"):
                 for col in range(width):
                     # clamp negative to 0
                     bandstack_mv[dst_idx+b, row, col] = sqrtf(src_mv[b, row, col]) if src_mv[b, row, col] >= 0.0 else 0.0
@@ -116,7 +120,7 @@ cdef void _create_bands_from_block_kernel(
 
         # log bands
         for b in range(bands):
-            for row in range(height):
+            for row in prange(height, nogil=True, schedule="static"):
                 for col in range(width):
                     val = src_mv[b, row, col]
                     # guard: log1p undefined for val <= -1; 
@@ -154,7 +158,7 @@ def _create_bands_from_block(image_block:np.ndarray, full_synthetic:bool):
         src = image_block
 
     # Source dims
-    bands  = src.shape[0]
+    cdef psize_t bands  = <psize_t> src.shape[0]
     height = src.shape[1]
     width  = src.shape[2]
 
@@ -173,7 +177,7 @@ def _create_bands_from_block(image_block:np.ndarray, full_synthetic:bool):
 
     # noGIL kernel to create band_stack
     with nogil:
-        _create_bands_from_block_kernel(src_mv, bs_mv, full_syn)
+        _create_bands_from_block_cy(src_mv, bs_mv, full_syn)
 
     return band_stack
 
