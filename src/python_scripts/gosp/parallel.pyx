@@ -145,7 +145,7 @@ cdef int _argmax_l2_norms(
         Py_ssize_t height = block.shape[1] 
         Py_ssize_t width = block.shape[2] 
         Py_ssize_t b, row, col 
-        float_t acc, best = -1e300 # cannot -np.inf without GIL
+        float_t acc, best = -3.3e38 # cannot -np.inf without GIL
         Py_ssize_t best_idx = 0, idx = 0 
     
     for row in range(height): 
@@ -157,8 +157,8 @@ cdef int _argmax_l2_norms(
                 best = acc 
                 best_idx = idx 
             idx += 1 
-        out_max_val[0] = best 
-        out_flat_idx[0] = best_idx
+    out_max_val[0] = best 
+    out_flat_idx[0] = best_idx
 
 
 @dataclass
@@ -391,15 +391,16 @@ def _normalize_windows_chunk(
     output:List[Tuple[WindowType, np.ndarray]] = []
 
     # Memory views
-    cdef np.float32_t[:, :, :] block_mv 
-    cdef np.float32_t[:] mins_mv
-    cdef np.float32_t[:] denom_mv 
+    cdef:
+        float_t[:, :, :] block_mv 
+        float_t[:]       mins_mv
+        float_t[:]       denom_mv 
 
     for window in windows_chunk:
         # Read block from window
         (row_off, col_off), (win_height, win_width) = window
         block = src.read(window=Window(col_off, row_off, win_width, win_height)).astype(np.float32)
-        # Cythonized in-place normalization + clamp
+        # Cythonized in-place normalization + clamp [0,1]
         block_mv = block
         mins_mv = mins
         denom_mv = denom
