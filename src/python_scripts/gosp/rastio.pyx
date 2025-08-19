@@ -8,9 +8,10 @@
 # --------------------------------------------------------------------------------------------
 import numpy as np
 cimport numpy as np
-from osgeo import gdal
-from os import makedirs, join
+from os import makedirs, join, close
+import tempfile
 
+from osgeo import gdal
 import rasterio
 from rasterio.windows import Window
 cdef extern from "Python.h": pass  # silence “Python.h” warning when using only typed calls
@@ -80,7 +81,9 @@ cdef class MultibandBlockReader:
         assert filepaths is not None, "[rastio] MultibandBlockReader: empty file list"
         
         self.filepaths = filepaths
-        self.vrt_path = "output.vrt"
+        fdir, tmp_path = tempfile.mkstemp(suffix=".vrt")
+        close(fdir)
+        self.vrt_path = tmp_path
 
         # Comverge rasters into "one" dataset = VRT
         try:
@@ -101,13 +104,22 @@ cdef class MultibandBlockReader:
         self.close()
             
     def __del__(self):
-        self.dataset = None # close dataset
-        rm(self.vrt_path)
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            pass
+        # Remove the vrt file if exists
+        try:
+            rm(self.vrt_path)
+        except Exception:
+            pass
 
-    cdef void close(self) noexcept:
-        self.dataset = None
-        self.close()
+    def close(self):
+        """Safely close dataset and free VRT path if present."""
+        try:
+            if self.dataset is not None: self.dataset = None
+        except Exception:
+            pass
     
     def image_shape(self) -> tuple:
         """Returns (rows, cols)"""
