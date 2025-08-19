@@ -34,7 +34,6 @@ extensions = cythonize(
     pyx_files,
     compiler_directives=cython_directives,
     include_path=[get_include()],  # NumPy headers
-    language='c'                   # compile to C
 )
 
 
