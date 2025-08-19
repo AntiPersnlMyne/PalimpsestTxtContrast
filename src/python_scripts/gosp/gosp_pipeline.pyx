@@ -5,10 +5,10 @@
 Implements: The OSP-based, automatic target detection workflow laid out by Chang and Ren.
 [Ref] Hsuan Ren, Student Member, IEEE, and Chein-I Chang, Senior Member, IEEE 2000
 
-Does: Automatically finds K (integer > 1) likely targets in image and classififes all pixels to a target likelihood.
+Does: Automatically finds K (an integer > 1) likely targets in image and classififes all pixels to a target likelihood.
                             
 Stages:
-    0. Compile BGP, TGP, TCP Cython code
+    0. Compile Cython (.pyx) code
     1. Band Generation Process (BGP)        - Create synthetic bands from raw imagery
     2. Target Generation Process (TGP)      - Iteratively discover target spectra using OSP
     3. Target Classification Process (TCP)  - Classify image using discovered targets
@@ -46,7 +46,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.2.0"
+__version__ = "3.2."
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"

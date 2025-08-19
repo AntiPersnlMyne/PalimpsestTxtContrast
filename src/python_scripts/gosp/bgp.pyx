@@ -9,12 +9,9 @@
 # --------------------------------------------------------------------------------------------
 import numpy as np
 cimport numpy as np
+from libc.math cimport sqrtf, log1pf
 from typing import Tuple, List
 from os.path import join
-
-# External helpers (already compiled as cdef/cpdef in the same module)
-cdef extern from "your_helpers_module.h":
-    pass  # (your actual declarations go here)
 
 from .rastio import MultibandBlockReader, MultibandBlockWriter
 from .parallel import parallel_normalize_streaming, parallel_generate_streaming
@@ -28,7 +25,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.2"
+__version__ = "3.1.3"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -39,92 +36,147 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 np.import_array()
 
-ctypedef const np.float32 float_t
-ctypedef const np.uint16 uint16_t
+# Typed aliases for readability
+ctypedef np.float32_t float_t
+ctypedef np.uint16_t uint16_t
+ctypedef Py_ssize_t psize_t
 
 
-# --------------------------------------------------------------------------------------------
-# Helper Functions
-# --------------------------------------------------------------------------------------------
-cdef uint16_t _expected_total_bands(uint16_t n, bint full_synthetic) noexcept nogil:
-    """Returns expected output size (i.e. number of bands) from band generation process"""
-    cdef uint16_t total = n + (n * (n - 1)) // 2
-    if full_synthetic: total += 2*n
+# ------------------
+# C helper functions
+# ------------------
+cdef inline psize_t _expected_total_bands_cy(
+    psize_t nbands,
+    bint full_synthetic
+) nogil:
+    """
+    Expected total bands from input band count `nbands` and `full_synthetic` flag.
+
+    Formula:
+      total = n + n*(n-1)/2   # original + pairwise
+      if full_synthetic: add 2*n (sqrt + log1p)
+    """
+    cdef psize_t total = nbands + (nbands * (nbands - 1)) // 2
+    if full_synthetic:
+        total += 2 * nbands
     return total
 
+
+cdef void _create_bands_from_block_kernel(
+    float_t[:, :, :] src_mv,        # (bands, height, width)
+    float_t[:, :, :] bandstack_mv,        # (total_bands, h, w) preallocated
+    bint full_synthetic
+) nogil:
+    """
+    Fill bandstack_mv with generated bands.
+    + auto- and cross-correlation
+    + (optional) sqrt and log1p
+    """
+    cdef:
+        psize_t bands  = src_mv.shape[0]
+        psize_t height = src_mv.shape[1]
+        psize_t width  = src_mv.shape[2]
+
+        psize_t dst_idx = 0
+        psize_t b, row, col, i, j
+
+    # ==============
+    # Original Bands
+    # ==============
+    for b in range(bands):
+        for row in range(height):
+            for col in range(width):
+                bandstack_mv[dst_idx+b, row, col] = src_mv[b, row, col]
+    dst_idx += bands
+
+    # ========================================
+    # Correlations (no redundant combinations)
+    # ========================================
+    # Ensure no redundant combinations
+    for i in range(bands - 1):
+        for j in range(i + 1, bands):
+            # Correlation multiplication
+            for row in range(height):
+                for col in range(width):
+                    bandstack_mv[dst_idx, row, col] = src_mv[i, row, col] * src_mv[j, row, col]
+            dst_idx += 1
+
+    # ===================================
+    # "full_synthetic" log and sqrt bands
+    # ===================================
+    if full_synthetic:
+        # sqrt bands
+        for b in range(bands):
+            for row in range(height):
+                for col in range(width):
+                    # clamp negative to 0
+                    bandstack_mv[dst_idx+b, row, col] = sqrtf(src_mv[b, row, col]) if src_mv[b, row, col] >= 0.0 else 0.0
+        dst_idx += bands
+
+        # log bands
+        for b in range(bands):
+            for row in range(height):
+                for col in range(width):
+                    val = src_mv[b, row, col]
+                    # guard: log1p undefined for val <= -1; 
+                    if val <= -1:
+                        bandstack_mv[dst_idx + b, row, col] = log1pf(-0.99) # -1 is undefined
+                    else:
+                        bandstack_mv[dst_idx + b, row, col] = log1pf(val)
+        dst_idx += bands
+
+
+# ----------------------------------------
+# Python-callable band creation function
+# (must be importable by workers)
+# ----------------------------------------
+def _create_bands_from_block(image_block:np.ndarray, full_synthetic:bool):
+    """
+    Python-callable wrapper used by worker processes.
+
+    Args:
+      image_block (ndarray):
+        (bands, height, width). Data will be cast to float32).
+      full_synthetic (bool):
+        If true, generates additional sqrt and log bands.
+
+    Returns:
+      ndarray: band_stack=(total_bands, height, width) ; dtype=float32
+    """
+    if image_block.ndim != 3:
+        raise ValueError(f"[BGP] image_block must be 3D (bands,h,w); got shape {image_block.shape}")
+
+    # Ensure float32 and contiguous layout (no copies if already correct)
+    if image_block.dtype != np.float32 or not image_block.flags['C_CONTIGUOUS']:
+        src = np.ascontiguousarray(image_block, dtype=np.float32)
+    else:
+        src = image_block
+
+    # Source dims
+    bands  = src.shape[0]
+    height = src.shape[1]
+    width  = src.shape[2]
+
+    # Calculat output (#bands) size
+    tot_num_bands = _expected_total_bands_cy(bands, full_synthetic)
+
+    # Preallocate output array (float32)
+    band_stack = np.empty((tot_num_bands, height, width), dtype=np.float32)
+
+    # Get fast C memoryviews 
+    cdef float_t[:, :, :] src_mv = src
+    cdef float_t[:, :, :] bs_mv = band_stack
+
+    # noGIL kernel to fill band_stack
+    with nogil:
+        _create_bands_from_block_kernel(src_mv, bs_mv, full_synthetic)
+
+    return band_stack
 
 
 # --------------------------------------------------------------------------------------------
 # Band Generation Process (BGP)
 # --------------------------------------------------------------------------------------------
-cdef np.ndarray[float_t, cast=False] _create_bands_from_block (
-    np.ndarray[float_t, cast=False] image_block,
-    bint full_synthetic
-    ) noexcept nogil:
-    """
-    Creates new, non-linear bands from existing bands for the GOSP algorithm.
-
-    Args:
-        image_block (np.ndarray, float32): 
-            A 3D numpy array representing a block of the image,
-            with shape (bands, height, width).
-        use_sqrt (bint): 
-            Flag to indicate if sqrt and log bands should be generated.
-
-    Returns:
-        np.ndarray: 
-            A 3D numpy array containing old and the newly generated correlated bands,
-            with shape (new_bands, height, width) where (height, width) are
-            determined by the original image_block.
-    """
-    cdef:
-        uint16_t src_bands = <uint16_t>image_block.shape[0]     # type: ignore[reportGeneralTypeIssues]
-        uint16_t src_height = <uint16_t>image_block.shape[1]    # type: ignore[reportGeneralTypeIssues]
-        uint16_t src_width  = <uint16_t>image_block.shape[2]    # type: ignore[reportGeneralTypeIssues]
-        uint16_t total = _expected_total_bands(src_bands, full_synthetic)
-
-        np.ndarray[float_t, ndim=3] band_stack = np.empty((total, src_height, src_width), dtype=float_t)
-
-        float_t[:, :, :] src_view = image_block  # type:ignore[reportGeneralTypeIssues]
-        float_t[:, :, :] stack_view = band_stack # type:ignore[reportGeneralTypeIssues]
-        # Ensure bands dont overlap when written to array
-        uint16_t idx = <uint16_t> 0 
-    
-    # ============================================================================================
-    # Original Bands
-    # ============================================================================================
-    stack_view[idx:idx+src_bands, :, :] = src_view # type:ignore[reportGeneralTypeIssues]
-    idx += src_bands
-
-    # ============================================================================================
-    # Pairwise Correlations
-    # ============================================================================================\
-    cdef: 
-        int band  # int compatible with range
-        uint16_t count
-
-    for band in range(src_bands - 1):
-        count = src_bands - 1 - band
-        stack_view[idx:idx+count, :, :] = src_view[band, :, :] * src_view[band+1:, :, :] # type:ignore[reportGeneralTypeIssues]
-        idx += count
-
-    # ============================================================================================
-    # "full_synthetic" -- ln and sqrt
-    # ============================================================================================\
-    if full_synthetic:
-        # sqrt
-        np.sqrt(src_view, out=stack_view[idx:idx+src_bands, :, :]) # type:ignore[reportGeneralTypeIssues]
-        idx += src_bands
-        # log1p
-        np.log1p(src_view, out=stack_view[idx:idx+src_bands, :, :]) # type:ignore[reportGeneralTypeIssues]
-        idx += src_bands
-
-    if idx != total:
-        raise AssertionError(f"[BGP] Created bands #={idx} does not match expected={total}")
-    
-    return band_stack
-
-
 cpdef None band_generation_process(
     List[str] input_image_paths,
     str output_dir,
