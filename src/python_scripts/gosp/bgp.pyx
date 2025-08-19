@@ -290,7 +290,7 @@ def band_generation_process(
             input_paths     = input_image_paths,
             windows         = windows,
             writer          = writer,
-            func_module     = "src.python_scripts.bgp",  # This module ; alternatively "src.python_scripts.bgp"
+            func_module     = "gosp.bgp",  
             func_name       = "_create_bands_from_block",
             full_synthetic  = full_synthetic,
             max_workers     = max_workers,
