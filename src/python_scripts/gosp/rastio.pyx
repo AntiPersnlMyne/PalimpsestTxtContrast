@@ -173,15 +173,15 @@ cdef class MultibandBlockWriter:
 
     Attributes
     ----------
-        output_dir (str): 
+        out_dir (str): 
             The path to the output raster directory (filename not included).
-        output_image_shape (tuple): 
+        out_image_shape (tuple): 
             The dimensions (rows, cols) of the output image.
-        output_image_name (str):
+        out_image_name (str):
             filename.ext of output file. E.g., `raster.tif`.
-        window_shape (tuple):
+        win_shape (tuple):
             Window dimensions (height, width).
-        output_dtype (np.type, optional): 
+        out_dtype (np.type, optional): 
             The data type of the output raster. Defaults to np.float32.
         num_bands (int):
             Number of output bands.
@@ -221,10 +221,10 @@ cdef class MultibandBlockWriter:
         self.profile = {
             # GTFF (BIGTIFF) supports 4+ GB TIFF files
             "driver": "GTiff", 
-            "height": self.out_shape[0],
-            "width": self.out_shape[1],
+            "height": self.out_image_shape[0],
+            "width": self.out_image_shape[1],
             "count": self.num_bands, 
-            "dtype": self.out_dtype,
+            "dtype": self.out_datatype,
             "tiled": True,
             "blockxsize": self.win_shape[1], 
             "blockysize": self.win_shape[0],
@@ -236,7 +236,7 @@ cdef class MultibandBlockWriter:
         # Check for valid output path for intermediate dataset file,
         # otherwise create it
         makedirs(self.output_dir, exist_ok=True) 
-        self.dataset = rasterio.open(f"{self.output_dir}/{self.output_name}", "w", **self.profile)
+        self.dataset = rasterio.open(f"{self.output_dir}/{self.out_image_name}", "w", **self.profile)
         return self 
 
     def __exit__(self, exc_type, exc_val, exc_tb):

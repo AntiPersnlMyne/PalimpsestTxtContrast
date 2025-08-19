@@ -210,7 +210,7 @@ def project_block_onto_subspace(
 
 
 def compute_opci(
-    projection_matrix: np.ndarray,
+    p_matrix: np.ndarray,
     spectrum: np.ndarray
 ) -> float:
     """
@@ -233,8 +233,8 @@ def compute_opci(
     Returns:
         float: OPCI value in [0,1] (sqrt of ratio of projected energy to total energy).
     """
-    # Convert to a 1D contiguous vector in double precision for numerical stability.
-    x_vec = np.asarray(spectrum, dtype=np.float64).reshape(-1)
+    # Convert to a 1D contiguous vector 
+    x_vec = np.asarray(spectrum, dtype=np.float32).reshape(-1)
 
     # Replace NaNs/Infs with zero
     if not np.isfinite(x_vec).all():
@@ -251,8 +251,7 @@ def compute_opci(
     # =================
     # Projection Matrix
     # =================
-    # Load the projection matrix as double precision. 
-    pmat = np.asarray(projection_matrix, dtype=np.float64)
+    pmat = np.asarray(p_matrix, dtype=np.float32)
     if pmat.ndim != 2 or pmat.shape[0] != pmat.shape[1] or pmat.shape[0] != x_vec.shape[0]:
         raise ValueError(f"[compute_opci] Bad shapes: P={pmat.shape}, x={x_vec.shape}")
 
@@ -265,7 +264,7 @@ def compute_opci(
     # =================
     # Allocate y as a double vector and compute the matrix-vector product
     num_bands = x_vec.shape[0]
-    y_vec = np.empty(num_bands, dtype=np.float64)
+    y_vec = np.empty(num_bands, dtype=np.float32)
 
     # Create typed memoryviews to pass into the nogil kernel.
     cdef double_t[:, :] pmat_mv = pmat
@@ -311,4 +310,4 @@ def compute_opci(
     # =============
     # Used formula deviates slightly from original paper -> computes a ratio of squared norms; 
     # Fix: take the square root
-    return float(np.sqrt(opci_clamped))
+    return np.asarray(np.sqrt(opci_clamped), np.float32)
