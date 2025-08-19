@@ -8,8 +8,10 @@
 # --------------------------------------------------------------------------------------------
 import numpy as np
 cimport numpy as np
-from os import makedirs, join, close
+from os import makedirs
+from os.path import join
 import tempfile
+import os
 
 from osgeo import gdal
 import rasterio
@@ -42,6 +44,42 @@ WindowType = tuple[tuple[int, int], tuple[int, int]]
 ctypedef np.float32_t float_t
 ctypedef np.uint16_t uint16_t
 
+
+# --------------------------------------------------------------------------------------------
+# Helper Functions
+# --------------------------------------------------------------------------------------------
+def _build_vrt(vrt_path:str, filepaths:list[str], separate=True, allow_projection_difference=True) -> object:
+    """
+    Create a virtual raster (VRT) from a set of input raster files.
+    
+    args:
+        out_dir (str): 
+            Path to the output VRT file (filename not included).
+        input_pattern (str): 
+            Glob pattern for input raster files.
+        separate (bool): 
+            If True, stack bands separately.
+        allow_projection_difference (bool): 
+            If True, allow rasters with different projections.
+    
+    Returns:
+        object: VRT dataset object.
+    """
+    if not filepaths:
+        raise FileNotFoundError(f"[rastio] No files in filepaths")
+
+    # Build VRT options
+    vrt_options = gdal.BuildVRTOptions(
+        separate=separate,
+        allowProjectionDifference=allow_projection_difference
+    )
+
+    # Create the VRT
+    vrt = gdal.BuildVRT(vrt_path, filepaths, options=vrt_options)
+    if vrt is None:
+        raise RuntimeError("Failed to build VRT")
+
+    return vrt
 
 
 # --------------------------------------------------------------------------------------------
@@ -79,16 +117,21 @@ cdef class MultibandBlockReader:
         """
         # Check filepaths isn't empty
         assert filepaths is not None, "[rastio] MultibandBlockReader: empty file list"
-        
         self.filepaths = filepaths
-        fdir, tmp_path = tempfile.mkstemp(suffix=".vrt")
-        close(fdir)
-        self.vrt_path = tmp_path
+        
+        # Define temporary parh for VRT object
+        fd, vrt_path = tempfile.mkstemp(suffix=".vrt")
+        os.close(fd)
+        self.vrt_path = vrt_path
 
-        # Comverge rasters into "one" dataset = VRT
+        # Create VRT
+        self.vrt = _build_vrt(
+            vrt_path=self.vrt_path,
+            filepaths=filepaths
+        )
+
         try:
-            self.vrt = gdal.BuildVRT(self.vrt_path, filepaths)
-            self.dataset = gdal.Open(self.vrt)
+            self.dataset = gdal.Open(self.vrt_path)
 
             self.total_bands = self.dataset.RasterCount
             self.img_shape = (self.dataset.RasterYSize, self.dataset.RasterXSize)
@@ -146,6 +189,7 @@ cdef class MultibandBlockReader:
             int col_off     = offsets[1]
             int win_h       = win_dims[0]
             int win_w       = win_dims[1]
+            Py_ssize_t i
             np.ndarray[float_t, ndim=3] block 
             
         # Preallocate block

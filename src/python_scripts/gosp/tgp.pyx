@@ -10,12 +10,12 @@
 import numpy as np
 cimport numpy as np
 
-from dataclasses import dataclass
 from typing import List, Tuple
+from logging import warn
 
 from .math_utils import compute_orthogonal_projection_matrix, compute_opci
 from .rastio import MultibandBlockReader
-from .parallel import best_target_parallel
+from .parallel import best_target_parallel, Target
 
 
 # --------------------------------------------------------------------------------------------
@@ -35,14 +35,6 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Custom Datatypes
 # --------------------------------------------------------------------------------------------
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
-
-@dataclass
-class Target:
-    value: float
-    row: int
-    col: int
-    band_spectrum: np.ndarray  # shape=(bands,)
-
 
 
 # --------------------------------------------------------------------------------------------
@@ -116,7 +108,7 @@ def target_generation_process(
             Lower threshold (e.g. 0.001) creates more pure targets.
 
     Returns:
-        List[np.ndarray]: List of targets (t0, t1, t2, ...); 
+        List[np.ndarray]: List of targets (T0, T1, T2, ...); 
     """
     targets:List[np.ndarray] = []
     
@@ -136,8 +128,12 @@ def target_generation_process(
     # Find the first target T0 and OPCI
     # =================================
     T0 = best_target_parallel(
-        paths=generated_bands, windows=windows, p_matrix=None,
-        max_workers=max_workers, inflight=inflight, show_progress=show_progress
+        paths=generated_bands, 
+        windows=windows, 
+        p_matrix=None,
+        max_workers=max_workers, 
+        inflight=inflight, 
+        show_progress=show_progress
     )
     targets.append(T0.band_spectrum)
 
@@ -161,7 +157,9 @@ def target_generation_process(
 
         # Evaluate OPCI - checks for early stopping
         opci = compute_opci(p_matrix, best_target.band_spectrum)
-        if not np.isfinite(opci): opci = 0.0 # prevent NaN fallback to 1.0 
+        if not np.isfinite(opci): 
+            warn("[tcp] OCPI reached a value of infinity, now exiting tgp.")
+            opci = 0.0 # prevent NaN fallback to 1.0 
         
         if opci < opci_threshold:
             if show_progress: print("[TGP] opci fell below threshold, no more targets generated..")

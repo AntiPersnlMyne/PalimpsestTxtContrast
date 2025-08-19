@@ -23,17 +23,19 @@ from __future__ import annotations
 
 import os
 import importlib
-import rasterio
+from typing import Iterable, Iterator, List, Sequence, Tuple, Any, Callable
+from dataclasses import dataclass
+from tqdm import tqdm
+
 cimport numpy as np
 import numpy as np
 
 from libc.math cimport fmaxf, fminf
-
 from concurrent.futures import ProcessPoolExecutor, as_completed, Future
-from typing import Iterable, Iterator, List, Sequence, Tuple, Protocol, Any, Callable
-from tqdm import tqdm
+
+import rasterio
 from rasterio.windows import Window
-from dataclasses import dataclass
+
 
 from .rastio import MultibandBlockReader
 from .math_utils import project_block_onto_subspace, block_l2_norms
@@ -59,6 +61,12 @@ for _var in ("OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS", "
 ctypedef np.float32_t float_t
 WindowType = Tuple[Tuple, Tuple] # ((row_off, col_off), (height, width))
 
+@dataclass
+class Target:
+    value: float
+    row: int
+    col: int
+    band_spectrum: np.ndarray  # shape=(bands,)
 
 # --------------------------------------------------------------------------------------
 # Helper functions
@@ -630,7 +638,7 @@ def submit_streaming(
     prog_bar_label:str = "stream",
     prog_bar_color:str = "WHITE",
     show_progress:bool = False
-    ) -> None:
+) -> None:
     """
     Function parallelizes tasks in a streaming fashion between cores with python's multiprocessing lbirary.
     It avoids loading all data into memory at once by submitting tasks to a 
@@ -665,7 +673,7 @@ def submit_streaming(
         initargs=initargs
     ) as exec:
         # "todo" list of all future tasks
-        pending:set[Future] = set()
+        pending = set()
         # Prevent inflight from being negative
         target_inflight = max(1, (max_workers or 1) * max(1, inflight))
 
@@ -689,9 +697,8 @@ def submit_streaming(
                 result = done.result() 
                 
                 # Give results to consumer to write to disc
-                consumer(result)
-                
                 # Update progress bar with +1 task completed
+                consumer(result)
                 if prog_bar is not None: 
                     prog_bar.update(1)
                 

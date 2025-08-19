@@ -11,6 +11,17 @@ __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Development", or "Production". 
 
+# ---------------
+# Useful commands
+# ---------------
+"""
+// Sets number of avaliable threads from 1 to 8 for multithreading
+OMP_NUM_THREADS=8 python src/main.py
+
+// Compile Cython files
+python setup.py build_ext --inplace
+"""
+
 
 # --------------------------------------------------------------------------------------------
 # Imports
@@ -26,12 +37,12 @@ from time import time
 def main():
     # CLAHE
     start = time()
-    from python_scripts.gosp import test
-    test.test_read_write_roundtrip("", 3, 100,100)
-    # gosp(
-        # input_dir="data/input/test",
-        # output_dir="data/output"
-    # )
+
+    gosp(
+        input_dir="data/input/test",
+        output_dir="data/output"
+    )
+    
     # gosp(
     #     # Input information
     #     input_dir="data/input/arch177_rgb_365cor_lum",   
