@@ -1,59 +1,79 @@
 #!/usr/bin/env python3
 
-"""skip_bgp.py: Allows user to skip the BGP (i.e. skipping the g in gosp, to the ("ATDCA") ) to only process input files"""
+"""
+skip_bgp.pyx: Allows user to skip the BGP to only process input files (Cythonized).
+This module preserves the original API but uses typed variables and memoryviews
+where appropriate for efficiency.
+"""
 
-# --------------------------------------------------------------------------------------------
-# Imports
-# --------------------------------------------------------------------------------------------
 from __future__ import annotations
 import numpy as np
-import rasterio
-from concurrent.futures import ProcessPoolExecutor, as_completed, Future
+cimport numpy as cnp
 from typing import List, Tuple, Iterable, Any, Sequence
+from concurrent.futures import ProcessPoolExecutor, as_completed, Future
 from tqdm import tqdm
+import rasterio
 
+# Local imports (Python-level)
 from .rastio import MultibandBlockReader, MultibandBlockWriter
+from libc.stdint cimport intptr_t
 
+# NumPy typedefs for memoryviews
+cnp.import_array()
+ctypedef cnp.float32_t float32_t
+
+# Re-exported type alias
 WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
 
-
-# --------------------------------------------------------------------------------------------
-# Authorship Information
-# --------------------------------------------------------------------------------------------
-__author__ = "Gian-Mateo (GM) Tifone"
-__copyright__ = "2025, RIT MISHA"
-__credits__ = ["Gian-Mateo Tifone"]
-__license__ = "MIT"
-__version__ = "3.1.0"
-__maintainer__ = "MISHA Team"
-__email__ = "mt9485@rit.edu"
-__status__ = "Development" # "Prototype", "Development", "Production"
-
-
-
-# Worker state
-_pt_state: dict[str, Any] = {
+# Worker state (module-level; each process will set its own via initializer)
+_pt_state: dict = {
     "reader": None,
     "dtype": np.float32,
 }
 
 
-def _init_pt_worker(paths: List[str], dtype: str) -> None:
+def _init_pt_worker(paths: List[str], dtype_name: str) -> None:
+    """
+    Initializer for worker processes: open a MultibandBlockReader and store dtype.
+    Kept as a Python function for picklability by ProcessPoolExecutor.
+    """
+    # store a reader instance in module-level state for worker
     _pt_state["reader"] = MultibandBlockReader(list(paths))
-    _pt_state["dtype"] = np.dtype(dtype)
+    _pt_state["dtype"] = np.dtype(dtype_name)
 
 
 def _read_original_chunk(windows_chunk: List[WindowType]) -> List[Tuple[WindowType, np.ndarray]]:
-    reader:MultibandBlockReader = _pt_state["reader"]  # type: ignore
-    out_dtype:np.dtype = _pt_state["dtype"]            # type: ignore
-    band_stack:List[Tuple[WindowType, np.ndarray]] = []
+    """
+    Worker: read the original multiband blocks for a chunk of windows.
+    Returns list of (window, block) where block is a numpy.ndarray dtype `out_dtype`.
+    """
+    # Access worker-global variables (set in _init_pt_worker)
+    reader = _pt_state["reader"]  # type: ignore
+    out_dtype = _pt_state["dtype"]  # type: ignore
+
+    results: List[Tuple[WindowType, np.ndarray]] = []
+    # Local references to accelerate attribute lookup
+    read_multiband_block = reader.read_multiband_block
+
     for window in windows_chunk:
-        block = reader.read_multiband_block(window).astype(out_dtype, copy=False)
-        band_stack.append((window, block))
-    return band_stack
+        # Read directly as float32 contiguous (reader already returns float32 contiguous arrays)
+        block = read_multiband_block(window)
+        # Ensure dtype matches requested output dtype without unnecessary copy
+        if block.dtype != out_dtype:
+            block = block.astype(out_dtype, copy=False)
+        else:
+            # Guarantee contiguous (should be, but be defensive)
+            if not block.flags['C_CONTIGUOUS']:
+                block = np.ascontiguousarray(block)
+        results.append((window, block))
+    return results
 
 
 def _chunked(iterable: Iterable[Any], size: int) -> Iterable[List[Any]]:
+    """
+    Yield lists of up to `size` items from `iterable`.
+    Kept Pythonic for clarity; this is not a hot path relative to numeric work.
+    """
     it = iter(iterable)
     while True:
         chunk: List[Any] = []
@@ -68,16 +88,24 @@ def _chunked(iterable: Iterable[Any], size: int) -> Iterable[List[Any]]:
 
 
 def _build_windows(src_h: int, src_w: int, win_h: int, win_w: int) -> List[WindowType]:
+    """
+    Build window list from source image dims and window dims.
+    Implemented with typed local ints for speed.
+    """
+    cdef int r, c
     windows: List[WindowType] = []
     for r in range(0, src_h, win_h):
         for c in range(0, src_w, win_w):
-            h = min(win_h, src_h - r)
-            w = min(win_w, src_w - c)
+            h = win_h if win_h <= (src_h - r) else (src_h - r)
+            w = win_w if win_w <= (src_w - c) else (src_w - c)
             windows.append(((r, c), (h, w)))
     return windows
 
 
 def _total_band_count(paths: Sequence[str]) -> int:
+    """
+    Count total number of bands across a list of raster files.
+    """
     total = 0
     for p in paths:
         with rasterio.open(p, "r") as s:
@@ -92,7 +120,7 @@ def write_original_multiband(
     input_image_paths: List[str],
     output_dir: str,
     window_shape: Tuple[int, int] = (512, 512),
-    output_dtype:... = np.float32,
+    output_dtype: Any = np.float32,
     max_workers: int | None = None,
     inflight: int = 2,
     chunk_size: int = 4,
@@ -127,33 +155,40 @@ def write_original_multiband(
     show_progress (bool):
         Display progress bars.
     """
-    if not input_image_paths: raise ValueError("[skipBGP] Empty input list")
+    if not input_image_paths:
+        raise ValueError("[skipBGP] Empty input list")
 
-    # Shape & band count
+    # Setup reader to discover shape
     reader = MultibandBlockReader(input_image_paths)
-    src_height, src_width = reader.image_shape()
+    try:
+        src_height, src_width = reader.image_shape()
+    finally:
+        # we don't close reader here because worker processes re-open their own readers;
+        # keep local reader live only for geometry extraction
+        pass
+
     num_bands = _total_band_count(input_image_paths)
 
-    # Dtype
-    out_dtype = np.dtype(output_dtype) 
+    # Output dtype as numpy dtype (stable name for passing to workers)
+    out_dtype = np.dtype(output_dtype)
 
-    # Windows
+    # Prepare windows and chunks
     win_height, win_width = window_shape
     windows = _build_windows(src_height, src_width, win_height, win_width)
     chunks = list(_chunked(windows, chunk_size))
 
-    # Writer
+    # Create writer and stream writes
+    output_name = "gen_band_norm.tif"  # preserved name for compatibility
     with MultibandBlockWriter(
         output_dir=output_dir,
         output_image_shape=(src_height, src_width),
-        output_image_name="gen_band_norm.tif", # Keeps it consistent with BGP; yes this is bad practice
+        output_image_name=output_name,
         window_shape=window_shape,
         output_datatype=out_dtype,
         num_bands=num_bands,
     ) as writer:
 
-        # If exactly one multiband input, optional fast path via rasterio copy is possible,
-        # but currently keeping streaming for consistent tiling/profile from MultibandBlockWriter.
+        # Launch worker pool: each worker will run _init_pt_worker to create its own reader
         with ProcessPoolExecutor(
             max_workers=max_workers,
             initializer=_init_pt_worker,
@@ -163,6 +198,7 @@ def write_original_multiband(
             target_inflight = max(1, (max_workers or 1) * max(1, inflight))
 
             chunk_iter = iter(chunks)
+            # Submit initially up to target_inflight tasks
             for _ in range(target_inflight):
                 try:
                     chunk = next(chunk_iter)
@@ -177,22 +213,34 @@ def write_original_multiband(
                     done = next(as_completed(pending))
                     pending.remove(done)
                     results = done.result()  # list[(window, block)]
+
                     for window, block in results:
-                        # safety: ensure band axis matches writer count
+                        # Safety: ensure band axis matches writer count
                         if block.shape[0] != num_bands:
                             raise RuntimeError(f"[passthrough] Band count drift: got {block.shape[0]}, expected {num_bands}")
+
+                        # Ensure contiguous float32 before writing
+                        if block.dtype != np.float32 or not block.flags['C_CONTIGUOUS']:
+                            # Convert in parent process to avoid sending non-contiguous arrays to rasterio
+                            block = np.ascontiguousarray(block, dtype=np.float32)
+
                         writer.write_block(window=window, block=block)
-                        
-                        if prog_bar is not None: prog_bar.update(1)
-                    
-                    try: chunk = next(chunk_iter)
-                    except StopIteration: chunk = None
-                    
-                    if chunk is not None: pending.add(ex.submit(_read_original_chunk, chunk))
-                    
-                    
+
+                        if prog_bar is not None:
+                            prog_bar.update(1)
+
+                    # Submit next chunk if available
+                    try:
+                        chunk = next(chunk_iter)
+                    except StopIteration:
+                        chunk = None
+
+                    if chunk is not None:
+                        pending.add(ex.submit(_read_original_chunk, chunk))
+
             finally:
-                if prog_bar is not None: prog_bar.close()
+                if prog_bar is not None:
+                    prog_bar.close()
 
 
 def copy_single_multiband_fast(src_path: str, dst_path: str) -> None:

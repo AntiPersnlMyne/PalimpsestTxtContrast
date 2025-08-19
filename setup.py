@@ -15,10 +15,12 @@ pyx_files = [
 ]
 
 cython_directives = {
-    "boundscheck": False,
-    "wraparound":  False,
-    "nonecheck":   False,
-    "language_level": 3
+    "language_level": 3,  # python3
+    "boundscheck": False, # `IndexError``
+    "wraparound":  False, # [-1]
+    # "nonecheck":   False, # something, idk
+    "cdivision": True     # `ZeroDivisionError` and /
+    # "initializedcheck": False
 }
 
 extensions = cythonize(
@@ -31,7 +33,7 @@ extensions = cythonize(
 
 setup(
     name="gosp",
-    version="1.1",
+    version="1.2",
     packages=["gosp"],
     package_dir={"gosp": "src/python_scripts/gosp"},
     ext_modules=extensions
