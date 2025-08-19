@@ -11,4 +11,3 @@
 # Cython build files
 build
 **/*.c
-**/*.so

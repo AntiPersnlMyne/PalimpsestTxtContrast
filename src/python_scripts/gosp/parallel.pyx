@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# distutils: language=c
 
 """parallel.py: Parallelization ("multiprocessing") wrapper API. 
 
@@ -45,7 +46,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.1" 
+__version__ = "3.1.2" 
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development"  # "Prototype", "Development", "Production"
@@ -86,7 +87,7 @@ cdef inline float _clampf(const float x) nogil:
     return fminf(1.0, fmaxf(0.0, x)) 
 
 
-cdef void _bandwise_minmax( 
+cdef int _bandwise_minmax( 
     float_t[:, :, :] band_data, 
     float_t[:] out_mins, 
     float_t[:] out_maxs, 
@@ -113,7 +114,7 @@ cdef void _bandwise_minmax(
                     out_maxs[b] = px_val 
 
 
-cdef void _normalize_inplace(
+cdef int _normalize_inplace(
     float_t[:, :, :] block, 
     const float_t[:] mins, 
     const float_t[:] denom
@@ -134,24 +135,23 @@ cdef void _normalize_inplace(
                 block[b, row, col] = _clampf(px_val) 
                 
 
-cdef void _argmax_l2_norms(
+cdef int _argmax_l2_norms(
     float_t[:, :, :] block,
-    Py_ssize_t width, 
     float_t* out_max_val, 
     Py_ssize_t* out_flat_idx, 
 ) nogil:
     cdef:
-        Py_ssize_t band = block.shape[0] 
+        Py_ssize_t bands = block.shape[0] 
         Py_ssize_t height = block.shape[1] 
         Py_ssize_t width = block.shape[2] 
         Py_ssize_t b, row, col 
-        float_t acc, best = -np.inf 
+        float_t acc, best = -1e300 # cannot -np.inf without GIL
         Py_ssize_t best_idx = 0, idx = 0 
     
     for row in range(height): 
         for col in range(width): 
             acc = 0.0 
-            for i in range(b): 
+            for b in range(bands): 
                 acc += block[b, row, col] * block[b, row, col] 
             if acc > best: 
                 best = acc 
@@ -209,24 +209,33 @@ def _generate_windows_chunk(
     windows_chunk: List[tuple]
 ) -> List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]]:
     """Worker: read inputs, create synthetic bands for a chunk of windows."""
+    
     # Get worker varaibles
     reader = _gen_state["reader"]
     full_synthetic = _gen_state["full_synthetic"]
     bands_fn = _gen_state["bands_fn"]
 
-    # Generate bandstack
+    # Instantiate output and mv
     band_stack:List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]] = []
+    cdef float_t[:, :, :] nb_mv
+    cdef np.ndarray mins_np 
+    cdef np.ndarray maxs_np
+
+    # Generate bandstack
     for window in windows_chunk:
+        
         # Generate new bands
         block = reader.read_multiband_block(window).astype(np.float32)
         new_bands = bands_fn(block, full_synthetic).astype(np.float32)
+        
         # Compute per-band mins/max
-        cdef float_t[:, :, :] mv = new_bands 
-        cdef np.ndarray mins_np = np.empty(mv.shape[0], dtype=np.float32) 
-        cdef np.ndarray maxs_np = np.empty(mv.shape[0], dtype=np.float32) 
+        nb_mv = new_bands 
+        mins_np = np.empty(nb_mv.shape[0], dtype=np.float32) 
+        maxs_np = np.empty(nb_mv.shape[0], dtype=np.float32) 
+
         # Compute min/max in noGIL, keep it on otherwise
         with nogil:  
-            _bandwise_minmax(mv, mins_np, maxs_np) 
+            _bandwise_minmax(nb_mv, mins_np, maxs_np) 
         band_stack.append((window, new_bands, mins_np, maxs_np))
     
     return band_stack
@@ -374,16 +383,21 @@ def _normalize_windows_chunk(
     denom = np.maximum(maxs - mins, 1e-8).astype(np.float32) # 1e-8 prevent div 0
     output:List[Tuple[WindowType, np.ndarray]] = []
 
+    # Memory views
+    cdef np.float32_t[:, :, :] block_mv 
+    cdef np.float32_t[:] mins_mv
+    cdef np.float32_t[:] denom_mv 
+
     for window in windows_chunk:
         # Read block from window
         (row_off, col_off), (win_height, win_width) = window
         block = src.read(window=Window(col_off, row_off, win_width, win_height)).astype(np.float32)
         # Cythonized in-place normalization + clamp
-        cdef np.float32_t[:, :, :] mv = block
-        cdef np.float32_t[:] mins_mv = mins
-        cdef np.float32_t[:] denom_mv = denom
+        block_mv = block
+        mins_mv = mins
+        denom_mv = denom
         with nogil:
-            _normalize_inplace(mv, mins_mv, denom_mv)
+            _normalize_inplace(block_mv, mins_mv, denom_mv)
 
         output.append((window, block))
 
@@ -539,7 +553,7 @@ def _scan_window(window: WindowType) -> Tuple[float_t, int, int, np.ndarray]:
     cdef float_t max_px_val
     cdef Py_ssize_t max_px_idx
     with nogil:
-        _argmax_l2_norms(mv, mv.shape[2], &max_px_val, &max_px_idx)
+        _argmax_l2_norms(mv, &max_px_val, &max_px_idx)
 
     block_row, block_col = divmod(int(max_px_idx), int(win_width))
 

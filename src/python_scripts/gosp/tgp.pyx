@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# distutils: language=c
 
 """tgp.py: Target Generation Process. Automatically creates N most significant targets in target detection for pixel classification"""
 

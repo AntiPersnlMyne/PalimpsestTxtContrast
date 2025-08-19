@@ -1,6 +1,5 @@
+#!/usr/bin/env python3
 # distutils: language = c
-# cython: boundscheck=False, wraparound=False, nonecheck=False
-
 
 """bgp.py: Band Generation Process, creates new non-linear bondinations of existing bands"""
 
@@ -25,7 +24,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.4"
+__version__ = "3.1.5"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -66,7 +65,7 @@ cdef void _create_bands_from_block_kernel(
     float_t[:, :, :] src_mv,        # (bands, height, width)
     float_t[:, :, :] bandstack_mv,        # (total_bands, h, w) preallocated
     bint full_synthetic
-) nogil:
+) noexcept nogil:
     """
     Fill bandstack_mv with generated bands.
     + auto- and cross-correlation
@@ -79,6 +78,8 @@ cdef void _create_bands_from_block_kernel(
 
         psize_t dst_idx = 0
         psize_t b, row, col, i, j
+
+        float_t val
 
     # ==============
     # Original Bands
@@ -144,7 +145,7 @@ def _create_bands_from_block(image_block:np.ndarray, full_synthetic:bool):
       ndarray: band_stack=(total_bands, height, width) ; dtype=float32
     """
     if image_block.ndim != 3:
-        raise ValueError(f"[BGP] image_block must be 3D (bands,h,w); got shape {image_block.shape}")
+        raise ValueError(f"[BGP] image_block must be 3D (bands,h,w); got shape {(image_block[0], image_block[1])}")
 
     # Ensure float32 and contiguous layout (no copies if already correct)
     if image_block.dtype != np.float32 or not image_block.flags['C_CONTIGUOUS']:
@@ -157,8 +158,11 @@ def _create_bands_from_block(image_block:np.ndarray, full_synthetic:bool):
     height = src.shape[1]
     width  = src.shape[2]
 
+    # Convert bool to bint
+    cdef bint full_syn = full_synthetic
+
     # Calculat output (#bands) size
-    tot_num_bands = _expected_total_bands_cy(bands, full_synthetic)
+    tot_num_bands = _expected_total_bands_cy(bands, full_syn)
 
     # Preallocate output array (float32)
     band_stack = np.empty((tot_num_bands, height, width), dtype=np.float32)
@@ -169,7 +173,7 @@ def _create_bands_from_block(image_block:np.ndarray, full_synthetic:bool):
 
     # noGIL kernel to create band_stack
     with nogil:
-        _create_bands_from_block_kernel(src_mv, bs_mv, full_synthetic)
+        _create_bands_from_block_kernel(src_mv, bs_mv, full_syn)
 
     return band_stack
 
@@ -236,8 +240,12 @@ def band_generation_process(
     # tiny_block is (bands,1,1); convert to float32 contiguous
     if tiny_block.dtype != np.float32 or not tiny_block.flags['C_CONTIGUOUS']:
         tiny_block = np.ascontiguousarray(tiny_block, dtype=np.float32)
+
+    # Convert bool to bint
+    cdef bint full_syn = full_synthetic
+    
     # Create bands to test output (#-bands) size
-    sample_output = _create_bands_from_block(tiny_block, full_synthetic)
+    sample_output = _create_bands_from_block(tiny_block, full_syn)
     num_output_bands = int(sample_output.shape[0])
     # free temporaries
     del tiny_block, sample_output

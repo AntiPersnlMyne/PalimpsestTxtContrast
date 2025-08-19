@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# distutils: language=c
 
 """math_utils.py: Linear algebra, matrix, and calculus helper functions"""
 
@@ -19,7 +20,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.0"
+__version__ = "3.1.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Production" # "Prototype", "Development", "Production"
@@ -49,7 +50,7 @@ cdef extern from *:
 # --------------------------------------------------------------------------------------------
 # Helper C kernels
 # --------------------------------------------------------------------------------------------
-cdef void _block_l2_kernel(
+cdef int _block_l2_kernel(
     float_t[:, :, :] block_mv, 
     float_t[:, :] out_mv
 ) nogil:
@@ -72,7 +73,7 @@ cdef void _block_l2_kernel(
             out_mv[row, col] = <float_t> csqrt(acc)
 
 
-cdef void _matvec_quad_form_double(
+cdef int _matvec_quad_form_double(
     double_t[:, :] pmat_mv, 
     double_t[:] x_mv,
     double_t[:] y_mv
@@ -112,8 +113,10 @@ def block_l2_norms(block:np.ndarray) -> np.ndarray:
     if block.dtype != np.float32 or not block.flags['C_CONTIGUOUS']:
         block = np.ascontiguousarray(block, dtype=np.float32)
 
-    _, h, w = block.shape
-    norms = np.empty((h, w), dtype=np.float32)
+    cdef height = block.shape[1]
+    cdef width  = block.shape[2]
+    
+    norms = np.empty((height, width), dtype=np.float32)
 
     # Obtain typed memoryviews and call nogil kernel
     cdef float_t[:, :, :] block_mv = block
@@ -181,7 +184,9 @@ def project_block_onto_subspace(
 
     if block.ndim != 3: raise ValueError("block must be 3D (bands, h, w)")
 
-    bands, height, width = block.shape
+    cdef int bands  = block.shape[0]
+    cdef int height = block[1]
+    cdef int width  = block[2]
 
     # Enforce block float32 contiguous 
     if block.dtype != np.float32 or not block.flags['C_CONTIGUOUS']:
@@ -193,7 +198,7 @@ def project_block_onto_subspace(
     # Force projection matrix to float32 and symmetrize
     pmat = np.asarray(projection_matrix, dtype=np.float32)
     if pmat.shape != (bands, bands):
-        raise ValueError(f"[project_block_onto_subspace] Bad shapes: P{pmat.shape}, block{block.shape}")
+        raise ValueError(f"[project_block_onto_subspace] Bad shapes: P{pmat.shape}, block{(block.shape[0], block.shape[1])}")
 
     pmat = 0.5 * (pmat + pmat.T)
 

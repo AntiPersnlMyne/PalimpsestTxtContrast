@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# distutils: language=c
 
 """tcp.py: Target Classification Process. Automatically classified pixels into one of N classes found by tgp.py."""
 
@@ -57,10 +58,10 @@ def _init_tcp_worker(paths:Sequence[str], targets:np.ndarray, Pk:np.ndarray) -> 
 
 
 
-cdef inline void _compute_scores_inner(
-    double[:, :, :] proj_mv,           # (bands, h, w)
-    const double[:] targ_mv,           # (bands,)
-    double[:, :, :] out_mv             # (h, w) mapped as out_mv[target, row, col] in caller ordering
+cdef inline int _compute_scores_inner(
+    float_t[:, :, :] proj_mv,           # (bands, h, w)
+    const float_t[:] targ_mv,           # (bands,)
+    float_t[:, :] out_mv                # (h, w) 
 ) nogil:
     """
     Compute dot(targets[k], proj[:, r, c]) for each pixel (r,c) and store into out_mv.
@@ -72,7 +73,7 @@ cdef inline void _compute_scores_inner(
     targ_mv (const float64):
         Memory view of targets (to be classified)
     out_mv (float64):
-        Memory view of 
+        Memory view of output slice (height,width)
     
     """
     cdef:
@@ -108,21 +109,26 @@ def _tcp_window(window: WindowType) -> Tuple[WindowType, np.ndarray]:
     block = reader.read_multiband_block(window).astype(np.float32, copy=False)
     (_, _), (win_height, win_width) = window
 
-    # Prepare shapes
-    k_targets, _ = targets.shape
     # Preallocate scores: shape (K, h, w)
+    k_targets = targets.shape[0]
     scores = np.empty((k_targets, win_height, win_width), dtype=np.float32)
 
-    # Ensure targets are contiguous ; memoryview for fast access in nogil loops
+    # Ensure targets and block are contiguous ; memoryview for fast access in nogil loops
     if not targets.flags['C_CONTIGUOUS']:
         targets = np.ascontiguousarray(targets, dtype=np.float32)
-    cdef float_t[:, :] targets_mv = targets  # (K, B)
 
-    # Ensure block is contiguous
+    cdef float_t[:, :] targets_mv = targets  # (K, B)
     if not block.flags['C_CONTIGUOUS']:
         block = np.ascontiguousarray(block, dtype=np.float32)
 
-    # For each target, compute projected block (if needed) and then per-pixel dot product
+    # Create memoryviews
+    # targets_mv[k] is a 1D view; cast to contiguous float[:] for nogil
+    # 2D view for the output slice (h, w)
+    cdef float_t[:, :, :] proj_mv 
+    cdef float_t[:] targ_mv
+    cdef float_t[:, :] out_mv
+
+    # For each target, compute projected block and then per-pixel dot product
     cdef Py_ssize_t k
     for k in range(k_targets):
         # If only one target, projecting out nothing saves a call; keep same semantics
@@ -136,12 +142,9 @@ def _tcp_window(window: WindowType) -> Tuple[WindowType, np.ndarray]:
         if not proj_block.flags['C_CONTIGUOUS'] or proj_block.dtype != np.float32:
             proj_block = np.ascontiguousarray(proj_block, dtype=np.float32)
 
-        # Create memoryviews for nogil kernel
-        cdef float_t[:, :, :] proj_mv = proj_block
-        # Note: targets_mv[k] is a 1D view; cast to contiguous float[:] for nogil
-        cdef float_t[:] targ_mv = targets_mv[k]
-        # Prepare a 2D view for the output slice (h, w)
-        cdef float_t[:, :] out_mv = scores[k]
+        proj_mv = proj_block
+        targ_mv = targets_mv[k]
+        out_mv = scores[k]
 
         # Call the inner C kernel without the GIL
         with nogil:

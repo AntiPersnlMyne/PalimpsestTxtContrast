@@ -2,7 +2,7 @@
 
 set -e  # Exit on error
 
-echo "(Optional) Create a virtual environment with Python 3.12 and install required libraries."
+echo "(Optional) Create a virtual environment with Python 3.13.x and install required libraries."
 echo "Type y/yes to proceed, or anything else to only install libraries system-wide."
 read -p "Would you like to create a virtual environment? (y/yes): " create_venv
 
@@ -57,6 +57,8 @@ else
         echo "requirements.txt not found. Skipping package installation."
     fi
 fi
+
+
 
 echo "Cleaning up setup files..."
 rm -f setup.sh

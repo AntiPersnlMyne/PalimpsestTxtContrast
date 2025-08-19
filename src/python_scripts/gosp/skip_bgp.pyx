@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# distutils: language=c
 
 """
 skip_bgp.pyx: Allows user to skip the BGP to only process input files (Cythonized).

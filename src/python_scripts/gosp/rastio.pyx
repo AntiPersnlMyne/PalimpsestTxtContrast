@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# distutils: language=c
 
 """rastio.py: Handles I/O of raster data"""
 
@@ -23,7 +24,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.3"
+__version__ = "3.1.4"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -238,7 +239,7 @@ cdef class MultibandBlockWriter:
     def write_block(
         self, 
         tuple window, 
-        np.ndarray[output_datatype, ndim=3] block
+        np.ndarray[float_t, ndim=3] block
     ):
         """
         Write block of data to dataset
@@ -270,7 +271,7 @@ cdef class MultibandBlockWriter:
 
         # Check dims and dataset
         if block_mv.shape[0] != self.num_bands or block_mv.shape[1] != win_h or block_mv.shape[2] != win_w:
-            raise ValueError(f"[rastio] Shape mismatch: got {block.shape} vs expected ({self.num_bands}, {win_h}, {win_w})")
+            raise ValueError(f"[rastio] Shape mismatch: got {(block_mv.shape[0],block_mv.shape[1],block_mv.shape[2])} vs expected ({self.num_bands}, {win_h}, {win_w})")
         if not self.dataset:
             raise RuntimeError("[rastio] Attempted to write but dataset is not initialized")
         

@@ -2,7 +2,6 @@
 setlocal enabledelayedexpansion
 
 :: Prompt user for virtual environment creation
-echo This project only works with Python versions 3.12.7 and below.
 echo (Optional) Create a virtual environment with compatible python version and necessary libraries.
 echo Type y/yes to proceed, or n/no to only install libraries.
 set /p create_venv="Would you like to create a virtual environment? (y/yes): "
