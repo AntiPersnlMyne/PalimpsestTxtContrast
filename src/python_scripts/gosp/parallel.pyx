@@ -217,9 +217,12 @@ def _generate_windows_chunk(
 
     # Instantiate output and mv
     band_stack:List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]] = []
-    cdef float_t[:, :, :] nb_mv
-    cdef np.ndarray mins_np 
-    cdef np.ndarray maxs_np
+    cdef:
+        float_t[:, :, :] nb_mv
+        np.ndarray[float_t] mins_np 
+        np.ndarray[float_t] maxs_np
+        float_t[:] mins_mv
+        float_t[:] maxs_mv
 
     # Generate bandstack
     for window in windows_chunk:
@@ -232,10 +235,14 @@ def _generate_windows_chunk(
         nb_mv = new_bands 
         mins_np = np.empty(nb_mv.shape[0], dtype=np.float32) 
         maxs_np = np.empty(nb_mv.shape[0], dtype=np.float32) 
+        # Pass numpy (np) to C-level before entering noGIL
+        mins_mv = mins_np
+        maxs_mv = maxs_np
 
         # Compute min/max in noGIL, keep it on otherwise
         with nogil:  
-            _bandwise_minmax(nb_mv, mins_np, maxs_np) 
+            _bandwise_minmax(nb_mv, mins_mv, maxs_mv) 
+
         band_stack.append((window, new_bands, mins_np, maxs_np))
     
     return band_stack
