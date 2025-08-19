@@ -23,7 +23,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.2"
+__version__ = "3.1.3"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -129,23 +129,25 @@ cdef class MultibandBlockReader:
             int win_w       = win_dims[1]
 
             # Block: (bands, rows, cols)
-            np.ndarray[float_t, ndim=3] block = np.empty(
-                (self.total_bands, win_h, win_w), dtype=np.float32, order="C"
-            )
+            np.ndarray[float_t, ndim=3] block 
+            
+        # Preallocate block
+        block = np.empty((self.total_bands, win_h, win_w), dtype=np.float32, order="C")
         
-        
-        # Preallocate output array
-        # C-order permutes bands as contiguous in memory ; shape={bands,height,width}
-        block_stack = np.empty((self.total_bands, win_h, win_w), dtype=float_t, order="C")
+       
 
         # ============================================================================================
         # Read & Return Multiband Block
         # ============================================================================================
-        # Read directly into block
-        data = self.vrt.read(window=Window(col_off, row_off, win_w, win_h), out=block)
-        if data.shape[0] != self.total_bands:
+        # Read directly into preallocated block
+        self.vrt.read(window=Window(col_off, row_off, win_w, win_h), out=block)
+        
+        if block.shape[0] != self.total_bands:
             raise RuntimeError("[rastio] Band count mismatch after reading window")
 
+        # Create a typed memoryview
+        cdef float_t[:, :, :] block_mv = block
+        
         return block
 
 
@@ -259,9 +261,16 @@ cdef class MultibandBlockWriter:
         # ==============
         # Shape Checking
         # ==============
-        expected_shape = (self.num_bands, win_h, win_w)
-        if block.shape != expected_shape:
-            raise ValueError(f"[rastio] Shape mismatch: got {block.shape} vs expected: {expected_shape}")
+        if block.dtype != np.float32 or not block.flags['C_CONTIGUOUS']:
+            # Ensure correct dtype and contiguous
+            block = np.ascontiguousarray(block, dtype=np.float32)
+
+        # Create memoryview
+        cdef float_t[:, :, :] block_mv = block
+
+        # Check dims and dataset
+        if block_mv.shape[0] != self.num_bands or block_mv.shape[1] != win_h or block_mv.shape[2] != win_w:
+            raise ValueError(f"[rastio] Shape mismatch: got {block.shape} vs expected ({self.num_bands}, {win_h}, {win_w})")
         if not self.dataset:
             raise RuntimeError("[rastio] Attempted to write but dataset is not initialized")
         
