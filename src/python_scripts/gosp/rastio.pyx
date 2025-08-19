@@ -9,7 +9,7 @@
 import numpy as np
 cimport numpy as np
 from osgeo import gdal
-from os import makedirs
+from os import makedirs, join
 
 import rasterio
 from rasterio.windows import Window
@@ -189,43 +189,45 @@ cdef class MultibandBlockWriter:
     
     def __cinit__(
         self, 
-        str out_dir, 
-        tuple out_image_shape, 
-        str out_image_name, 
-        tuple win_shape, 
-        object out_datatype,
+        str output_dir, 
+        tuple output_image_shape, 
+        str output_image_name, 
+        tuple window_shape, 
+        object output_datatype,
         int num_bands,
     ):
-        self.out_dir         = out_dir
-        self.out_image_shape = out_image_shape
-        self.out_image_name  = out_image_name
-        self.win_shape       = win_shape
-        self.out_datatype    = out_datatype
+        self.out_dir         = output_dir
+        self.out_image_shape = output_image_shape
+        self.out_image_name  = output_image_name
+        self.win_shape       = window_shape
+        self.out_datatype    = output_datatype
         self.num_bands       = num_bands
         self.dataset         = None
         self.profile         = {}
 
 
     def __enter__(self):      
+        # Build rasterio profile using the attributes set above
         self.profile = {
-            # GTFF (BIGTIFF) supports 4+ GB TIFF files
-            "driver": "GTiff", 
-            "height": self.out_image_shape[0],
-            "width": self.out_image_shape[1],
-            "count": self.num_bands, 
-            "dtype": self.out_datatype,
+            "driver": "GTiff",
+            "height": int(self.out_image_shape[0]),
+            "width": int(self.out_image_shape[1]),
+            "count": int(self.num_bands),
+            # rasterio expects np.dtype or string
+            "dtype": self.out_datatype if isinstance(self.out_datatype, np.dtype) else np.dtype(self.out_datatype).name,
             "tiled": True,
-            "blockxsize": self.win_shape[1], 
-            "blockysize": self.win_shape[0],
+            "blockxsize": int(self.win_shape[1]),
+            "blockysize": int(self.win_shape[0]),
             "interleave": "band",
             "BIGTIFF": "YES",
-            "compress": None, # Optional: replace with "ZSTD"
+            "compress": None,
         }
 
         # Check for valid output path for intermediate dataset file,
         # otherwise create it
-        makedirs(self.output_dir, exist_ok=True) 
-        self.dataset = rasterio.open(f"{self.output_dir}/{self.out_image_name}", "w", **self.profile)
+        makedirs(self.out_dir, exist_ok=True) 
+        out_path = join(self.out_dir, self.out_image_name)
+        self.dataset = rasterio.open(out_path, "w", **self.profile)
         return self 
 
     def __exit__(self, exc_type, exc_val, exc_tb):
