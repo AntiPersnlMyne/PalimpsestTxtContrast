@@ -25,7 +25,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.3"
+__version__ = "3.1.4"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -167,7 +167,7 @@ def _create_bands_from_block(image_block:np.ndarray, full_synthetic:bool):
     cdef float_t[:, :, :] src_mv = src
     cdef float_t[:, :, :] bs_mv = band_stack
 
-    # noGIL kernel to fill band_stack
+    # noGIL kernel to create band_stack
     with nogil:
         _create_bands_from_block_kernel(src_mv, bs_mv, full_synthetic)
 
@@ -175,21 +175,27 @@ def _create_bands_from_block(image_block:np.ndarray, full_synthetic:bool):
 
 
 # --------------------------------------------------------------------------------------------
-# Band Generation Process (BGP)
+# Band Generation Process (BGP, Python callable)
 # --------------------------------------------------------------------------------------------
-cpdef None band_generation_process(
+def band_generation_process(
     List[str] input_image_paths,
     str output_dir,
-    Tuple[uint16_t,uint16_t] window_shape,
+    Tuple[int, int] window_shape,
     bint full_synthetic,
-    uint16_t max_workers,
-    uint16_t chunk_size,
-    uint16_t inflight,
+    int max_workers,
+    int chunk_size,
+    int inflight,
     bint show_progress
-    ):
+):
     """
     The Band Generation Process. Generates synthetic, non-linear bands as combinations of existing bands. 
     Output is normalized range [0,1] per band.
+
+    Overview:
+      - Scans input to determine image shape / number of output bands.
+      - Runs Pass 1 (generate un-normalized bands) in parallel via parallel_generate_streaming.
+      - Runs Pass 2 (normalize) via parallel_normalize_streaming.
+      - Removes temporary unnormalized file.
 
     Args:
         input_image_paths (List[str]): 
@@ -216,97 +222,78 @@ cpdef None band_generation_process(
     # ============================================================
     # Scan the input to obtain image size & window dimensions
     # ============================================================
-    cdef:
-        MultibandBlockReader input_dataset = MultibandBlockReader(input_image_paths)
-        tuple[uint16_t, uint16_t] input_shape = input_dataset.image_shape()
-        # Extract dimensions
-        const uint16_t src_height = input_shape[0]
-        const uint16_t src_width = input_shape[1]
-        const uint16_t win_height = window_shape[0]
-        const uint16_t win_width = window_shape[1]  
+    input_reader = MultibandBlockReader(input_image_paths)
+    try:
+        img_height, img_width = input_reader.image_shape()
+        # sample a tiny block to infer number of output bands
+        tiny_block = input_reader.read_multiband_block(((0, 0), (1, 1)))
+    finally:
+        input_reader.close()
     
     # ============================================================
     # Peek one-pixel block to calculate tot num output bands
     # ============================================================
-    cdef np.ndarray[float_t, ndim=3] tiny_block
-    cdef np.ndarray[float_t, ndim=2] sample_bands
-    # Read in (bands,1,1) block 
-    tiny_block = input_dataset.read_multiband_block(((0, 0), (1, 1)))
-    # Returns (num_output_bands,...)
-    sample_bands = _create_bands_from_block(tiny_block, full_synthetic)
-    cdef uint16_t num_output_bands = sample_bands.shape[0] #type:ignore[CythonreportGeneralTypeIssues]
-    # free the temporary data
-    del tiny_block, sample_bands
+    # tiny_block is (bands,1,1); convert to float32 contiguous
+    if tiny_block.dtype != np.float32 or not tiny_block.flags['C_CONTIGUOUS']:
+        tiny_block = np.ascontiguousarray(tiny_block, dtype=np.float32)
+    # Create bands to test output (#-bands) size
+    sample_output = _create_bands_from_block(tiny_block, full_synthetic)
+    num_output_bands = int(sample_output.shape[0])
+    # free temporaries
+    del tiny_block, sample_output
     
     # ============================================================
-    # Arrays to hold global min/max for later normalization
+    # Predetermine list of windows
     # ============================================================
-    cdef:
-        np.ndarray[float_t, ndim=1] np_band_mins = np.full(num_output_bands, np.inf, dtype=float_t)
-        np.ndarray[float_t, ndim=1] np_band_maxs = np.full(num_output_bands, -np.inf, dtype=float_t)
-        # Memory view for faster access
-        float_t[:] band_mins = np_band_mins #type:ignore[CythonreportGeneralTypeIssues]
-        float_t[:] band_maxs = np_band_maxs #type:ignore[CythonreportGeneralTypeIssues]
-    
-    # ============================================================
-    # Preallocate list of windows
-    # ============================================================
-    cdef:
-        # Calc how many windows fit inside the source
-        uint16_t n_rows = (src_height + win_height - 1) // win_height
-        uint16_t n_cols = (src_width  + win_width  - 1) // win_width
-        uint16_t total_windows = n_rows * n_cols
-        # List of window coordinate-tuples
-        list windows = [None] * total_windows
-        int win_idx = 0
-        
-        int row_off, col_off, actual_height, actual_width
+    win_height, win_width = window_shape
+    n_rows = (img_height + win_height - 1) // win_height
+    n_cols = (img_width + win_width - 1) // win_width
+    total_windows = int(n_rows * n_cols)
 
-    # Calc windows indices
-    for row_off in range(0, src_height, win_height):
-        for col_off in range(0, src_width, win_width):
-            # Ensure window does not index out-of-bounds
-            actual_height = win_height if row_off + win_height <= src_height else src_height - row_off
-            actual_width  = win_width  if col_off + win_width  <= src_width  else src_width  - col_off
-            windows[win_idx] = ((row_off, col_off), (actual_height, actual_width)) #type:ignore[CythonreportGeneralTypeIssues]
+    windows = [None] * total_windows
+    win_idx = 0
+    for row_off in range(0, img_height, win_height):
+        for col_off in range(0, img_width, win_width):
+            actual_height = win_height if row_off + win_height <= img_height else img_height - row_off
+            actual_width = win_width if col_off + win_width <= img_width else img_width - col_off
+            windows[win_idx] = ((row_off, col_off), (actual_height, actual_width))
             win_idx += 1
 
-
     # --------------------------------------------------------------------------------------------
-    # Pass 1: Generate unnormalized output
+    # Pass 1: Generate unnormalized output + global min/max for pass 2
     # --------------------------------------------------------------------------------------------
     # (Hardcoded) output file names
-    cdef: 
-        str output_unorm_filename = "gen_band_unorm.tif" # un-normalized bands
-        str output_norm_filename = "gen_band_norm.tif"   # normalized bands
-        str unorm_path = join(output_dir, output_unorm_filename)
+    output_unorm_filename:str = "gen_band_unorm.tif" # un-normalized bands
+    output_norm_filename:str = "gen_band_norm.tif"   # normalized bands
+    unorm_path:str = join(output_dir, output_unorm_filename)
     
     # Write unnormalized output, collect global stats
     with MultibandBlockWriter(
         output_dir          = output_dir,
-        output_image_shape  = input_shape,
+        output_image_shape  = (img_height, img_width),
         output_image_name   = output_unorm_filename,
         window_shape        = window_shape,
         num_bands           = num_output_bands,
         output_datatype     = np.float32
     ) as writer:
         
-        cdef tuple band_stats = parallel_generate_streaming(
+        # The worker initializer will import this module and call `_create_bands_from_block`
+        band_stats = parallel_generate_streaming(
             input_paths     = input_image_paths,
             windows         = windows,
             writer          = writer,
-            func_module     = "python_scripts.gosp.bgp", 
-            func_name       = "_create_bands_from_block",   
+            func_module     = __name__,  # This module ; alternatively "src.python_scripts.bgp"
+            func_name       = "_create_bands_from_block",
             full_synthetic  = full_synthetic,
-            max_workers     = max_workers,                       
+            max_workers     = max_workers,
             chunk_size      = chunk_size,
-            inflight        = inflight,                            
+            inflight        = inflight,
             show_progress   = show_progress
         )
 
     # Extract stats from band_stats
-    band_mins[:] = band_stats[0] # type:ignore[PythonreportGeneralTypeIssues]
-    band_maxs[:] = band_stats[1] # type:ignore[PythonreportGeneralTypeIssues]
+    band_mins = np.asarray(band_stats[0], dtype=np.float32)
+    band_maxs = np.asarray(band_stats[1], dtype=np.float32)
 
     
     # --------------------------------------------------------------------------------------------
@@ -314,11 +301,11 @@ cpdef None band_generation_process(
     # --------------------------------------------------------------------------------------------
     with MultibandBlockWriter(
         output_dir          = output_dir,
-        output_image_shape  = input_shape,
+        output_image_shape  = (img_height, img_width),
         output_image_name   = output_norm_filename,
         window_shape        = window_shape,
         num_bands           = num_output_bands,
-        output_datatype     = float_t
+        output_datatype     = np.float32
     ) as writer:
         # Stream in parallel: workers read+normalize, parent writes
         parallel_normalize_streaming(
@@ -333,9 +320,9 @@ cpdef None band_generation_process(
             show_progress   = show_progress
         )
 
-    # ============================================================================================
+    # ======================
     # Cleanup Temporary File
-    # ============================================================================================
+    # ======================
     rm(unorm_path) 
     
             
