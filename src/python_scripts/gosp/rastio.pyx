@@ -188,18 +188,26 @@ cdef class MultibandBlockReader:
             int win_h       = win_dims[0]
             int win_w       = win_dims[1]
             Py_ssize_t i
+            object band # type = gdal.band
+            np.ndarray[float_t, ndim=2] band_array
             np.ndarray[float_t, ndim=3] block 
             
-        # Preallocate block
+        # Preallocate
+        band_array = np.empty(win_h, win_w, dtype=np.float32, order="C")
         block = np.empty((self.total_bands, win_h, win_w), dtype=np.float32, order="C")
-        
-        # Create a typed memoryview
+
+        # Create typed memoryview
+        cdef float_t[:, :] array_mv    = band_array
         cdef float_t[:, :, :] block_mv = block
 
-        # Fill block
+        # RasterBands are 1-indexed
         for i in range(1, self.total_bands + 1):
-            band_data = np.asarray(self.dataset.GetRasterBand(i).ReadAsArray(col_off, row_off, win_w, win_h), np.float32)
-            block_mv[i-1,:,:] = band_data[:,:]
+            # Read in band, convert the ndarray to float32
+            band = self.dataset.GetRasterBand(i)
+            # Get data from window
+            array_mv = band.ReadAsArray(col_off, row_off, win_w, win_h).astype(np.float32, copy=False)
+            # Add data to block ; convert 2D array to 3D (height,width) -> (band, height, width)
+            block_mv[i-1,:,:] = array_mv
     
         
         if block.shape[0] != self.total_bands:
