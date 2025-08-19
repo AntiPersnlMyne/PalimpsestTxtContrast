@@ -8,13 +8,14 @@
 # --------------------------------------------------------------------------------------------
 import numpy as np
 cimport numpy as np
-from rasterio.vrt import buildvrt
+from osgeo import gdal
 from os import makedirs
 
 import rasterio
 from rasterio.windows import Window
-cdef extern from "Python.h":
-    pass  # silence “Python.h” warning when using only typed calls
+cdef extern from "Python.h": pass  # silence “Python.h” warning when using only typed calls
+
+from .file_utils import rm
 
 
 # --------------------------------------------------------------------------------------------
@@ -41,6 +42,7 @@ ctypedef np.float32_t float_t
 ctypedef np.uint16_t uint16_t
 
 
+
 # --------------------------------------------------------------------------------------------
 # Reader (Input)
 # --------------------------------------------------------------------------------------------
@@ -59,6 +61,9 @@ cdef class MultibandBlockReader:
     """
     cdef:
         object vrt # VRT dataset
+        object dataset
+        str vrt_path
+        
         int total_bands
         tuple img_shape
         list filepaths
@@ -75,13 +80,15 @@ cdef class MultibandBlockReader:
         assert filepaths is not None, "[rastio] MultibandBlockReader: empty file list"
         
         self.filepaths = filepaths
-        # Comverge rasters into "one" dataset 
+        self.vrt_path = "output.vrt"
+
+        # Comverge rasters into "one" dataset = VRT
         try:
-            self.vrt = buildvrt([rasterio.open(p) for p in self.filepaths])
-            self.total_bands = self.vrt.count 
-            self.img_shape = self.vrt.shape
-            # Test if opening vrt errors
-            self.vrt.read(1, window=Window(0, 0, 1, 1))
+            self.vrt = gdal.BuildVRT(self.vrt_path, filepaths)
+            self.dataset = gdal.Open(self.vrt)
+
+            self.total_bands = self.dataset.RasterCount
+            self.img_shape = (self.dataset.RasterYSize, self.dataset.RasterXSize)
         except: 
             raise Exception (f"[rastio] MultibandBlockReader: Error opening files during __init__")
 
@@ -90,16 +97,17 @@ cdef class MultibandBlockReader:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self.dataset = None # close dataset
         self.close()
             
     def __del__(self):
+        self.dataset = None # close dataset
+        rm(self.vrt_path)
         self.close()
 
     cdef void close(self) noexcept:
-        try:
-            if self.vrt:self.vrt.close()
-        except: 
-            pass # exit quietly
+        self.dataset = None
+        self.close()
     
     cdef tuple image_shape(self):
         """Returns (rows, cols)"""
@@ -128,26 +136,30 @@ cdef class MultibandBlockReader:
             int col_off     = offsets[1]
             int win_h       = win_dims[0]
             int win_w       = win_dims[1]
+            Py_ssize_t idx  = 0
 
             # Block: (bands, rows, cols)
+            np.ndarray[float_t, ndim=3] band_data 
             np.ndarray[float_t, ndim=3] block 
             
         # Preallocate block
         block = np.empty((self.total_bands, win_h, win_w), dtype=np.float32, order="C")
         
        
-
         # ============================================================================================
         # Read & Return Multiband Block
         # ============================================================================================
-        # Read directly into preallocated block
-        self.vrt.read(window=Window(col_off, row_off, win_w, win_h), out=block)
+        # Create a typed memoryview
+        cdef float_t[:, :, :] block_mv = block
+
+        for i in range(1, self.total_bands + 1):
+            band_data = np.asarray(self.dataset.GetRasterBand(i).ReadAsArray(col_off, row_off, win_w, win_h), np.float32)
+            block_mv[i-1,:,:] = band_data[:,:]
+    
         
         if block.shape[0] != self.total_bands:
             raise RuntimeError("[rastio] Band count mismatch after reading window")
 
-        # Create a typed memoryview
-        cdef float_t[:, :, :] block_mv = block
         
         return block
 

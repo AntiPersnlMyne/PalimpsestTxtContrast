@@ -182,14 +182,14 @@ def _create_bands_from_block(image_block:np.ndarray, full_synthetic:bool):
 # Band Generation Process (BGP, Python callable)
 # --------------------------------------------------------------------------------------------
 def band_generation_process(
-    List[str] input_image_paths,
-    str output_dir,
-    Tuple[int, int] window_shape,
-    bint full_synthetic,
-    int max_workers,
-    int chunk_size,
-    int inflight,
-    bint show_progress
+    input_image_paths:List[str],
+    output_dir:str,
+    window_shape:Tuple[int, int],
+    full_synthetic:bint,
+    max_workers:int|None,
+    chunk_size:int,
+    inflight:int,
+    show_progress:bint,
 ):
     """
     The Band Generation Process. Generates synthetic, non-linear bands as combinations of existing bands. 

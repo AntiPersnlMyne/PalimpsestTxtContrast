@@ -27,7 +27,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.1"
+__version__ = "3.1.2"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -88,7 +88,7 @@ cdef inline int _compute_scores_inner(
             acc = 0.0
             # accumulate dot product over bands
             for b in range(bands):
-                acc == fmaf(targ_mv[b], proj_mv[b, row, col], acc)
+                acc = fmaf(targ_mv[b], proj_mv[b, row, col], acc)
             out_mv[row, col] = acc
 
 

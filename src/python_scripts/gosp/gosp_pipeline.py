@@ -17,12 +17,12 @@ Stages:
 # --------------------------------------------------------------------------------------------
 # Compile Pipeline Code (so it can be imported)
 # --------------------------------------------------------------------------------------------
-# TODO: Move this to setup.py/.sh
-try:
-    from os import system
-    system("python setup.py build_ext --inplace")
-except Exception as e:
-    print(f"Error compiling Cython scripts:\n{e}")
+# TODO: Move this to setup.bat/.sh
+# try:
+#     from os import system
+#     system("python setup.py build_ext --inplace")
+# except Exception as e:
+#     print(f"Error compiling Cython scripts:\n{e}")
 
 
 # --------------------------------------------------------------------------------------------

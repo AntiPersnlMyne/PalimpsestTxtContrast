@@ -1,13 +1,10 @@
-"""setup.py: Builds Cython (.pyx) files into importable Python modules"""
-
-from setuptools import setup
+from setuptools import setup, Extension
 from Cython.Build import cythonize
 from numpy import get_include
 from os.path import join
 
 PYX_DIR = "src/python_scripts/gosp"
 
-# Build a full list of file paths
 pyx_files = [
   join(PYX_DIR, fn) for fn in [
       "bgp.pyx",
@@ -22,26 +19,34 @@ pyx_files = [
 ]
 
 cython_directives = {
-    "language_level": 3,  # python3
-    "boundscheck": False, # array bounds check
-    "wraparound":  False, # disable negative indices
-    "cdivision": True,     # C division semantics
-    # "initializedcheck": False
-    # "nonecheck":   False, # something, idk
+    "language_level": 3,
+    "boundscheck": False,
+    "wraparound": False,
+    "cdivision": True,
 }
 
-extensions = cythonize(
-    pyx_files,
-    compiler_directives=cython_directives,
-    include_path=[get_include()],  # NumPy headers
-)
-
-
+extensions = [
+    Extension(
+        "gosp." + fn[:-4],
+        [join(PYX_DIR, fn)],
+        include_dirs=[get_include()], 
+    )
+    for fn in [
+        "bgp.pyx",
+        "tgp.pyx",
+        "tcp.pyx",
+        "rastio.pyx",
+        "parallel.pyx",
+        "skip_bgp.pyx",
+        "file_utils.pyx",
+        "math_utils.pyx",
+    ]
+]
 
 setup(
     name="gosp",
-    version="1.3",
+    version="1.4",
     packages=["gosp"],
     package_dir={"gosp": PYX_DIR},
-    ext_modules=extensions
+    ext_modules=cythonize(extensions, compiler_directives=cython_directives),
 )
