@@ -25,7 +25,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.4"
+__version__ = "3.1.5"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -109,14 +109,12 @@ cdef class MultibandBlockReader:
         self.dataset = None
         self.close()
     
-    cdef tuple image_shape(self):
+    def image_shape(self) -> tuple:
         """Returns (rows, cols)"""
         return self.img_shape
-            
-    cdef np.ndarray[float_t, ndim=3] tupleread_multiband_block(
-        self,
-        tuple window
-        ):
+
+    # cpdef maybe?       
+    def read_multiband_block(self, tuple window):
         """
         Reads a block of data and returns (bands, rows, cols)
         
@@ -136,22 +134,15 @@ cdef class MultibandBlockReader:
             int col_off     = offsets[1]
             int win_h       = win_dims[0]
             int win_w       = win_dims[1]
-            Py_ssize_t idx  = 0
-
-            # Block: (bands, rows, cols)
-            np.ndarray[float_t, ndim=3] band_data 
             np.ndarray[float_t, ndim=3] block 
             
         # Preallocate block
         block = np.empty((self.total_bands, win_h, win_w), dtype=np.float32, order="C")
         
-       
-        # ============================================================================================
-        # Read & Return Multiband Block
-        # ============================================================================================
         # Create a typed memoryview
         cdef float_t[:, :, :] block_mv = block
 
+        # Fill block
         for i in range(1, self.total_bands + 1):
             band_data = np.asarray(self.dataset.GetRasterBand(i).ReadAsArray(col_off, row_off, win_w, win_h), np.float32)
             block_mv[i-1,:,:] = band_data[:,:]
@@ -159,8 +150,6 @@ cdef class MultibandBlockReader:
         
         if block.shape[0] != self.total_bands:
             raise RuntimeError("[rastio] Band count mismatch after reading window")
-
-        
         return block
 
 
