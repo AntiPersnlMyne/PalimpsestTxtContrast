@@ -16,8 +16,6 @@ cdef extern from "Python.h":
     pass  # silence “Python.h” warning when using only typed calls
 
 
-
-
 # --------------------------------------------------------------------------------------------
 # Authorship Information
 # --------------------------------------------------------------------------------------------
@@ -25,7 +23,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.1"
+__version__ = "3.1.2"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -61,7 +59,8 @@ cdef class MultibandBlockReader:
     cdef:
         object vrt # VRT dataset
         int total_bands
-        tuple win_shape
+        tuple img_shape
+        list filepaths
     
     def __cinit__(self, list filepaths):
         """
@@ -79,7 +78,9 @@ cdef class MultibandBlockReader:
         try:
             self.vrt = buildvrt([rasterio.open(p) for p in self.filepaths])
             self.total_bands = self.vrt.count 
-            self.win_shape = rasterio.open(self.vrt).read(1).shape
+            self.img_shape = self.vrt.shape
+            # Test if opening vrt errors
+            self.vrt.read(1, window=Window(0, 0, 1, 1))
         except: 
             raise Exception (f"[rastio] MultibandBlockReader: Error opening files during __init__")
 
@@ -88,25 +89,27 @@ cdef class MultibandBlockReader:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Closes open raster files"""
-        try: self.vrt.close()
-        except: pass # quietly exit
+        self.close()
             
     def __del__(self):
-        """Closes open raster files"""
-        try: self.vrt.close()
-        except: pass # quietly exit
+        self.close()
+
+    cdef void close(self) noexcept:
+        try:
+            if self.vrt:self.vrt.close()
+        except: 
+            pass # exit quietly
     
     cdef tuple image_shape(self):
-        """Returns (win_height, win_width)"""
-        return self.win_shape
+        """Returns (rows, cols)"""
+        return self.img_shape
             
     cdef np.ndarray[float_t, ndim=3] tupleread_multiband_block(
         self,
         tuple window
         ):
         """
-        Reads a block of data from each raster file and combines them into a single multi-band array.
+        Reads a block of data and returns (bands, rows, cols)
         
         Parameters
         ----------
@@ -126,7 +129,9 @@ cdef class MultibandBlockReader:
             int win_w       = win_dims[1]
 
             # Block: (bands, rows, cols)
-            np.ndarray[float_t, ndim=3] block
+            np.ndarray[float_t, ndim=3] block = np.empty(
+                (self.total_bands, win_h, win_w), dtype=np.float32, order="C"
+            )
         
         
         # Preallocate output array
@@ -136,10 +141,11 @@ cdef class MultibandBlockReader:
         # ============================================================================================
         # Read & Return Multiband Block
         # ============================================================================================
-        src = rasterio.open(self.vrt)
-        block = src.read(window=Window(col_off, row_off, win_w, win_h)) 
+        # Read directly into block
+        data = self.vrt.read(window=Window(col_off, row_off, win_w, win_h), out=block)
+        if data.shape[0] != self.total_bands:
+            raise RuntimeError("[rastio] Band count mismatch after reading window")
 
-        assert block.count == self.total_bands, "Band count mismatch after reading window"
         return block
 
 
@@ -168,61 +174,64 @@ cdef class MultibandBlockWriter:
             Compresses output file with ZSTD compression. Smaller file = slower IO speed.
     """
     cdef:
-        str output_dir
-        tuple output_image_shape
-        str output_image_name
-        tuple window_shape
-        object output_datatype
+        str out_dir
+        tuple out_image_shape
+        str out_image_name
+        tuple win_shape
+        object out_datatype
         int num_bands
         object dataset
+        dict profile
     
     def __cinit__(
         self, 
-        str output_dir, 
-        tuple output_image_shape, 
-        str output_image_name, 
-        tuple window_shape, 
-        object output_datatype,
+        str out_dir, 
+        tuple out_image_shape, 
+        str out_image_name, 
+        tuple win_shape, 
+        object out_datatype,
         int num_bands,
     ):
-        self.output_dir     = output_dir
-        self.output_shape   = output_image_shape
-        self.output_name    = output_image_name
-        self.window_shape   = window_shape
-        self.output_dtype   = output_datatype
-        self.num_bands      = num_bands
-        self.dataset        = None
+        self.out_dir         = out_dir
+        self.out_image_shape = out_image_shape
+        self.out_image_name  = out_image_name
+        self.win_shape       = win_shape
+        self.out_datatype    = out_datatype
+        self.num_bands       = num_bands
+        self.dataset         = None
+        self.profile         = {}
 
 
     def __enter__(self):      
         self.profile = {
             # GTFF (BIGTIFF) supports 4+ GB TIFF files
             "driver": "GTiff", 
-            "height": self.output_shape[0],
-            "width": self.output_shape[1],
+            "height": self.out_shape[0],
+            "width": self.out_shape[1],
             "count": self.num_bands, 
-            "dtype": self.output_dtype,
+            "dtype": self.out_dtype,
             "tiled": True,
-            "blockxsize": self.window_shape[1], 
-            "blockysize": self.window_shape[0],
+            "blockxsize": self.win_shape[1], 
+            "blockysize": self.win_shape[0],
             "interleave": "band",
             "BIGTIFF": "YES",
-
-            # use if ZSTD
-            "compress": None, # ZSTD
-            # "zlevel": 10,
+            "compress": None, # Optional: replace with "ZSTD"
         }
 
         # Check for valid output path for intermediate dataset file,
         # otherwise create it
         makedirs(self.output_dir, exist_ok=True) 
         self.dataset = rasterio.open(f"{self.output_dir}/{self.output_name}", "w", **self.profile)
-        
         return self 
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Closes dataset after finished writing to it"""
-        if self.dataset: self.dataset.close() 
+        self.close() 
+
+    cdef void close(self) noexcept:
+        try:
+            if self.dataset: self.dataset.close()
+        except: 
+            pass
 
     def write_block(
         self, 
@@ -247,16 +256,18 @@ cdef class MultibandBlockWriter:
             int win_h    = dims[0]
             int win_w    = dims[1]
         
-        # ============================================================================================
+        # ==============
         # Shape Checking
-        # ============================================================================================
+        # ==============
         expected_shape = (self.num_bands, win_h, win_w)
-        assert block.shape == expected_shape, f"[rastio] Shape mismatch: got {block.shape} vs expected: {expected_shape}"
-        assert self.dataset, "[rastio] Attempted to write but dataset is not initialized"
-
-        # ============================================================================================
+        if block.shape != expected_shape:
+            raise ValueError(f"[rastio] Shape mismatch: got {block.shape} vs expected: {expected_shape}")
+        if not self.dataset:
+            raise RuntimeError("[rastio] Attempted to write but dataset is not initialized")
+        
+        # ==============================
         # Write & Return Multiband Block
-        # ============================================================================================
+        # ==============================
         win = Window(col_off, row_off, win_w, win_h) 
         self.dataset.write(block, window=win, indexes=range(1, self.num_bands + 1))
 
