@@ -1,0 +1,29 @@
+<VRTDataset rasterXSize="8964" rasterYSize="6716">
+  <VRTRasterBand dataType="UInt16" band="1">
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">data/input/test/Arch_165r_370nm.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="8964" RasterYSize="6716" DataType="UInt16" BlockXSize="8964" BlockYSize="1024" />
+      <SrcRect xOff="0" yOff="0" xSize="8964" ySize="6716" />
+      <DstRect xOff="0" yOff="0" xSize="8964" ySize="6716" />
+    </SimpleSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="UInt16" band="2">
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">data/input/test/Arch_165r_448nm.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="8964" RasterYSize="6716" DataType="UInt16" BlockXSize="8964" BlockYSize="1024" />
+      <SrcRect xOff="0" yOff="0" xSize="8964" ySize="6716" />
+      <DstRect xOff="0" yOff="0" xSize="8964" ySize="6716" />
+    </SimpleSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="UInt16" band="3">
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">data/input/test/Arch_165r_476nm.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="8964" RasterYSize="6716" DataType="UInt16" BlockXSize="8964" BlockYSize="1024" />
+      <SrcRect xOff="0" yOff="0" xSize="8964" ySize="6716" />
+      <DstRect xOff="0" yOff="0" xSize="8964" ySize="6716" />
+    </SimpleSource>
+  </VRTRasterBand>
+</VRTDataset>

@@ -77,7 +77,7 @@ def _build_vrt(vrt_path:str, filepaths:list[str], separate=True, allow_projectio
     # Create the VRT
     vrt = gdal.BuildVRT(vrt_path, filepaths, options=vrt_options)
     if vrt is None:
-        raise RuntimeError("Failed to build VRT")
+        raise RuntimeError("[rastio] Failed to build VRT")
 
     return vrt
 
@@ -102,7 +102,6 @@ cdef class MultibandBlockReader:
         object vrt # VRT dataset
         object dataset
         str vrt_path
-        
         int total_bands
         tuple img_shape
         list filepaths
@@ -120,23 +119,22 @@ cdef class MultibandBlockReader:
         self.filepaths = filepaths
         
         # Define temporary parh for VRT object
-        fd, vrt_path = tempfile.mkstemp(suffix=".vrt")
-        os.close(fd)
-        self.vrt_path = vrt_path
+        self.vrt_path = "vrt_dataset.vrt"
 
         # Create VRT
         self.vrt = _build_vrt(
             vrt_path=self.vrt_path,
             filepaths=filepaths
         )
+        
+        # Return dataset ; if already open, return reference to open dataset
+        self.dataset = gdal.OpenShared(self.vrt_path)
+      # self.dataset = gdal.Open(self.vrt_path)
 
-        try:
-            self.dataset = gdal.Open(self.vrt_path)
-
-            self.total_bands = self.dataset.RasterCount
-            self.img_shape = (self.dataset.RasterYSize, self.dataset.RasterXSize)
-        except: 
-            raise Exception (f"[rastio] MultibandBlockReader: Error opening files during __init__")
+        # total bands
+        self.total_bands = self.dataset.RasterCount
+        # (height, width)
+        self.img_shape = (self.dataset.RasterYSize, self.dataset.RasterXSize)
 
         
     def __enter__(self):
