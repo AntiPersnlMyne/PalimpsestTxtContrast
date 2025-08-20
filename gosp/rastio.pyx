@@ -149,12 +149,8 @@ cdef class MultibandBlockReader:
                 self.vrt = None
         except Exception:
             pass
-    
-    def image_shape(self) -> tuple:
-        """Returns (rows, cols)"""
-        return self.image_shape
 
-    # cpdef maybe?       
+    # cpdef maybe?
     def read_multiband_block(self, tuple window):
         """
         Reads a block of data and returns (bands, rows, cols)
@@ -187,7 +183,6 @@ cdef class MultibandBlockReader:
 
         # Convert bytes (buffer) to NumPy array and reshape
         block = np.frombuffer(rast_data, dtype=np.float32).reshape((self.total_bands, win_h, win_w)).copy()
-        print(f"[DEBUG] Block read shape = {block.shape[0], block.shape[1], block.shape[2]}")
 
         return block
 
