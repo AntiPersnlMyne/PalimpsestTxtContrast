@@ -38,20 +38,22 @@ rm -rf build *.egg-info src/python_scripts/gosp/*.c src/python_scripts/gosp/*.so
 # --------------------------------------------------------------------------------------------
 from gosp import gosp
 # from python_scripts import improc 
+
 from time import time
+import multiprocessing as mp
+from sys import platform
 
 
 # --------------------------------------------------------------------------------------------
 # Driver Code
 # --------------------------------------------------------------------------------------------
 def main():
-    # CLAHE
     start = time()
 
-    # gosp(
-    #     input_dir="data/input/test",
-    #     output_dir="data/output"
-    # )
+    gosp(
+        input_dir="data/input/test",
+        output_dir="data/output"
+    )
     
     # gosp(
     #     # Input information
@@ -75,10 +77,19 @@ def main():
     
 
 
-# --------------------------------------------------------------------------------------------
+# ==============
 # Executing Main
-# --------------------------------------------------------------------------------------------
+# ==============
 if __name__ == "__main__":
+    # Multiprocessing logic
+    # fork is faster  - Linux exclusive
+    # spawn is slower - Windows & Linux
+    if platform == "win32":
+        mp.set_start_method("spawn", force=True)
+    else:
+        try: mp.set_start_method("fork", force=True)
+        except: mp.set_start_method("spawn", force=True)
+    
     main()
 
 

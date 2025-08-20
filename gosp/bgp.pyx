@@ -230,17 +230,21 @@ def band_generation_process(
     # ============================================================
     # Scan the input to obtain image size & window dimensions
     # ============================================================
+    print("have")
     input_reader = MultibandBlockReader(input_image_paths)
     try:
         img_height, img_width = input_reader.image_shape()
-        # sample a tiny block to infer number of output bands
-        tiny_block = input_reader.read_multiband_block(((0, 0), (1, 1)))
+        # Copy the data so it's independent of the reader
+        tiny_block = np.array(input_reader.read_multiband_block(((0, 0), (1, 1))), copy=True)
     finally:
         input_reader.close()
-    
+
+        
+
     # ============================================================
     # Peek one-pixel block to calculate tot num output bands
     # ============================================================
+    print("you")
     # tiny_block is (bands,1,1); convert to float32 contiguous
     if tiny_block.dtype != np.float32 or not tiny_block.flags['C_CONTIGUOUS']:
         tiny_block = np.ascontiguousarray(tiny_block, dtype=np.float32)
@@ -257,6 +261,7 @@ def band_generation_process(
     # ============================================================
     # Predetermine list of windows
     # ============================================================
+    print("seen")
     win_height, win_width = window_shape
     n_rows = (img_height + win_height - 1) // win_height
     n_cols = (img_width + win_width - 1) // win_width
@@ -274,11 +279,13 @@ def band_generation_process(
     # --------------------------------------------------------------------------------------------
     # Pass 1: Generate unnormalized output + global min/max for pass 2
     # --------------------------------------------------------------------------------------------
+    print("the")
     # (Hardcoded) output file names
     output_unorm_filename:str = "gen_band_unorm.tif" # un-normalized bands
     output_norm_filename:str = "gen_band_norm.tif"   # normalized bands
     unorm_path:str = join(output_dir, output_unorm_filename)
     
+
     # Write unnormalized output, collect global stats
     with MultibandBlockWriter(
         output_dir          = output_dir,
@@ -288,7 +295,8 @@ def band_generation_process(
         num_bands           = num_output_bands,
         output_datatype     = np.float32
     ) as writer:
-        
+        print("Knock me out")
+                
         # The worker initializer will import this module and call `_create_bands_from_block`
         band_stats = parallel_generate_streaming(
             input_paths     = input_image_paths,
@@ -302,6 +310,7 @@ def band_generation_process(
             inflight        = inflight,
             show_progress   = show_progress
         )
+        print("YouAsshole")
 
     # Extract stats from band_stats
     band_mins = np.asarray(band_stats[0], dtype=np.float32)
@@ -311,6 +320,7 @@ def band_generation_process(
     # --------------------------------------------------------------------------------------------
     # Pass 2: Normalize output
     # --------------------------------------------------------------------------------------------
+    print("great")
     with MultibandBlockWriter(
         output_dir          = output_dir,
         output_image_shape  = (img_height, img_width),

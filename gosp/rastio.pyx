@@ -11,7 +11,7 @@ cimport numpy as np
 from os import makedirs
 from os.path import join
 import tempfile
-import os
+import atexit
 
 from osgeo import gdal
 import rasterio
@@ -116,24 +116,12 @@ cdef class MultibandBlockReader:
         """
         # Check filepaths isn't empty
         assert filepaths is not None, "[rastio] MultibandBlockReader: empty file list"
+        
         self.filepaths = filepaths
-        
-        # Define temporary parh for VRT object
         self.vrt_path = "vrt_dataset.vrt"
-
-        # Create VRT
-        self.vrt = _build_vrt(
-            vrt_path=self.vrt_path,
-            filepaths=filepaths
-        )
-        
-        # Return dataset ; if already open, return reference to open dataset
-        self.dataset = gdal.OpenShared(self.vrt_path)
-      # self.dataset = gdal.Open(self.vrt_path)
-
-        # total bands
+        self.vrt = _build_vrt(vrt_path=self.vrt_path, filepaths=filepaths)
+        self.dataset = gdal.Open(self.vrt_path)
         self.total_bands = self.dataset.RasterCount
-        # (height, width)
         self.img_shape = (self.dataset.RasterYSize, self.dataset.RasterXSize)
 
         
@@ -142,23 +130,23 @@ cdef class MultibandBlockReader:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.dataset = None # close dataset
+        # rm(self.vrt_path)
         self.close()
             
     def __del__(self):
         try:
+            self.dataset = None
+            # rm(self.vrt_path)
             self.close()
         except Exception:
             pass
-        # Remove the vrt file if exists
-        try:
-            rm(self.vrt_path)
-        except Exception:
-            pass
-
     def close(self):
         """Safely close dataset and free VRT path if present."""
         try:
-            if self.dataset is not None: self.dataset = None
+            if self.dataset is not None:
+                self.dataset = None
+            if self.vrt is not None:
+                self.vrt = None
         except Exception:
             pass
     
@@ -200,7 +188,7 @@ cdef class MultibandBlockReader:
         )
 
         # Convert buffer to NumPy array and reshape
-        block = np.frombuffer(rast_data, dtype=np.float32).reshape((self.total_bands, win_h, win_w))
+        block = np.frombuffer(rast_data, dtype=np.float32).reshape((self.total_bands, win_h, win_w)).copy()
 
         return block
 

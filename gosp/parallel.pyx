@@ -341,7 +341,6 @@ def parallel_generate_streaming(
 # --------------------------------------------------------------------------------------
 # Pass 2: bands -> normalize -> write (normalization)
 # --------------------------------------------------------------------------------------
-
 _worker_state: dict[str, Any] = {
     """Stores global information accessible to the worker"""
     
