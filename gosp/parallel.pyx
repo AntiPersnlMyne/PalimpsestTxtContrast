@@ -615,7 +615,6 @@ def best_target_parallel(
         # Compare size ("value") of targets' L2 norms
         if value > best_target.value: 
             best_target = Target(value, row, col, band_spec)
-            print(f"[DEBUG] Candidate spectrum shape = {best_target.band_spectrum.shape}")
 
 
     tasks = [(window,) for window in list(windows)] # wrap args (window) in tuple for streaming

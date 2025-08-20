@@ -74,9 +74,9 @@ cdef int _block_l2_kernel(
 
 
 cdef int _matvec_quad_form_double(
-    double_t[:, :] pmat_mv, 
-    double_t[:] x_mv,
-    double_t[:] y_mv
+    float_t[:, :] pmat_mv, 
+    float_t[:] x_mv,
+    float_t[:] y_mv
 ) nogil:
     """
     y = P @ x, where P is (n,n) and x is (n,). Output y is (n,).
@@ -185,8 +185,8 @@ def project_block_onto_subspace(
     if block.ndim != 3: raise ValueError("block must be 3D (bands, h, w)")
 
     cdef int bands  = block.shape[0]
-    cdef int height = block[1]
-    cdef int width  = block[2]
+    cdef int height = block.shape[1]
+    cdef int width  = block.shape[2]
 
     # Enforce block float32 contiguous 
     if block.dtype != np.float32 or not block.flags['C_CONTIGUOUS']:
@@ -267,9 +267,9 @@ def compute_opci(
     y_vec = np.empty(num_bands, dtype=np.float32)
 
     # Create typed memoryviews to pass into the nogil kernel.
-    cdef double_t[:, :] pmat_mv = pmat
-    cdef double_t[:] x_mv = x_vec
-    cdef double_t[:] y_mv = y_vec
+    cdef float_t[:, :] pmat_mv = pmat
+    cdef float_t[:] x_mv = x_vec
+    cdef float_t[:] y_mv = y_vec
 
     # Compute y_mv[:] = pmat_mv @ x_mv ; in noGIL
     with nogil:
