@@ -13,9 +13,9 @@ cimport numpy as np
 from typing import List, Tuple
 from logging import warn
 
-from .build.math_utils import compute_orthogonal_projection_matrix, compute_opci
-from .build.rastio import MultibandBlockReader
-from .build.parallel import best_target_parallel
+from ..build.math_utils import compute_orthogonal_projection_matrix, compute_opci
+from ..build.rastio import MultibandBlockReader
+from ..build.parallel import best_target_parallel
 
 
 # --------------------------------------------------------------------------------------------

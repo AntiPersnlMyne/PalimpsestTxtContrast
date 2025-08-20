@@ -18,6 +18,21 @@ cython_directives = {
 }
 
 
+# ============
+# Source Files
+# ============
+pyx_files = [
+    "bgp.pyx",
+    "tgp.pyx",
+    "tcp.pyx",
+    "rastio.pyx",
+    "parallel.pyx",
+    "skip_bgp.pyx",
+    "file_utils.pyx",
+    "math_utils.pyx",
+]
+
+
 # =========================================
 # OpenMP Compiler Flags (platform-specific)
 # =========================================
@@ -33,7 +48,7 @@ else:
 # =================================
 # 'build_ext' To Redict Build Files
 # =================================
-class build_ext_build_dir(build_ext):
+class BuildExt(build_ext):
     def build_extensions(self):
         # Ensure build directory exists
         build_dir = join(dirname(abspath(__file__)), "gosp", "build")
@@ -43,9 +58,8 @@ class build_ext_build_dir(build_ext):
         # Redirect each extension's build output
         for ext in self.extensions:
             ext.name = "gosp.build." + ext.name.split(".")[-1]
-            ext.sources = [join("gosp", src.split(".")[-1] + ".pyx") for src in ext.sources]
-
-        # Proceed with normal build_ext
+            
+        # Makes class call itself creating build_ext
         super().build_extensions()
 
 
@@ -54,22 +68,13 @@ class build_ext_build_dir(build_ext):
 # =========================
 extensions = [
     Extension(
-        "gosp." + fn[:-4],  # gosp.parallel, gosp.bgp, etc.
-        [join("gosp", fn)],
+        "gosp." + fn[:-4],  # module name ; e.g. gosp.bgp
+        [join("gosp", "src", fn)],  # source location ; e.g. gosp.src.bgp
         include_dirs=[get_include()], 
         extra_compile_args=extra_compile_args,
         extra_link_args=extra_link_args,
     )
-    for fn in [
-        "bgp.pyx",
-        "tgp.pyx",
-        "tcp.pyx",
-        "rastio.pyx",
-        "parallel.pyx",
-        "skip_bgp.pyx",
-        "file_utils.pyx",
-        "math_utils.pyx",
-    ]
+    for fn in pyx_files
 ]
 
 
@@ -78,8 +83,9 @@ extensions = [
 # ===============================
 setup(
     name="gosp",
-    version="3.0",
+    version="3.1",
     packages=find_packages(),
     ext_modules=cythonize(extensions, compiler_directives=cython_directives),
+    cmdclass={"build_ext": BuildExt},
     zip_safe=False,
 )

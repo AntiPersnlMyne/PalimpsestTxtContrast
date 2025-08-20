@@ -37,8 +37,8 @@ import multiprocessing as mp
 import rasterio
 from rasterio.windows import Window
 
-from .build.rastio import MultibandBlockReader
-from .build.math_utils import project_block_onto_subspace
+from ..build.rastio import MultibandBlockReader
+from ..build.math_utils import project_block_onto_subspace
 
 
 # --------------------------------------------------------------------------------------------

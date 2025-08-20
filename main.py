@@ -15,21 +15,14 @@ __status__ = "Development" # "Development", or "Production".
 # Useful commands
 # ---------------
 """
-// Sets number of avaliable threads from 1 to 8 for multithreading
+// (Run) Sets number of avaliable threads from 1 to 8 for multithreading
 OMP_NUM_THREADS=8 python src/main.py
 
-// Compile Cython files - $/build
+// (Development) Compile Cython files 
 python setup.py build_ext --inplace
 
-// Compile Cython files - $/gosp.egg-info 
-// Install in "editable" mode
-pip install -e .
-
-// Cleanup build files
-rm -rf build *.egg-info src/python_scripts/gosp/*.c src/python_scripts/gosp/*.so
-
-// Execute a local package containing imports 
-
+// (Install) Build & Compile Cython files
+pip install -e . && rm -r build || del build && rm -r gosp.egg-info || del gosp.egg-info
 """
 
 
@@ -74,7 +67,7 @@ def main():
     #     # Debug
     #     verbose=True,                      
     # )
-    print(f"\n[main/rgb_365cor_lum] - Execution finished -\nRuntime = {(time() - start):.2f}")
+    print(f"\n[main/test] - Execution finished -\nRuntime = {(time() - start):.2f}")
     
 
 

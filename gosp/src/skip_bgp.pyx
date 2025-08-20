@@ -18,7 +18,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed, Future
 from tqdm import tqdm
 import rasterio
 
-from .build.rastio import MultibandBlockReader, MultibandBlockWriter
+from ..build.rastio import MultibandBlockReader, MultibandBlockWriter
 
 # NumPy typedefs for memoryviews
 cnp.import_array()
