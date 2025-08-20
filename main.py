@@ -18,15 +18,25 @@ __status__ = "Development" # "Development", or "Production".
 // Sets number of avaliable threads from 1 to 8 for multithreading
 OMP_NUM_THREADS=8 python src/main.py
 
-// Compile Cython files
+// Compile Cython files - $/build
 python setup.py build_ext --inplace
+
+// Compile Cython files - $/gosp.egg-info 
+// Install in "editable" mode
+pip install -e .
+
+// Cleanup build files
+rm -rf build *.egg-info src/python_scripts/gosp/*.c src/python_scripts/gosp/*.so
+
+// Execute a local package containing imports 
+
 """
 
 
 # --------------------------------------------------------------------------------------------
 # Imports
 # --------------------------------------------------------------------------------------------
-from python_scripts.gosp import gosp
+from gosp import gosp
 # from python_scripts import improc 
 from time import time
 
@@ -38,10 +48,10 @@ def main():
     # CLAHE
     start = time()
 
-    gosp(
-        input_dir="data/input/test",
-        output_dir="data/output"
-    )
+    # gosp(
+    #     input_dir="data/input/test",
+    #     output_dir="data/output"
+    # )
     
     # gosp(
     #     # Input information

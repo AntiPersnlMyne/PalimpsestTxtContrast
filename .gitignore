@@ -1,9 +1,5 @@
 # Ignore data files
-.jpg
-.png
-.dat
-.hdr
-.tif
+data
 
 # Any Python cache
 **/__pycache__
