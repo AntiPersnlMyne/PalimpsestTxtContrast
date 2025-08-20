@@ -52,7 +52,8 @@ def main():
 
     gosp(
         input_dir="data/input/test",
-        output_dir="data/output"
+        output_dir="data/output",
+        verbose=True
     )
     
     # gosp(
