@@ -15,9 +15,9 @@ from os.path import join
 from cython.parallel import prange
 from libc.math cimport sqrtf, log1pf
 
-from ..build.rastio import MultibandBlockReader, MultibandBlockWriter
-from ..build.parallel import parallel_normalize_streaming, parallel_generate_streaming
-from ..build.file_utils import rm
+from gosp.build.rastio import MultibandBlockReader, MultibandBlockWriter
+from gosp.build.parallel import parallel_normalize_streaming, parallel_generate_streaming
+from gosp.build.file_utils import rm
 
 
 # --------------------------------------------------------------------------------------------

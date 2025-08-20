@@ -13,10 +13,10 @@ cimport numpy as np
 from typing import List, Sequence, Tuple
 from libc.math cimport fmaf
 
-from ..build.rastio import MultibandBlockReader, MultibandBlockWriter
-from ..build.tgp import _make_windows, WindowType  
-from ..build.math_utils import compute_orthogonal_projection_matrix, project_block_onto_subspace
-from ..build.parallel import submit_streaming
+from gosp.build.rastio import MultibandBlockReader, MultibandBlockWriter
+from gosp.build.tgp import _make_windows, WindowType  
+from gosp.build.math_utils import compute_orthogonal_projection_matrix, project_block_onto_subspace
+from gosp.build.parallel import submit_streaming
 
 
 # --------------------------------------------------------------------------------------------

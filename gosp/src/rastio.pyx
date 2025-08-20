@@ -17,7 +17,7 @@ import rasterio
 from rasterio.windows import Window
 cdef extern from "Python.h": pass  # silence “Python.h” warning when using only typed calls
 
-from ..build.file_utils import rm
+from gosp.build.file_utils import rm
 
 
 # --------------------------------------------------------------------------------------------
@@ -98,7 +98,7 @@ cdef class MultibandBlockReader:
             Window (win_height, win_width)
     """
     cdef:
-        object vrt # VRT dataset
+        object vrt
         object dataset
         str vrt_path
         int total_bands
