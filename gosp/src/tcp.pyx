@@ -11,13 +11,12 @@ from __future__ import annotations
 import numpy as np
 cimport numpy as np
 from typing import List, Sequence, Tuple
-from libc.math cimport fmaf # fused multiply-add-function
+from libc.math cimport fmaf
 
-# Project modules
-from .rastio import MultibandBlockReader, MultibandBlockWriter
-from .tgp import _make_windows, WindowType  
-from .math_utils import compute_orthogonal_projection_matrix, project_block_onto_subspace
-from .parallel import submit_streaming
+from .build.rastio import MultibandBlockReader, MultibandBlockWriter
+from .build.tgp import _make_windows, WindowType  
+from .build.math_utils import compute_orthogonal_projection_matrix, project_block_onto_subspace
+from .build.parallel import submit_streaming
 
 
 # --------------------------------------------------------------------------------------------

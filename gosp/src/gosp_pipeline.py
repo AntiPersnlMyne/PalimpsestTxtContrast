@@ -33,11 +33,11 @@ from warnings import filterwarnings
 from os import remove
 from numpy import ndarray
 
-from .bgp import band_generation_process
-from .tgp import target_generation_process
-from .tcp import target_classification_process
-from .skip_bgp import write_original_multiband
-from .file_utils import discover_image_files
+from .build.bgp import band_generation_process
+from .build.tgp import target_generation_process
+from .build.tcp import target_classification_process
+from .build.skip_bgp import write_original_multiband
+from .build.file_utils import discover_image_files
 
 
 # --------------------------------------------------------------------------------------------

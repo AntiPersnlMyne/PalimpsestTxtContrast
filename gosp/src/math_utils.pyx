@@ -20,7 +20,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.1"
+__version__ = "3.1.2"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Production" # "Prototype", "Development", "Production"
@@ -39,7 +39,6 @@ OPCI_TOL = 1e-9    # clamp tolerance
 # --------------------------------------------------------------------------------------------
 # Typedefs for memoryviews
 ctypedef np.float32_t float_t
-ctypedef np.float64_t double_t
 
 # Typing
 cdef extern from *:
@@ -84,7 +83,7 @@ cdef int _matvec_quad_form_double(
     cdef:
         Py_ssize_t n = pmat_mv.shape[0]
         Py_ssize_t i, j
-        double_t acc
+        float_t acc
     
     for i in range(n):
         acc = 0.0

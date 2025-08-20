@@ -2,22 +2,23 @@
 # distutils: language=c
 
 """
-skip_bgp.pyx: Allows user to skip the BGP to only process input files (Cythonized).
+skip_bgp.pyx: 
+Allows user to skip the BGP to only process input files (Cythonized).
 This module preserves the original API but uses typed variables and memoryviews
 where appropriate for efficiency.
 """
 
 from __future__ import annotations
+
 import numpy as np
 cimport numpy as cnp
+
 from typing import List, Tuple, Iterable, Any, Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed, Future
 from tqdm import tqdm
 import rasterio
 
-# Local imports (Python-level)
-from .rastio import MultibandBlockReader, MultibandBlockWriter
-from libc.stdint cimport intptr_t
+from .build.rastio import MultibandBlockReader, MultibandBlockWriter
 
 # NumPy typedefs for memoryviews
 cnp.import_array()

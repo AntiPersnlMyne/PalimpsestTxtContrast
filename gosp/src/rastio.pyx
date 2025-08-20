@@ -11,14 +11,13 @@ cimport numpy as np
 from os import makedirs
 from os.path import join
 import tempfile
-import atexit
 
 from osgeo import gdal
 import rasterio
 from rasterio.windows import Window
 cdef extern from "Python.h": pass  # silence “Python.h” warning when using only typed calls
 
-from .file_utils import rm
+from .build.file_utils import rm
 
 
 # --------------------------------------------------------------------------------------------
