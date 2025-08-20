@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # distutils: language=c
 
-"""tcp.py: Target Classification Process. Automatically classified pixels into one of N classes found by tgp.py."""
+"""tcp.pyx: Target Classification Process. Automatically classified pixels into one of N classes found by tgp.py."""
 
 # --------------------------------------------------------------------------------------------
 # Imports

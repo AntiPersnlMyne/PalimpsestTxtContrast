@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # distutils: language=c
 
-"""math_utils.py: Linear algebra, matrix, and calculus helper functions"""
+"""math_utils.pyx: Linear algebra, matrix, and calculus helper functions"""
 
 # --------------------------------------------------------------------------------------------
 # Imports

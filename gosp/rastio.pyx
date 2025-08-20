@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # distutils: language=c
 
-"""rastio.py: Handles I/O of raster data"""
+"""rastio.pyx: Handles I/O of raster data"""
 
 # --------------------------------------------------------------------------------------------
 # Imports

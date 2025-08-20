@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # distutils: language = c
 
-"""bgp.py: Band Generation Process, creates new non-linear bondinations of existing bands"""
+"""bgp.pyx: Band Generation Process, creates new non-linear bondinations of existing bands"""
 
 # --------------------------------------------------------------------------------------------
 # Imports

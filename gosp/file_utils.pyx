@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # distutils: language=c
 
-"""fileio.py: File discovery and deletion"""
+"""fileio.pyx: File discovery and deletion"""
 
 # --------------------------------------------------------------------------------------------
 # Imports

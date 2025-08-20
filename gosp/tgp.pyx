@@ -2,7 +2,7 @@
 # distutils: language=c
 
 
-"""tgp.py: Target Generation Process. Automatically creates N most significant targets in target detection for pixel classification"""
+"""tgp.pyx: Target Generation Process. Automatically creates N most significant targets in target detection for pixel classification"""
 
 # --------------------------------------------------------------------------------------------
 # Imports

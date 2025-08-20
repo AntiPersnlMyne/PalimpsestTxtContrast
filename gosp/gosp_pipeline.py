@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""gosp.py: GOSP (Generalized Orthogonal Subspace Projection)
+"""gosp_pipeline.py: GOSP (Generalized Orthogonal Subspace Projection)
 
 Implements: The OSP-based, automatic target detection workflow laid out by Chang and Ren.
 [Ref] Hsuan Ren, Student Member, IEEE, and Chein-I Chang, Senior Member, IEEE 2000

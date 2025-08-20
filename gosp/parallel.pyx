@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # distutils: language=c
 
-"""parallel.py: Parallelization ("multiprocessing") wrapper API. 
+"""parallel.pyx: Parallelization ("multiprocessing") wrapper API. 
 
 Notes
 -----
