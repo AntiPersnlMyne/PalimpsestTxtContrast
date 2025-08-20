@@ -4,8 +4,8 @@
 numpy
 
 # Image processing
-opencv-python      # Image processing functions
-colorspacious      # 16-bit color space transformations
+# opencv-python      # Image processing functions
+# colorspacious      # 16-bit color space transformations
 
 # Optimization
 cython             # C extensions for Python 

@@ -1,5 +1,6 @@
-# Palimpsest Text Contrast
-An implementation of the Orthoginal Subspace Projection (OSP) target detection method on multi-spectral, historical document imaging. A student contribution to the MISHA project. 
+# GOSP
+An implementation of the Generalized Orthoginal Subspace Projection (GOSP) target detection method. A students' contribution to the MISHA project. The MISHA (Multispectral Imaging System for Historical Artifacts) project is a system created by College of Imaging Science at RIT and the RIT Museum Studies Program.
+
 
 
 ## Setup
@@ -10,7 +11,7 @@ git clone https://github.com/AntiPersnlMyne/PalimpsestTxtContrast
 
 (2) Navigate to the project directory:
 
-cd ~/PATH TO PROJECT/PalimpsestTxtContrast
+cd PalimpsestTxtContrast
 
 
 (3) Run the setup script:
@@ -21,73 +22,90 @@ cd ~/PATH TO PROJECT/PalimpsestTxtContrast
 (Windows) \
 `setup.bat`
 
-(4) Move data to be processed into `data/input`
+(4) [optional] Move `data/`, `gosp/` and `main.py` to `(gospvenv)` if it exists
 
 
 This script will:
 - Install the required dependencies (libraries) from the `requirements.txt` file
-- Create the necessary directory structure
+- Compile and build project files 
 - Optionally creates virtual environment - keeps dependencies isolated
-- Delete the `setup.bat/.sh` file
+- Delete the setup.bat/.sh and requirements.txt file
 --------------------------------------------------------------------------------
 
 
 
+## Getting started
+Just import the gosp function into your project. An example can be seen in provided `main.py`:
+```python
+from gosp import gosp
+
+gosp(
+    # Required parameters
+    input_dir="data/input"
+    output_dir="data/output"
+    # Optional parameters
+    ...
+)
+```
+
+
+
 ## Dependencies
-This project uses the ENVI (Environment for Visualizing Imagery) software by NV5 Geospatial Software. This project is compatable with the now latest version of ENVI - 6.1 with IDL 9.1. Compatible Python versions are > 3.10.x and < 3.12.x. 
-
-The software can be made available through a CIS (Chester F. Carlson College of Imaging Science) license. The MISHA (Multispectral Imaging System for Historical Artifacts) project is a system created by CIS and the RIT Museum Studies Program.
-
-Python Version:
-- 3.12.7 (This is due to a compatability issue with IDL 9.1)
-- When prompted during startup.sh/.bat, creating the virtual environment will provide a compatable Python version for the project
+- Python version 3.15+
+- [optional][future] CUDA 13.0 compatible GPU
 
 This project includes the following libraries: 
 1. Numpy (data arrays)
-2. OpenCV (computer vision)
-3. SPy (spectral data processing)
-4. scikit-image (image processing)
-5. SciPy (scientific computing)
-6. Matplotlib (plotting)
-7. Pytesseract (OCR)
-8. Pillow/PIL (OCR dependancy)
+2. Cython (C extensions)
+3. Setuptools (Build/Compiler)
+4. Numba (JIT compiler)
+5. rasterio (raster I/O)
+6. GDAL (virtual raster title)
+7. tqdm (terminal progress bar)
 
-The startup script AUTOMATICALLY downloads these libraries, ready to use, no user input required (venv recommended for package isolation)
-
+The startup script AUTOMATICALLY downloads these libraries, ready to use, no user input required. venv ('gospenv' during setup.sh/.bat) recommended for package isolation.
 
 
-## Usage
-The current Python script is setup to accept TIFF (`.tif`, `.tiff`) raw image files, as well as ENVI files (`.pro`, `.dat`). 
 
-Place all PRE-processed images into the input directory:
+## Structure
+The current Python script is setup to accept TIFF (`.tif`) files. `gosp` function accepts all rasterio compatible types.
+
+Place all raw images into the input directory:
 
 `data/input`
 
-Images that have been POST-processed are stored in the output directory: 
+Targets from gosp are written as multiband TIFF: 
 
-`data/output`
+`<OUTDIR>targets_classified/targets_classified.tif`
 
-Utility Python and IDL files are stored in their respective directories: 
+Source (.py, .c) and build (.so/.pyd) files are in gosp directory: 
 
-`src/python_scripts`
-`src/IDL_scripts`
+`gosp/build`
+`gosp/src`
 
 The execution file is `main.py`
 
 
-## Questions (or complaints)
+
+## Questions
 Complaints may fall on deaf ears. Questions may fall on ignorant ears.
 
 For questions concerning legality or contact from within CIS, please contact Gian-Mateo (AntiPersnlMyne) at: 
-`mt9485@rit.edu`
+`mt9485@rit.edu` (until 2026)
+`mtifone2022@disroot.org`
+
+
 
 ### Additional Personel
 
-Douglas Tavolette(dft8437@rit.edu) | RIT software engineering student, who devoted his free time to developing code for this project
+Douglas Tavolette, BS   | RIT software engineering student, who devoted his free time to developing code for this project
 
 
-Roger Easton Jr.(rlepci@rit.edu) | My excellent adviser and project sponsor, MISHA personell
+Roger Easton Jr., Ph. D | My adviser who gave me freedom to explore the world of R&D, and project sponsor.
 
 
-David Messinger(dwmpci@rit.edu) | Another adviser and mentor, MISHA personell
+David Messinger, Ph. D  | Providing project direction.
+
+
+Juliee Decker, Ph.D     | Graciously teaching and included myself into all things MISHA.
 
