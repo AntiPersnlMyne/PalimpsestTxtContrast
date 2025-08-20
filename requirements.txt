@@ -1,32 +1,23 @@
-# Supports Python 3.13.6+
+# Required Python 3.13+
 
 # Data arrays and backbone of every other library
-numpy             
+numpy
 
 # Image processing
-opencv-python           # Prebuild improc functions
-colorspacious           # 16-bit color space transformations
-# scikit-image==0.25.2    #
-
-# Scientific computing
-# scipy              #        
-# scipy-stubs[scipy] # Syntax highlighting
-
-# Optical Character Recognition (OCR)
-# pytesseract==0.3.13
+opencv-python      # Image processing functions
+colorspacious      # 16-bit color space transformations
 
 # Optimization
-cython           # Static c-typing
-setuptools       # Build Cython
-numba==2.2.6     # JIT compiler
-dask[complete]   # Parallel processing
-cupy-cuda12x
-dask-cuda        # GPU parallel processing
+cython             # C extensions for Python 
+setuptools         # Build Cython
+numba              # JIT compiler and prange
+# dask[complete]   # Parallel processing
+# cupy-cuda12x     # NumPy GPU-acceleration
+# dask-cuda        # Dask GPU-acceleration
 
 # Raster data
-rasterio         # Raster dataset I/O
-GDAL             # Virtual Raster Title (VRT)
+rasterio           # Raster dataset I/O
+GDAL               # Virtual Raster Title (VRT)
 
 # Graphical User Interface 
-screeninfo==0.8.1 # Screen resolution
-tqdm              # Progress bar
+tqdm               # Progress bar
