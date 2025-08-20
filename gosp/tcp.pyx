@@ -178,7 +178,7 @@ def target_classification_process(
 
     # Discover geometry and confirm target dimensionality matches
     with MultibandBlockReader(list(generated_bands)) as reader:
-        img_height, img_width = reader.image_shape()
+        img_height, img_width = reader.image_shape
         sample = reader.read_multiband_block(((0,0), (2,2))) # sample 2x2 block
         band_count = int(sample.shape[0])
 
