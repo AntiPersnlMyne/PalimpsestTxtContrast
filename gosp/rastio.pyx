@@ -103,7 +103,7 @@ cdef class MultibandBlockReader:
         object dataset
         str vrt_path
         int total_bands
-        tuple img_shape
+        tuple image_shape
         list filepaths
     
     def __cinit__(self, list filepaths):
@@ -122,7 +122,7 @@ cdef class MultibandBlockReader:
         self.vrt = _build_vrt(vrt_path=self.vrt_path, filepaths=filepaths)
         self.dataset = gdal.Open(self.vrt_path)
         self.total_bands = self.dataset.RasterCount
-        self.img_shape = (self.dataset.RasterYSize, self.dataset.RasterXSize)
+        self.image_shape = (self.dataset.RasterYSize, self.dataset.RasterXSize)
 
         
     def __enter__(self):
@@ -152,7 +152,7 @@ cdef class MultibandBlockReader:
     
     def image_shape(self) -> tuple:
         """Returns (rows, cols)"""
-        return self.img_shape
+        return self.image_shape
 
     # cpdef maybe?       
     def read_multiband_block(self, tuple window):
@@ -175,9 +175,7 @@ cdef class MultibandBlockReader:
             int col_off     = offsets[1]
             int win_h       = win_dims[0]
             int win_w       = win_dims[1]
-            Py_ssize_t i
-            object band # type = gdal.band
-            np.ndarray[float_t, ndim=2] band_array
+
             np.ndarray[float_t, ndim=3] block 
             
         # Read all bands in one shot (as bytes)
@@ -187,8 +185,9 @@ cdef class MultibandBlockReader:
             buf_type=gdal.GDT_Float32
         )
 
-        # Convert buffer to NumPy array and reshape
+        # Convert bytes (buffer) to NumPy array and reshape
         block = np.frombuffer(rast_data, dtype=np.float32).reshape((self.total_bands, win_h, win_w)).copy()
+        print(f"[DEBUG] Block read shape = {block.shape[0], block.shape[1], block.shape[2]}")
 
         return block
 

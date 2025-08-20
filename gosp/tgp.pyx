@@ -25,7 +25,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.1"
+__version__ = "3.1.2"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -75,7 +75,6 @@ def _make_windows(image_shape: Tuple[int, int], window_shape: Tuple[int, int]):
     return windows
 
 
-
 # --------------------------------------------------------------------------------------------
 # TGP Function
 # --------------------------------------------------------------------------------------------
@@ -88,7 +87,7 @@ def target_generation_process(
     max_workers:int|None = None,  # vvv Parallelization parameters vvv
     inflight:int,
     show_progress:bool
-) -> List[np.ndarray]:
+    ) -> List[np.ndarray]:
     """
     Target Generation Process (TGP).
 
@@ -114,14 +113,11 @@ def target_generation_process(
     
     # Get image shape for window creation
     with MultibandBlockReader(generated_bands) as reader:
-        # Determine final dimensions from small test block (10, 10)
-        image_shape = reader.image_shape()  
-        dummy_block = reader.read_multiband_block(  ((0, 0), (10,10))  )
-        num_bands = int(dummy_block.shape[0]) 
-        del dummy_block # free memory
+        num_bands:int = reader.total_bands
+        image_shape:tuple = reader.image_shape
 
     # Generate all windows for image 
-    windows = _make_windows(image_shape, window_shape)
+    windows:list = _make_windows(image_shape, window_shape)
 
 
     # =================================

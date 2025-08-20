@@ -601,7 +601,7 @@ def best_target_parallel(
     """
     Parallel variant of global argmax scan using `submit_streaming`.
 
-    The parent process reduces local candidates into a single global best.
+    The parent process reduces local candidate Targets into a single global best.
     """
     # Initalize output
     best_target:Target = Target(value=-np.inf, row=-1, col=-1, band_spectrum=np.empty(0, dtype=np.float32))
@@ -615,6 +615,7 @@ def best_target_parallel(
         # Compare size ("value") of targets' L2 norms
         if value > best_target.value: 
             best_target = Target(value, row, col, band_spec)
+            print(f"[DEBUG] Candidate spectrum shape = {best_target.band_spectrum.shape}")
 
 
     tasks = [(window,) for window in list(windows)] # wrap args (window) in tuple for streaming
