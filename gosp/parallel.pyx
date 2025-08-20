@@ -32,6 +32,7 @@ import numpy as np
 
 from libc.math cimport fmaxf, fminf
 from concurrent.futures import ProcessPoolExecutor, as_completed, Future
+import multiprocessing as mp
 
 import rasterio
 from rasterio.windows import Window
@@ -276,20 +277,30 @@ def parallel_generate_streaming(
     Returns:
         band_stats (np.ndarray): Shape=(2, bands) where [0] = global mins, [1] = global maxs.
     """
+    # Get multiprocessing context depending on user's OS
+    # Build worker function around context
+    context = mp.get_context()
+    module = __import__(func_module, fromlist=[func_name])
+    func = getattr(module, func_name)
+    
+    # Preallocate varaibles
     windows_list = list(windows)
     chunks = list(_chunked(windows_list, chunk_size))
-
     cdef np.ndarray global_mins = None
     cdef np.ndarray global_maxs = None
 
+    # Multiprocess to run tasks
     with ProcessPoolExecutor(
         max_workers=max_workers,
         initializer=_init_generate_worker,
         initargs=(list(input_paths), func_module, func_name, full_synthetic),
+        mp_context=context
     ) as exec:
+        # Instantiate vars ; ensure inflight >= 1
         pending: set[Future] = set()
         target_inflight = max(1, (max_workers or 1) * max(1, inflight))
 
+        # Iterate through chunks and give to workers
         chunk_iter = iter(chunks)
         for _ in range(target_inflight):
             try:
@@ -298,10 +309,11 @@ def parallel_generate_streaming(
                 break
             pending.add(exec.submit(_generate_windows_chunk, chunk))
 
+        # Show progress in terminal
         prog_bar = tqdm(total=len(windows_list), desc=desc, unit="win", colour="CYAN") if show_progress else None
         
         try:
-            # Process all tasks in "todo" list
+            # Process all tasks in 'todo' list
             while pending:
                 done = next(as_completed(pending))
                 pending.remove(done)
