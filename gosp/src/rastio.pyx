@@ -15,7 +15,7 @@ import tempfile
 from osgeo import gdal
 import rasterio
 from rasterio.windows import Window
-cdef extern from "Python.h": pass  # silence “Python.h” warning when using only typed calls
+cdef extern from "Python.h": pass  
 
 from gosp.build.file_utils import rm
 
@@ -27,7 +27,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.6"
+__version__ = "3.1.7"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -64,8 +64,8 @@ def _build_vrt(vrt_path:str, filepaths:list[str], separate=True, allow_projectio
     Returns:
         object: VRT dataset object.
     """
-    if not filepaths:
-        raise FileNotFoundError(f"[rastio] No files in filepaths")
+    assert filepaths and len(filepaths) > 0, \
+        f"[rastio] No files in filepaths"
 
     # Build VRT options
     vrt_options = gdal.BuildVRTOptions(
@@ -74,7 +74,12 @@ def _build_vrt(vrt_path:str, filepaths:list[str], separate=True, allow_projectio
     )
 
     # Create the VRT
-    vrt = gdal.BuildVRT(vrt_path, filepaths, options=vrt_options)
+    vrt = gdal.BuildVRT(
+        destName=vrt_path, 
+        srcDSOrSrcDSTab=filepaths, 
+        options=vrt_options
+    )
+    
     if vrt is None:
         raise RuntimeError("[rastio] Failed to build VRT")
 
@@ -98,7 +103,6 @@ cdef class MultibandBlockReader:
             Window (win_height, win_width)
     """
     cdef:
-        object vrt
         object dataset
         str vrt_path
         int total_bands
@@ -113,52 +117,40 @@ cdef class MultibandBlockReader:
         ----------
             filepaths (List[str]): A list of path(s) to the raster files.
         """
-        # Check filepaths isn't empty
-        assert filepaths is not None, "[rastio] MultibandBlockReader: empty file list"
-        
         self.filepaths = filepaths
-        self.vrt_path = "vrt_dataset.vrt"
-        self.vrt = _build_vrt(vrt_path=self.vrt_path, filepaths=filepaths)
-        self.dataset = gdal.Open(self.vrt_path)
+        self.vrt_path = "/vsimem/vrt_dataset.vrt"
+        self.dataset = _build_vrt(
+            vrt_path=self.vrt_path,
+            filepaths=filepaths)
         self.total_bands = self.dataset.RasterCount
         self.image_shape = (self.dataset.RasterYSize, self.dataset.RasterXSize)
-
         
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.dataset = None # close dataset
-        # rm(self.vrt_path)
         self.close()
             
     def __del__(self):
-        try:
-            self.dataset = None
-            # rm(self.vrt_path)
-            self.close()
-        except Exception:
-            pass
-
-    def close(self):
-        """Safely close dataset and free VRT path if present."""
-        try:
-            if self.dataset is not None:
-                self.dataset = None
-            if self.vrt is not None:
-                self.vrt = None
-        except Exception:
-            pass
+        self.close()
 
     @property
     def image_shape(self):
         return self.image_shape
-    
+
     @property
     def total_bands(self):
         return self.total_bands
 
-    # cpdef maybe?
+    def close(self):
+        """Safely close dataset and free VRT path if present."""
+        try:
+            if self.dataset is not None: self.dataset = None
+            if self.vrt is not None: self.vrt = None
+            gdal.Unlink(self.vrt_path)
+        except Exception:
+            pass
+
     def read_multiband_block(self, tuple window):
         """
         Reads a block of data and returns (bands, rows, cols)
@@ -190,7 +182,9 @@ cdef class MultibandBlockReader:
         )
 
         # Convert bytes (buffer) to NumPy array and reshape
-        block = np.frombuffer(rast_data, dtype=np.float32).reshape((self.total_bands, win_h, win_w)).copy()
+        block = np.frombuffer(rast_data, dtype=np.float32
+            ).reshape((self.total_bands, win_h, win_w)
+            ).copy() # shallow copy is Python readable
 
         return block
 
