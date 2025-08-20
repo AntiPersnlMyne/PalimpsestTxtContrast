@@ -133,7 +133,7 @@ cdef void _create_bands_from_block_cy(
 
 # ----------------------------------------
 # Python-callable band creation function
-# (must be importable by workers)
+# (importable by workers)
 # ----------------------------------------
 def _create_bands_from_block(image_block:np.ndarray, full_synthetic:bool):
     """
@@ -227,34 +227,26 @@ def band_generation_process(
         verbose (bint): 
             If true, shows progress bars.
     """
+    # Convert bool to bint
+    cdef bint full_syn = full_synthetic
+
     # ============================================================
     # Scan the input to obtain image size & window dimensions
     # ============================================================
-    input_reader = MultibandBlockReader(input_image_paths)
-    try:
-        img_height, img_width = input_reader.image_shape()
-        # Copy the data so it's independent of the reader
-        tiny_block = np.array(input_reader.read_multiband_block(((0, 0), (1, 1))), copy=True)
-    finally:
-        input_reader.close()
+    with MultibandBlockReader(input_image_paths) as reader:
+        img_height, img_width = reader.image_shape()
+        # Copy the data to allow reader to close
+        # Convert to contiguous float32
+        test_block = np.array(reader.read_multiband_block(((0, 0), (1, 1))), copy=True)
+        if test_block.dtype != np.float32 or not test_block.flags['C_CONTIGUOUS']:
+            test_block = np.ascontiguousarray(test_block, dtype=np.float32)
 
-        
-
-    # ============================================================
-    # Peek one-pixel block to calculate tot num output bands
-    # ============================================================
-    # tiny_block is (bands,1,1); convert to float32 contiguous
-    if tiny_block.dtype != np.float32 or not tiny_block.flags['C_CONTIGUOUS']:
-        tiny_block = np.ascontiguousarray(tiny_block, dtype=np.float32)
-
-    # Convert bool to bint
-    cdef bint full_syn = full_synthetic
-    
-    # Create bands to test output (#-bands) size
-    sample_output = _create_bands_from_block(tiny_block, full_syn)
+    # Create bands to test output size
+    sample_output = _create_bands_from_block(test_block, full_syn)
     num_output_bands = int(sample_output.shape[0])
+    
     # free temporaries
-    del tiny_block, sample_output
+    del test_block, sample_output
     
     # ============================================================
     # Predetermine list of windows

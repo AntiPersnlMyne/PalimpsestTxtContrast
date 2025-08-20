@@ -140,6 +140,7 @@ cdef class MultibandBlockReader:
             self.close()
         except Exception:
             pass
+
     def close(self):
         """Safely close dataset and free VRT path if present."""
         try:
@@ -149,6 +150,14 @@ cdef class MultibandBlockReader:
                 self.vrt = None
         except Exception:
             pass
+
+    @property
+    def image_shape(self):
+        return self.image_shape
+    
+    @property
+    def total_bands(self):
+        return self.total_bands
 
     # cpdef maybe?
     def read_multiband_block(self, tuple window):
