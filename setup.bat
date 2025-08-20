@@ -1,72 +1,39 @@
 @echo off
 setlocal enabledelayedexpansion
 
-:: Prompt user for virtual environment creation
-echo (Optional) Create a virtual environment with compatible python version and necessary libraries.
-echo Type y/yes to proceed, or n/no to only install libraries.
-set /p create_venv="Would you like to create a virtual environment? (y/yes): "
-
-:: Check if input starts with 'y' or 'Y'
-if /i "%create_venv:~0,1%"=="y" (
-    echo Creating virtual environment '.venv' with Python 3.12...
-
-    :: Ensure Python 3.12 is installed and used
-    py -3.12 -m venv venv
-    if errorlevel 1 (
-        echo Failed to create virtual environment with Python 3.12.
-        goto InstallOnly
-    )
-
-    call venv\Scripts\activate.bat
-
-    echo Virtual environment 'venv' activated.
-
-    :: Upgrade pip and install dependencies
-    if exist "requirements.txt" (
-        echo Installing dependencies from requirements.txt...
-        pip install --upgrade pip
-        pip install -r requirements.txt
-    ) else (
-        echo requirements.txt not found.
-    )
-
-    :: Move src folder into venv
-    if exist "src" (
-        echo Moving 'src' folder into venv...
-        move /Y src venv\
-    ) else (
-        echo 'src' folder not found. Skipping move.
-    )
-
-    :: Move data folder into venv
-    if exist "data" (
-        echo Moving 'data' folder into venv...
-        move /Y data venv\
-    ) else (
-        echo 'data' folder not found. Skipping move.
-    )
-
-    :: Deactivate virtual environment
-    echo Deactivating virtual environment...
-    call venv\Scripts\deactivate.bat
-
-    goto Cleanup
+echo Checking Python version...
+for /f "tokens=2 delims= " %%a in ('python -V 2^>^&1') do set PYTHON_VERSION=%%a
+for /f "tokens=1,2 delims=." %%a in ("%PYTHON_VERSION%") do (
+    set MAJOR=%%a
+    set MINOR=%%b
 )
 
-:InstallOnly
-echo Skipping virtual environment setup.
-echo Installing dependencies system-wide...
-
-if exist "requirements.txt" (
-    pip install --upgrade pip
-    pip install -r requirements.txt
-) else (
-    echo requirements.txt not found. Skipping package installation.
+if %MAJOR% lss 3 (
+    echo Python 3.13+ required, found %PYTHON_VERSION%
+    exit /b 1
+)
+if %MAJOR%==3 if %MINOR% lss 13 (
+    echo Python 3.13+ required, found %PYTHON_VERSION%
+    exit /b 1
 )
 
-:Cleanup
-echo Cleaning up setup files...
-del "%~f0" >nul 2>&1
-del "startup.sh" >nul 2>&1
-del "requirements.txt" >nul 2>&1
-echo Setup complete.
+set /p CREATE_VENV="Do you want to create a virtual environment (gospenv)? [y/n]: "
+if /i "%CREATE_VENV%"=="y" (
+    echo Creating virtual environment 'gospenv' ...
+    python -m venv gospenv
+    call gospenv\Scripts\activate
+)
+
+echo Installing Python requirements ...
+pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+
+echo Building Cython files ...
+pip install -e .
+
+echo Cleaning up setup files ...
+del setup.bat
+del setup.sh
+del requirements.txt
+
+echo Setup complete!
