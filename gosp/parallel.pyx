@@ -568,7 +568,7 @@ def _scan_window(window: WindowType) -> Tuple[float_t, int, int, np.ndarray]:
         and isinstance(window[1], tuple)
     ), f"Band WindowType: {window!r}"
 
-    reader: MultibandBlockReader = _scan_state["reader"]  # type:ignore 
+    reader:MultibandBlockReader = _scan_state["reader"]  # type:ignore 
     p_matrix = _scan_state["projection_matrix"]
     (row_off, col_off), (_, win_width) = window
 

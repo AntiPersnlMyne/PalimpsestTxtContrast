@@ -132,6 +132,7 @@ def target_generation_process(
         show_progress=show_progress
     )
     targets.append(T0.band_spectrum)
+    print(f"The T0 spectrum = {T0.band_spectrum}")
 
     # Check target has same num_bands as input data
     if T0.band_spectrum.shape[0] != num_bands: raise ValueError(f"Band mismatch: discovered {num_bands} bands, candidate has {T0.band_spectrum.shape[0]}")

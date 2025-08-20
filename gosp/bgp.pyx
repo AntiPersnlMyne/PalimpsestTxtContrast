@@ -234,7 +234,7 @@ def band_generation_process(
     # Scan the input to obtain image size & window dimensions
     # ============================================================
     with MultibandBlockReader(input_image_paths) as reader:
-        img_height, img_width = reader.image_shape()
+        img_height, img_width = reader.image_shape
         # Copy the data to allow reader to close
         # Convert to contiguous float32
         test_block = np.array(reader.read_multiband_block(((0, 0), (1, 1))), copy=True)
