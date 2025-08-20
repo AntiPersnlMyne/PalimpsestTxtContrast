@@ -1,0 +1,35 @@
+[build-system]
+requires = [
+    "setuptools>=65",
+    "wheel",
+    "Cython>=0.29",
+    "numpy"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gosp"
+version = "3.0"
+description = "Band Generation Process (BGP) package"
+authors = [
+    { name="Gian-Mateo (GM) Tifone", email="mt9485@rit.edu" }
+]
+license = { text="MIT" }
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["BGP", "Cython", "multispectral", "image-processing"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent"
+]
+
+[project.dependencies]
+numpy = ">=1.25"
+
+[tool.setuptools.packages.find]
+where = ["gosp"]
+
+[tool.setuptools.extensions]
+# This tells setuptools to compile the Cython file
+gosp.gosp_pipeline = "gosp/gosp_pipeline.py"

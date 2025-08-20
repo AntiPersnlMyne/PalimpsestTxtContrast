@@ -3,6 +3,7 @@ data
 
 # Any Python cache
 **/__pycache__
+*.egg-info
 
 # Cython build files
 build
