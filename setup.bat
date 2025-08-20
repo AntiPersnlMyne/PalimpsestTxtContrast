@@ -32,8 +32,8 @@ echo Building Cython files ...
 pip install -e .
 
 echo Cleaning up setup files ...
-del setup.bat
 del setup.sh
 del requirements.txt
+del setup.bat
 
 echo Setup complete!

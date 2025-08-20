@@ -26,7 +26,7 @@ echo "Building Cython files ..."
 pip install -e .
 
 echo "Cleaning up setup files ..."
-rm -f setup.sh setup.bat requirements.txt
+rm -f setup.bat requirements.txt setup.sh
 
 if [[ "$create_venv" == "y" || "$create_venv" == "Y" ]]; then
     echo "[Hint] Move `gosp/`, `data/`, and `main.py` into gospenv root.
