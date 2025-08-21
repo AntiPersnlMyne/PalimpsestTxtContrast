@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # distutils: language=c
+# cython: profile=True
 
 """parallel.pyx: Parallelization ("multiprocessing") wrapper API. 
 
@@ -94,7 +95,7 @@ cdef inline float _clampf(const float x) nogil:
     # Clamp to [0,1] 
     return fminf(1.0, fmaxf(0.0, x)) 
 
-@profile
+
 cdef int _bandwise_minmax( 
     float_t[:, :, :] band_data, 
     float_t[:] out_mins, 
@@ -212,7 +213,7 @@ def _init_generate_worker(
     _gen_state["bands_fn"] = getattr(importlib.import_module(func_module), func_name)
     _gen_state["reader"] = MultibandBlockReader(list(input_paths))
 
-@profile
+
 def _generate_windows_chunk(
     windows_chunk: List[tuple]
 ) -> List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]]:
@@ -255,7 +256,7 @@ def _generate_windows_chunk(
     
     return band_stack
 
-@profile
+
 def parallel_generate_streaming(
     *,
     input_paths:Sequence[str],
@@ -427,7 +428,7 @@ def _normalize_windows_chunk(
 
     return output
 
-@profile
+
 def parallel_normalize_streaming(
     *,
     unorm_path: str,

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # distutils: language = c
+# cython: profile=True
 
 """bgp.pyx: Band Generation Process, creates new non-linear bondinations of existing bands"""
 
@@ -63,7 +64,7 @@ cdef inline psize_t _expected_total_bands_cy(
         total += 2 * nbands
     return total
 
-@profile
+
 cdef void _create_bands_from_block_cy(
     float_t[:, :, :] src_mv,        # (bands, height, width)
     float_t[:, :, :] bandstack_mv,  # (total_bands, h, w) preallocated
@@ -135,7 +136,6 @@ cdef void _create_bands_from_block_cy(
 # Python-callable band creation function
 # (importable by workers)
 # ----------------------------------------
-@profile
 def _create_bands_from_block(image_block:np.ndarray, full_synthetic:bool):
     """
     Python-callable wrapper used by worker processes.

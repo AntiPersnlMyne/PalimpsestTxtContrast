@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # distutils: language=c
+# cython: profile=True
 
 """math_utils.pyx: Linear algebra, matrix, and calculus helper functions"""
 
