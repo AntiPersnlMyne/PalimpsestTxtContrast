@@ -71,7 +71,6 @@ class Target:
 # --------------------------------------------------------------------------------------
 # Helper functions
 # --------------------------------------------------------------------------------------
-@profile
 def _chunked(
     iterable: Iterable[Any], 
     size: int
@@ -122,7 +121,7 @@ cdef int _bandwise_minmax(
                 elif px_val > out_maxs[b]: 
                     out_maxs[b] = px_val 
 
-@profile
+
 cdef int _normalize_inplace(
     float_t[:, :, :] block, 
     const float_t[:] mins, 
@@ -143,7 +142,7 @@ cdef int _normalize_inplace(
                 px_val = (block[b, row, col] - min_val) / dnom
                 block[b, row, col] = _clampf(px_val) 
                 
-@profile
+
 cdef int _argmax_l2_norms(
     float_t[:, :, :] block,
     float_t* out_max_val, 
@@ -188,7 +187,7 @@ _gen_state: dict[str, Any] = {
     "reader": None,             # MultibandBlockReader per worker
 }
 
-@profile
+
 def _init_generate_worker(
     input_paths: List[str], 
     func_module: str, 
@@ -384,7 +383,7 @@ def _init_normalize_worker(
     denom = np.maximum(_worker_state["band_maxs"] - _worker_state["band_mins"], 1e-8) # prevent div 0
     np.divide(dummy_block, denom[:, None, None], out=dummy_block)
 
-@profile
+
 def _normalize_windows_chunk(
     windows_chunk: List[WindowType]
     ) -> List[Tuple[WindowType, np.ndarray]]:
@@ -548,7 +547,7 @@ def _init_scan_worker(paths: Sequence[str], projection: np.ndarray|None) -> None
     _scan_state["projection_matrix"] = projection.astype(np.float32) if projection is not None else None
     _scan_state["reader"] = MultibandBlockReader(list(paths))
 
-@profile
+
 def _scan_window(window: WindowType) -> Tuple[float_t, int, int, np.ndarray]:
     """
     (per worker) Scan a single window and return its best candidate.
@@ -634,7 +633,7 @@ def best_target_parallel(
     assert seen > 0 and best_target.band_spectrum.size > 0, "No pixels scanned; empty window list purghaps?"
     return best_target
 
-@profile
+
 def submit_streaming(
     *,
     worker:Callable[..., Any],
