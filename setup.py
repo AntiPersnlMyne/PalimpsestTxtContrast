@@ -1,11 +1,8 @@
 from sys import platform
 from setuptools import setup, Extension, find_packages
-from setuptools.command.build_ext import build_ext
 from Cython.Build import cythonize
 from numpy import get_include
-from os.path import join, dirname, abspath, exists
-from os import makedirs
-
+from os.path import join
 
 # =================
 # Cython optimizers
@@ -16,7 +13,6 @@ cython_directives = {
     "wraparound": True,    # prevent negative indexing
     "cdivision": True,      # use c-style division
 }
-
 
 # ============
 # Source Files
@@ -32,60 +28,33 @@ pyx_files = [
     "math_utils.pyx",
 ]
 
-
 # =========================================
 # OpenMP Compiler Flags (platform-specific)
 # =========================================
-extra_compile_args = []
-extra_link_args = []
-if platform == "win32":
-    extra_compile_args = ["/openmp"]
-else:
-    extra_compile_args = ["-fopenmp"]
-    extra_link_args = ["-fopenmp"]
-
-
-# =================================
-# 'build_ext' To Redict Build Files
-# =================================
-class BuildExt(build_ext):
-    def build_extensions(self):
-        # Ensure build directory exists
-        build_dir = join(dirname(abspath(__file__)), "gosp", "build")
-        if not exists(build_dir):
-            makedirs(build_dir)
-
-        # Redirect each extension's build output
-        for ext in self.extensions:
-            ext.name = "gosp.build." + ext.name.split(".")[-1]
-            
-        # Makes class call itself creating build_ext
-        super().build_extensions()
-
+extra_compile_args = ["/openmp"] if platform == "win32" else ["-fopenmp"]
+extra_link_args = [] if platform == "win32" else ["-fopenmp"]
 
 # =========================
-# Extensions List (Sources)
+# Extensions List
 # =========================
 extensions = [
     Extension(
-        "gosp." + fn[:-4],  # module name ; e.g. gosp.bgp
-        [join("gosp", "src", fn)],  # source location ; e.g. gosp.src.bgp
-        include_dirs=[get_include()], 
+        "gosp." + fn[:-4],                # module name
+        [join("gosp", "src", fn)],       # source location
+        include_dirs=[get_include()],
         extra_compile_args=extra_compile_args,
         extra_link_args=extra_link_args,
     )
     for fn in pyx_files
 ]
 
-
 # ===============================
-# Setup run by 'pip install -e .'
+# Setup call
 # ===============================
 setup(
     name="gosp",
     version="3.1",
-    packages=find_packages(),
+    packages=find_packages(where="gosp"),
     ext_modules=cythonize(extensions, compiler_directives=cython_directives),
-    cmdclass={"build_ext": BuildExt},
     zip_safe=False,
 )
