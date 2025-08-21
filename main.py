@@ -16,7 +16,7 @@ __status__ = "Development" # "Development", or "Production".
 # ---------------
 """
 // (Run) Sets number of avaliable threads from 1 to 8 for multithreading
-OMP_NUM_THREADS=8 python src/main.py
+OMP_NUM_THREADS=8 python main.py
 
 // (Development) Compile Cython files 
 python setup.py build_ext --inplace
@@ -41,17 +41,10 @@ from sys import platform
 # Driver Code
 # --------------------------------------------------------------------------------------------
 def main():
-    start = time()
-
-    gosp(
-        input_dir="data/input/test",
-        output_dir="data/output",
-        verbose=True
-    )
-    
+    # start = time()
     # gosp(
     #     # Input information
-    #     input_dir="data/input/arch177_rgb_365cor_lum",   
+    #     input_dir="data/input/arch165",   
     #     output_dir="/media/g-m/FixedDisk/",         
     #     input_image_types="tif",       
     #     # BGP and TCP parameters    
@@ -60,14 +53,30 @@ def main():
     #     max_targets=40,                     
     #     opci_threshold=0.01,              
     #     # Parallelism fine-tuning
-    #     window_shape=(128,128),          
-    #     max_workers=None,                   
-    #     chunk_size=4,                      
-    #     inflight=2,                         
+    #     window_shape=(256,256),          
+    #     max_workers=3,                   
+    #     chunk_size=2,                      
+    #     inflight=1,                        
     #     # Debug
     #     verbose=True,                      
     # )
-    print(f"\n[main/test] - Execution finished -\nRuntime = {(time() - start):.2f}")
+    # print(f"\n[main/rgb_365cor_lum] - Execution finished -\nRuntime = {(time() - start):.2f}")
+    
+    from gosp.build.bgp import band_generation_process
+    from gosp.build.file_utils import discover_image_files
+    
+    input_files = discover_image_files("data/input/arch165", "tif")
+    
+    band_generation_process(
+        input_image_paths=input_files,
+        output_dir="/media/g-m/FixedDisk/",
+        window_shape=(512,512),
+        full_synthetic=True,
+        max_workers=8,
+        chunk_size=64,
+        inflight=1,
+        show_progress=True
+    )
     
 
 

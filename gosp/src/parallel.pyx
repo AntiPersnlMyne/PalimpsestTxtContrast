@@ -71,6 +71,7 @@ class Target:
 # --------------------------------------------------------------------------------------
 # Helper functions
 # --------------------------------------------------------------------------------------
+@profile
 def _chunked(
     iterable: Iterable[Any], 
     size: int
@@ -94,7 +95,7 @@ cdef inline float _clampf(const float x) nogil:
     # Clamp to [0,1] 
     return fminf(1.0, fmaxf(0.0, x)) 
 
-
+@profile
 cdef int _bandwise_minmax( 
     float_t[:, :, :] band_data, 
     float_t[:] out_mins, 
@@ -121,7 +122,7 @@ cdef int _bandwise_minmax(
                 elif px_val > out_maxs[b]: 
                     out_maxs[b] = px_val 
 
-
+@profile
 cdef int _normalize_inplace(
     float_t[:, :, :] block, 
     const float_t[:] mins, 
@@ -142,7 +143,7 @@ cdef int _normalize_inplace(
                 px_val = (block[b, row, col] - min_val) / dnom
                 block[b, row, col] = _clampf(px_val) 
                 
-
+@profile
 cdef int _argmax_l2_norms(
     float_t[:, :, :] block,
     float_t* out_max_val, 
@@ -187,7 +188,7 @@ _gen_state: dict[str, Any] = {
     "reader": None,             # MultibandBlockReader per worker
 }
 
-
+@profile
 def _init_generate_worker(
     input_paths: List[str], 
     func_module: str, 
@@ -212,7 +213,7 @@ def _init_generate_worker(
     _gen_state["bands_fn"] = getattr(importlib.import_module(func_module), func_name)
     _gen_state["reader"] = MultibandBlockReader(list(input_paths))
 
-
+@profile
 def _generate_windows_chunk(
     windows_chunk: List[tuple]
 ) -> List[Tuple[WindowType, np.ndarray, np.ndarray, np.ndarray]]:
@@ -255,7 +256,7 @@ def _generate_windows_chunk(
     
     return band_stack
 
-
+@profile
 def parallel_generate_streaming(
     *,
     input_paths:Sequence[str],
@@ -279,8 +280,6 @@ def parallel_generate_streaming(
     # Get multiprocessing context depending on user's OS
     # Build worker function around context
     context = mp.get_context()
-    module = __import__(func_module, fromlist=[func_name])
-    func = getattr(module, func_name)
     
     # Preallocate varaibles
     windows_list = list(windows)
@@ -385,7 +384,7 @@ def _init_normalize_worker(
     denom = np.maximum(_worker_state["band_maxs"] - _worker_state["band_mins"], 1e-8) # prevent div 0
     np.divide(dummy_block, denom[:, None, None], out=dummy_block)
 
-
+@profile
 def _normalize_windows_chunk(
     windows_chunk: List[WindowType]
     ) -> List[Tuple[WindowType, np.ndarray]]:
@@ -429,7 +428,7 @@ def _normalize_windows_chunk(
 
     return output
 
-
+@profile
 def parallel_normalize_streaming(
     *,
     unorm_path: str,
@@ -549,7 +548,7 @@ def _init_scan_worker(paths: Sequence[str], projection: np.ndarray|None) -> None
     _scan_state["projection_matrix"] = projection.astype(np.float32) if projection is not None else None
     _scan_state["reader"] = MultibandBlockReader(list(paths))
 
-
+@profile
 def _scan_window(window: WindowType) -> Tuple[float_t, int, int, np.ndarray]:
     """
     (per worker) Scan a single window and return its best candidate.
@@ -635,7 +634,7 @@ def best_target_parallel(
     assert seen > 0 and best_target.band_spectrum.size > 0, "No pixels scanned; empty window list purghaps?"
     return best_target
 
-
+@profile
 def submit_streaming(
     *,
     worker:Callable[..., Any],
