@@ -240,7 +240,7 @@ cdef int[:,:] _generate_windows_cy(
 
 
 # --------------------------------------------------------------------------------------------
-# Python-callable Band Creation Function
+# Python Wrapper for C Helpers
 # --------------------------------------------------------------------------------------------
 def _create_bands_from_block(
     image_block:np.ndarray, 
@@ -340,7 +340,6 @@ def band_generation_process(
             If true, shows progress bars.
     """
     cdef:
-        bint verb      = <bint> verbose 
         bint full_syn  = <bint> full_synthetic
         int win_height = <int> window_shape[0] 
         int win_width  = <int> window_shape[1]
@@ -351,14 +350,14 @@ def band_generation_process(
     output_norm_filename:str = "gen_band_norm.tif"   # normalized bands
     unorm_path:str = join(output_dir, output_unorm_filename)
 
-    if verb: logging.basicConfig(level=logging.INFO)
+    if verbose: logging.basicConfig(level=logging.INFO)
     else: logging.basicConfig(level=logging.WARNING)  
 
 
     # ==============================
     # Image size & window dimensions
     # ==============================
-    if info: info("[BGP] Getting image dimensions ...")
+    if verbose: info("[BGP] Getting image dimensions ...")
     with MultibandBlockReader(input_image_paths) as reader:
         img_height, img_width = reader.image_shape
         # Small 1x1 test block to calc number of output bands 
@@ -380,7 +379,7 @@ def band_generation_process(
     # ============================================================
     # Generate windows
     # ============================================================
-    if verb: info("Generating windows ...")
+    if verbose: info("Generating windows ...")
     # Generate array of window dimensions (num_windows, 4) 
     cdef int[:,:] win_mv = _generate_windows_cy(img_height, img_width, win_height, win_width)
     total_windows = win_mv.shape[0]
@@ -389,7 +388,7 @@ def band_generation_process(
     # ============================================================
     # Initialize arrays for band stack and global min/max
     # ============================================================
-    if verb: info("Initializing output arrays ...")
+    if verbose: info("Initializing output arrays ...")
     # Use small dummy block shape for initialization
     cdef:
         np.ndarray[np.float32_t, ndim=3] band_stack = np.empty((num_output_bands, win_height, win_width), dtype=np.float32)

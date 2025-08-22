@@ -38,14 +38,14 @@ WindowType = np.ndarray
 
 
 # --------------------------------------------------------------------------------------------
-# C Helper Functions (Kernels)
+# C Helper Function
 # --------------------------------------------------------------------------------------------
 cdef int[:,:] _generate_windows_cy(
     int img_height, 
     int img_width, 
     int win_height, 
     int win_width
-) nogil:
+):
     """
     Generate window offsets and sizes for an image.
     
@@ -94,10 +94,10 @@ def target_generation_process(
     window_shape:Tuple[int,int],
     max_targets:int,
     opci_threshold:float,        
-    max_workers:int|None = None,  # vvv Parallelization parameters vvv
-    inflight:int,
-    show_progress:bool
-    ) -> List[np.ndarray]:
+    max_workers:int|None = None,  # currently unused
+    inflight:int,                 # currently unused
+    verbose:bool
+) -> List[np.ndarray]:
     """
     Target Generation Process (TGP).
 
@@ -119,6 +119,7 @@ def target_generation_process(
     Returns:
         List[np.ndarray]: List of targets (T0, T1, T2, ...); 
     """
+
     targets:List[np.ndarray] = []
     
     # Get image shape for window creation
@@ -126,8 +127,23 @@ def target_generation_process(
         num_bands:int = reader.total_bands
         image_shape:tuple = reader.image_shape
 
-    # Generate all windows for image 
-    windows:list = _generate_windows_cy(image_shape, window_shape)
+    # ==============================
+    # Image size & window dimensions
+    # ==============================
+    if info: info("[BGP] Getting image dimensions ...")
+    with MultibandBlockReader(input_image_paths) as reader:
+        img_height, img_width = reader.image_shape
+        # Small 1x1 test block to calc number of output bands 
+        test_win = np.array([0, 0, 1, 1], dtype=np.int32)
+        test_block = np.array(reader.read_multiband_block(test_win), copy=True)
+
+    # ============================================================
+    # Generate windows
+    # ============================================================
+    if verb: info("Generating windows ...")
+    # Generate array of window dimensions (num_windows, 4) 
+    cdef int[:,:] win_mv = _generate_windows_cy(img_height, img_width, win_height, win_width)
+    total_windows = win_mv.shape[0]
 
 
     # =================================
@@ -165,7 +181,7 @@ def target_generation_process(
         opci = compute_opci(p_matrix, best_target.band_spectrum)
         if not np.isfinite(opci): 
             warn("[tcp] OCPI reached a value of infinity, now exiting tgp.")
-            opci = 0.0 # prevent NaN fallback to 1.0 
+            opci = 0.0 # prevent NaN, fallback to 1.0 
         
         if opci < opci_threshold:
             if show_progress: print("[TGP] opci fell below threshold, no more targets generated..")
