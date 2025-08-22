@@ -135,7 +135,7 @@ def gosp(
             max_workers=max_workers,
             chunk_size=chunk_size,
             inflight=inflight,
-            show_progress=verbose
+            verbose=verbose
         )
     else:
         # Change TGP to read input files instead of synthetic bands

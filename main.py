@@ -48,8 +48,8 @@ def main():
     start = time()
     gosp(
         # Input information
-        input_dir="data/input/arch165",   
-        output_dir="/media/g-m/FixedDisk/",         
+        input_dir="data/input/arch177_365cor",   
+        output_dir="data/output",         
         input_image_types="tif",       
         # BGP and TCP parameters    
         full_synthetic=True,                   

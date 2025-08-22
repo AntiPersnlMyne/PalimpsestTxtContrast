@@ -140,7 +140,7 @@ cdef int _normalize_block_cy(
     Safe against division by zero.
     """
     cdef:
-        size_t b, row, col, height, width, bands
+        ssize_t b, row, col, height, width, bands
         float_t denom, block_val
 
     bands = block.shape[0]
@@ -209,7 +209,7 @@ cdef int[:,:] _generate_windows_cy(
         int n_cols = (img_width + win_width - 1) // win_width
         int total_windows = n_rows * n_cols
         int[:, :] win_mv
-        np.ndarray[int, ndim=2] windows = np.empty((total_windows, 4), dtype=int)
+        np.ndarray[int, ndim=2] windows = np.empty((total_windows, 4), dtype=np.int32)
     
     win_mv = windows
 
@@ -295,11 +295,11 @@ def band_generation_process(
     input_image_paths:List[str],
     output_dir:str,
     window_shape:Tuple[int, int],
-    full_synthetic:bint,
+    full_synthetic:bool,
     max_workers:int|None,   # currently unused
     chunk_size:int,         # currently unused
     inflight:int,           # currently unused
-    show_progress:bint,
+    verbose:bool,           # currently unused
 ):
     """
     The Band Generation Process. Generates synthetic, non-linear bands as combinations of existing bands. 
@@ -334,10 +334,11 @@ def band_generation_process(
             If true, shows progress bars.
     """
     cdef:
-        bint full_syn = full_synthetic
-        int img_height, img_width
+        bint verb      = <bint> verbose 
+        bint full_syn  = <bint> full_synthetic
         int win_height = <int> window_shape[0] 
         int win_width  = <int> window_shape[1]
+        int img_height, img_width
 
     # (Hardcoded) output file names
     output_unorm_filename:str = "gen_band_unorm.tif" # un-normalized bands
@@ -350,8 +351,9 @@ def band_generation_process(
     # ==============================
     with MultibandBlockReader(input_image_paths) as reader:
         img_height, img_width = reader.image_shape
-        # Small test block to calc number of output bands 
-        test_block = np.array(reader.read_multiband_block(((0, 0), (1, 1))), copy=True)
+        # Small 1x1 test block to calc number of output bands 
+        test_win = np.array([0, 0, 1, 1], dtype=np.int32)
+        test_block = np.array(reader.read_multiband_block(test_win), copy=True)
     
     # Ensure float32 and contigouous
     if test_block.dtype != np.float32 or not test_block.flags['C_CONTIGUOUS']:
@@ -411,8 +413,8 @@ def band_generation_process(
             col_off = win_mv[i,1]
             height  = win_mv[i,2]
             width   = win_mv[i,3]
-            win = (row_off, col_off, height, width)
             # Read block from window
+            win = np.asarray([row_off, col_off, height, width], dtype=np.int32)
             block = reader.read_multiband_block(win)
             # Create synthetic bands
             new_block = _create_bands_from_block(block, full_syn)
@@ -443,15 +445,17 @@ def band_generation_process(
             output_datatype     = np.float32
         ) as writer:
 
-        for i in range(win_mv.shape[0]):
+        for i in range(total_windows):
             # Build window
-            row_off, col_off, height, width = win_mv[i,0], win_mv[i,1], win_mv[i,2], win_mv[i,3]
-            win = (row_off, col_off, height, width)
+            row_off = win_mv[i,0] 
+            col_off = win_mv[i,1]
+            height  = win_mv[i,2]
+            width   = win_mv[i,3]
             # Read block from window
+            win = np.asarray([row_off, col_off, height, width], dtype=np.int32)
             block = reader.read_multiband_block(win)
-            # Efficient memory views to data
+            # Memory views to data
             block_mv = block
-
             # Normalize blocks with C-kernels
             with nogil:
                 _normalize_block_cy(block_mv, mins_mv, maxs_mv)

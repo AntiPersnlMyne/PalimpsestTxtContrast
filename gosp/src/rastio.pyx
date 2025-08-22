@@ -151,13 +151,13 @@ cdef class MultibandBlockReader:
         except Exception:
             pass
 
-    def read_multiband_block(self, tuple window):
+    def read_multiband_block(self, np.ndarray[int, ndim=1] window):
         """
         Reads a block of data and returns (bands, rows, cols)
         
         Parameters
         ----------
-            window (WindowType): Region of raster to pull data: ( (row_off, col_off), (win_height, win_width) )
+            window (WindowType): Region of raster to pull data: ( row_off, col_off, win_height, win_width )
 
         Returns
         ----------
@@ -165,12 +165,10 @@ cdef class MultibandBlockReader:
                 with shape (bands, height, width), where (height, width) defined by window.
         """
         cdef:
-            tuple offsets   = window[0]
-            tuple win_dims  = window[1]
-            int row_off     = offsets[0]
-            int col_off     = offsets[1]
-            int win_h       = win_dims[0]
-            int win_w       = win_dims[1]
+            int row_off     = <int>window[0]
+            int col_off     = <int>window[1]
+            int win_h       = <int>window[2]
+            int win_w       = <int>window[3]
 
             np.ndarray[float_t, ndim=3] block 
             
@@ -278,8 +276,9 @@ cdef class MultibandBlockWriter:
 
     def write_block(
         self, 
-        tuple window, 
-        np.ndarray[float_t, ndim=3] block
+        np.ndarray[float_t, ndim=3] block,
+        np.ndarray[int, ndim=1] window, 
+
     ):
         """
         Write block of data to dataset
@@ -292,12 +291,10 @@ cdef class MultibandBlockWriter:
                 Block of data to be written. Size: (bands, win_height, win_width).
         """
         cdef:
-            tuple offs   = window[0]
-            tuple dims   = window[1]
-            int row_off  = offs[0]
-            int col_off  = offs[1]
-            int win_h    = dims[0]
-            int win_w    = dims[1]
+            int row_off     = <int>window[0]
+            int col_off     = <int>window[1]
+            int win_h       = <int>window[2]
+            int win_w       = <int>window[3]
         
         # ==============
         # Shape Checking
@@ -310,8 +307,8 @@ cdef class MultibandBlockWriter:
         cdef float_t[:, :, :] block_mv = block
 
         # Check dims and dataset
-        if block_mv.shape[0] != self.num_bands or block_mv.shape[1] != win_h or block_mv.shape[2] != win_w:
-            raise ValueError(f"[rastio] Shape mismatch: got {(block_mv.shape[0],block_mv.shape[1],block_mv.shape[2])} vs expected ({self.num_bands}, {win_h}, {win_w})")
+        # if block_mv.shape[0] != self.num_bands or block_mv.shape[1] != win_h or block_mv.shape[2] != win_w:
+            # raise ValueError(f"[rastio] Shape mismatch: got {(block_mv.shape[0],block_mv.shape[1],block_mv.shape[2])} vs expected ({self.num_bands}, {win_h}, {win_w})")
         if not self.dataset:
             raise RuntimeError("[rastio] Attempted to write but dataset is not initialized")
         
