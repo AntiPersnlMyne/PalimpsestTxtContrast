@@ -157,12 +157,10 @@ def project_block_onto_complement(
     reshaped = block.reshape(bands, -1)
 
     P_mat = np.ascontiguousarray(proj_matrix, dtype=np.float32)
-    if P_mat.shape != (bands, bands):
-        raise ValueError(f"Bad proj_matrix shape {P_mat.shape}, expected {(bands, bands)}")
     P_mat = 0.5 * (P_mat + P_mat.T)
 
     projected = P_mat.dot(reshaped)
-    return projected.reshape(bands, height, width).astype(np.float32, copy=False)
+    return projected.reshape(bands, height, width)
 
 
 def compute_opci(
@@ -204,8 +202,6 @@ def compute_opci(
         return 0.0
 
     P = np.ascontiguousarray(p_matrix, dtype=np.float32)
-    if P.ndim != 2 or P.shape[0] != P.shape[1] or P.shape[0] != x_vec.shape[0]:
-        raise ValueError(f"[compute_opci] Bad shapes: P={P.shape}, x={x_vec.shape}")
     P = 0.5 * (P + P.T)
 
 
@@ -236,3 +232,75 @@ def compute_opci(
 
     cdef float_t opci_clamped = <float> min(max(opci, 0.0), 1.0)
     return <float_t> csqrt(opci_clamped)
+
+
+cdef void _project_block_cy(
+    float_t[:, :, :] block_mv,     # shape: (bands, height, width)
+    float_t[:, :] P_mv,            # shape: (bands, bands)
+    float_t[:, :, :] out_mv        # shape: (bands, height, width)
+) noexcept nogil:
+    """
+    Project a block into a subspace defined by P (bands x bands).
+
+    Args:
+        block_mv: memoryview of input block (bands, h, w)
+        P_mv: memoryview of projection matrix (bands, bands)
+        out_mv: preallocated output memoryview (bands, h, w)
+    """
+    cdef:
+        Py_ssize_t b, row, col, k
+        Py_ssize_t bands = block_mv.shape[0]
+        Py_ssize_t height = block_mv.shape[1]
+        Py_ssize_t width = block_mv.shape[2]
+        float_t acc
+
+    for row in range(height):
+        for col in range(width):
+            for b in range(bands):
+                acc = 0.0
+                for k in range(bands):
+                    acc += P_mv[b, k] * block_mv[k, row, col]
+                out_mv[b, row, col] = acc
+
+
+def project_block_onto_subspace(
+    block: np.ndarray,
+    proj_matrix: np.ndarray
+) -> np.ndarray:
+    """
+    Project each pixel in a block into the subspace defined by proj_matrix
+    using a fast Cython memoryview implementation (nogil).
+
+    Args:
+        block: ndarray, shape (bands, height, width), dtype float32
+        proj_matrix: ndarray, shape (bands, bands), dtype float32
+
+    Returns:
+        Projected block: ndarray, shape (bands, height, width), dtype float32
+    """
+    cdef:
+        # int bands = block.shape[0]
+        # int height = block.shape[1]
+        # int width  = block.shape[2]
+        float_t[:, :, :] block_mv
+        float_t[:, :] P_mv
+        float_t[:, :, :] out_mv
+        np.ndarray out_block
+
+    # Ensure contiguous float32 arrays
+    block = np.ascontiguousarray(block, dtype=np.float32)
+    proj_matrix = np.ascontiguousarray(proj_matrix, dtype=np.float32)
+
+    # Allocate output
+    out_block = np.empty_like(block, dtype=np.float32)
+
+    # Create memoryviews
+    block_mv = block
+    P_mv = proj_matrix
+    out_mv = out_block
+
+    # Call C kernel without GIL
+    with nogil:
+        _project_block_cy(block_mv, P_mv, out_mv)
+
+    return out_block
