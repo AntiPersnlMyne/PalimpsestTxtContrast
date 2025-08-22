@@ -34,45 +34,55 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # --------------------------------------------------------------------------------------------
 # Custom Datatypes
 # --------------------------------------------------------------------------------------------
-WindowType = Tuple[Tuple[int, int], Tuple[int, int]]
+WindowType = np.ndarray
 
 
 # --------------------------------------------------------------------------------------------
-# Helper Function
+# C Helper Functions (Kernels)
 # --------------------------------------------------------------------------------------------
-def _make_windows(image_shape: Tuple[int, int], window_shape: Tuple[int, int]):
+cdef int[:,:] _generate_windows_cy(
+    int img_height, 
+    int img_width, 
+    int win_height, 
+    int win_width
+) nogil:
     """
-    Generates all possible windows over an image. Used in _best_target.
+    Generate window offsets and sizes for an image.
     
-    Args: 
-        image_shape (Tuple[int,int]): (height,width) of entire source image.
-        window_shape (Tuple[int,int]): (height,width) of window.
+    Returns:
+        windows: int[:, :] memoryview of shape (total_windows, 4)
+                 Each row: (row_off, col_off, actual_height, actual_width)
     """
-   # Get image and window dimensions
     cdef:
-        Py_ssize_t img_height, img_width
-        Py_ssize_t win_height, win_width
-        Py_ssize_t row_off, col_off
-        Py_ssize_t actual_height, actual_width
-
-    img_height = image_shape[0]
-    img_width  = image_shape[1]
-    win_height = window_shape[0]
-    win_width  = window_shape[1]
-
-    windows: List[WindowType] = []
-
-    # Create windows
-    for row_off in range(0, img_height, win_height):
-        for col_off in range(0, img_width, win_width):
-            # Prevent window from out-of-bounds
-            actual_height = win_height if win_height < (img_height - row_off) else (img_height - row_off)
-            actual_width = win_width if win_width < (img_width - col_off) else (img_width - col_off)
-            
-            # Create window and append to list
-            windows.append( ((<int>row_off, <int>col_off), (<int>actual_height, <int>actual_width)) )
+        int n_rows = (img_height + win_height - 1) // win_height
+        int n_cols = (img_width + win_width - 1) // win_width
+        int total_windows = n_rows * n_cols
+        int[:, :] win_mv
+        np.ndarray[int, ndim=2] windows = np.empty((total_windows, 4), dtype=np.int32)
     
-    return windows
+    win_mv = windows
+
+    cdef int row_idx, col_idx, win_idx
+    cdef int row_off, col_off, actual_height, actual_width
+
+    win_idx = 0
+    for row_idx in range(n_rows):
+        row_off = row_idx * win_height
+        actual_height = win_height if row_off + win_height <= img_height else img_height - row_off
+
+        for col_idx in range(n_cols):
+            col_off = col_idx * win_width
+            actual_width = win_width if col_off + win_width <= img_width else img_width - col_off
+
+            # Fill window valuess
+            win_mv[win_idx, 0] = row_off
+            win_mv[win_idx, 1] = col_off
+            win_mv[win_idx, 2] = actual_height
+            win_mv[win_idx, 3] = actual_width
+
+            win_idx += 1
+
+    return win_mv
 
 
 # --------------------------------------------------------------------------------------------
@@ -117,7 +127,7 @@ def target_generation_process(
         image_shape:tuple = reader.image_shape
 
     # Generate all windows for image 
-    windows:list = _make_windows(image_shape, window_shape)
+    windows:list = _generate_windows_cy(image_shape, window_shape)
 
 
     # =================================

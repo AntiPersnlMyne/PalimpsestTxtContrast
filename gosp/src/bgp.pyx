@@ -48,12 +48,12 @@ ctypedef Py_ssize_t psize_t
 
 
 # --------------------------------------------------------------------------------------------
-# C helper functions
+# C Helper Functions
 # --------------------------------------------------------------------------------------------
 cdef inline psize_t _total_bands_cy(
     psize_t nbands,
     bint full_synthetic
-) nogil:
+) noexcept nogil:
     """
     Expected total bands from input band count `nbands` and `full_synthetic` flag.
 
@@ -137,7 +137,7 @@ cdef int _normalize_block_cy(
     float_t[:, :, :] block,
     float_t[:]       band_mins,
     float_t[:]       band_maxs
-) nogil:
+) noexcept nogil:
     """
     Normalize each band in a block: (x - min) / (max - min).
     Safe against division by zero.
@@ -167,7 +167,7 @@ cdef int _block_minmax_cy(
     float_t[:, :, :] block,      # shape (bands, h, w)
     float_t[:] band_mins,        # global running mins
     float_t[:] band_maxs         # global running maxs
-) nogil:
+) noexcept nogil:
     """
     Update band_mins and band_maxs with values from this block.
     Scans each band in one pass.
@@ -199,7 +199,7 @@ cdef int[:,:] _generate_windows_cy(
     int img_width, 
     int win_height, 
     int win_width
-):
+) noexcept:
     """
     Generate window offsets and sizes for an image.
     
@@ -305,7 +305,7 @@ def band_generation_process(
     max_workers:int|None,   # currently unused
     chunk_size:int,         # currently unused
     inflight:int,           # currently unused
-    verbose:bool,           # currently unused
+    verbose:bool,           
 ):
     """
     The Band Generation Process. Generates synthetic, non-linear bands as combinations of existing bands. 
