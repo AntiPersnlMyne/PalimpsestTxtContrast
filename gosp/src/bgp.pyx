@@ -302,9 +302,6 @@ def band_generation_process(
     output_dir:str,
     window_shape:Tuple[int, int],
     full_synthetic:bool,
-    max_workers:int|None,   # currently unused
-    chunk_size:int,         # currently unused
-    inflight:int,           # currently unused
     verbose:bool,           
 ):
     """

@@ -46,29 +46,6 @@ ctypedef Py_ssize_t psize_t
 # --------------------------------------------------------------------------------------------
 # C Helper Functions
 # --------------------------------------------------------------------------------------------
-cdef int _block_l2_cy(
-    float_t[:, :, :] block_mv, 
-    float_t[:, :] out_mv
-) nogil:
-    """
-    Compute L2 norm at each pixel from a block (bands, h, w).
-    out_mv[row, col] = sqrt(sum_b block[b, row, col]^2).
-    """
-    cdef:
-        psize_t bands = block_mv.shape[0]
-        psize_t height = block_mv.shape[1]
-        psize_t width = block_mv.shape[2]
-        psize_t b, row, col
-        float_t sum
-    
-    for row in range(height):
-        for col in range(width):
-            sum = 0.0
-            for b in range(bands):
-                sum += block_mv[b, row, col] * block_mv[b, row, col]
-            out_mv[row, col] = <float_t> csqrt(sum)
-
-
 cdef int _matvec_cy(
     float_t[:, :] pmat_mv, 
     float_t[:]    x_mv,

@@ -107,13 +107,13 @@ cdef class MultibandBlockReader:
         int total_bands
         tuple image_shape
         list filepaths
+        int rasterX, rasterY
     
     def __cinit__(self, list filepaths):
         """
         Initializes the reader.
 
-        Parameters
-        ----------
+        Args:
             filepaths (List[str]): A list of path(s) to the raster files.
         """
         self.filepaths = filepaths
@@ -122,7 +122,9 @@ cdef class MultibandBlockReader:
             vrt_path=self.vrt_path,
             filepaths=filepaths)
         self.total_bands = self.dataset.RasterCount
-        self.image_shape = (self.dataset.RasterYSize, self.dataset.RasterXSize)
+        self.rasterX = self.dataset.RasterXSize
+        self.rasterY = self.dataset.RasterYSize
+        self.image_shape = (self.rasterY, self.rasterX)
         
     def __enter__(self):
         return self
@@ -170,7 +172,13 @@ cdef class MultibandBlockReader:
             int win_w       = <int>window[3]
 
             np.ndarray[float_t, ndim=3] block 
-            
+
+        # Prevent out of bounds
+        row_off = max(0, min(row_off, self.rasterY - 1))
+        col_off = max(0, min(col_off, self.rasterX - 1))
+        win_h   = min(win_h, self.rasterY - row_off)
+        win_w   = min(win_w, self.rasterX - col_off)
+                    
         # Read all bands in one shot (as bytes)
         rast_data = self.dataset.ReadRaster(
             col_off, row_off, win_w, win_h,

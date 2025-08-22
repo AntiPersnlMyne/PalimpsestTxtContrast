@@ -59,9 +59,6 @@ def gosp(
     skip_bgp:bool = False,
     max_targets:int = 10,
     opci_threshold:float = 0.01,
-    max_workers:int|None = None,
-    chunk_size:int = 8,
-    inflight:int = 2,
     verbose:bool = False,
     ) -> None:
     """
@@ -121,9 +118,6 @@ def gosp(
             output_dir=output_dir,
             window_shape=window_shape,
             full_synthetic=full_synthetic,
-            max_workers=max_workers,
-            chunk_size=chunk_size,
-            inflight=inflight,
             verbose=verbose
         )
     else:
@@ -132,10 +126,7 @@ def gosp(
             input_image_paths=input_files,
             output_dir=output_dir,
             window_shape=window_shape,
-            max_workers=max_workers,
-            inflight=inflight,
-            chunk_size=chunk_size,
-            show_progress=verbose
+            verbose=verbose
         )
 
 
@@ -146,9 +137,7 @@ def gosp(
         window_shape=window_shape,
         max_targets=max_targets,
         opci_threshold=opci_threshold,
-        max_workers=max_workers,
-        inflight=inflight,
-        show_progress=verbose
+        verbose=verbose
     )
 
     logging.info(f"[GOSP] TGP detected {len(targets)} target(s).")
@@ -159,9 +148,7 @@ def gosp(
         window_shape=window_shape,
         targets=targets,
         output_dir=targets_classified_dir,
-        max_workers=max_workers,
-        inflight=inflight,
-        show_progress=verbose
+        verbose=verbose
     )
     
     remove(generated_bands_dir) # Cleanup temp file

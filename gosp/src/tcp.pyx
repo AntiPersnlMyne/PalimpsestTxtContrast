@@ -134,8 +134,6 @@ def target_classification_process(
     targets: List[np.ndarray],
     output_dir: str,
     scores_filename: str = "targets_classified.tif",
-    max_workers: int|None = None,
-    inflight: int = 2,
     verbose:bool = True,
 ) -> None:
     """
@@ -225,43 +223,43 @@ def target_classification_process(
         num_bands=k_targets,
         output_datatype=np.float32,
     ) as writer:
+        with MultibandBlockReader(generated_bands) as reader:
+            # Loop over windows sequentially
+            for i in tqdm(range(total_windows), desc="[TCP] Classifying pixels", unit="win", colour="YELLOW"):
+                row_off = win_mv[i, 0]
+                col_off = win_mv[i, 1]
+                win_h   = win_mv[i, 2]
+                win_w   = win_mv[i, 3]
 
-        # Loop over windows sequentially
-        for i in tqdm(range(total_windows), desc="[TCP] Classifying pixels", unit="win", colour="WHITE"):
-            row_off = win_mv[i, 0]
-            col_off = win_mv[i, 1]
-            win_h   = win_mv[i, 2]
-            win_w   = win_mv[i, 3]
+                # Read block
+                win = np.asarray([row_off, col_off, win_h, win_w], dtype=np.intc)
+                block = reader.read_multiband_block(win)
+                # Check C condigouous
+                if not block.flags['C_CONTIGUOUS']:
+                    block = np.ascontiguousarray(block, dtype=np.float32)
 
-            # Read block
-            win = np.asarray([row_off, col_off, win_h, win_h])
-            block = reader.read_multiband_block(win)#.astype(np.float32, copy=False)
-            # Check C condigouous
-            if not block.flags['C_CONTIGUOUS']:
-                block = np.ascontiguousarray(block, dtype=np.float32)
+                # Prepare score array: (K, h, w)
+                scores = np.empty((k_targets, win_h, win_w), dtype=np.float32)
+                scores_mv = scores
 
-            # Prepare score array: (K, h, w)
-            scores = np.empty((k_targets, win_h, win_w), dtype=np.float32)
-            scores_mv = scores
+                # Compute per-target projected dot-products
+                for k in range(k_targets):
+                    if k_targets == 1:
+                        proj_block = block
+                    else:
+                        proj_block = project_block_onto_subspace(block, Pk_arr[k])
+                        if not proj_block.flags['C_CONTIGUOUS']:
+                            proj_block = np.ascontiguousarray(proj_block, dtype=np.float32)
 
-            # Compute per-target projected dot-products
-            for k in range(k_targets):
-                if k_targets == 1:
-                    proj_block = block
-                else:
-                    proj_block = project_block_onto_subspace(block, Pk_arr[k])
-                    if not proj_block.flags['C_CONTIGUOUS']:
-                        proj_block = np.ascontiguousarray(proj_block, dtype=np.float32)
+                    proj_mv = proj_block
+                    targ_mv = targets_mv[k]
+                    out_mv  = scores_mv[k]
 
-                proj_mv = proj_block
-                targ_mv = targets_mv[k]
-                out_mv  = scores_mv[k]
+                    with nogil:
+                        _compute_scores_inner(proj_mv, targ_mv, out_mv)
 
-                with nogil:
-                    _compute_scores_inner(proj_mv, targ_mv, out_mv)
-
-            # Write scores for this window
-            writer.write_block(window=win, block=scores)
+                # Write scores for this window
+                writer.write_block(window=win, block=scores)
 
 
 

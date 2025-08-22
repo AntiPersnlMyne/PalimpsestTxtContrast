@@ -33,12 +33,7 @@ from gosp import gosp
 # from python_scripts import improc 
 
 from time import time
-import multiprocessing as mp
-from sys import platform
-
 import pstats, cProfile
-
-
 
 
 # --------------------------------------------------------------------------------------------
@@ -48,7 +43,7 @@ def main():
     start = time()
     gosp(
         # Input information
-        input_dir="data/input/arch177_365cor",   
+        input_dir="data/input/arch177_rgb_365cor",   
         output_dir="data/output",         
         input_image_types="tif",       
         # BGP and TCP parameters    
@@ -56,33 +51,30 @@ def main():
         skip_bgp=False,                 
         max_targets=40,                     
         opci_threshold=0.01,              
-        # Parallelism fine-tuning
-        window_shape=(256,256),          
-        max_workers=None,                   
-        chunk_size=2,                      
-        inflight=1,                        
+        # Throughput
+        window_shape=(1024,1024),                 
         # Debug
         verbose=True,                      
     )
-    print(f"\n[main/arch165] - Execution finished -\nRuntime = {(time() - start):.2f}")
+    print(f"\n[main/arch165_] - Execution finished -\nRuntime = {(time() - start):.2f}")
     
 
 
-# ==============
-# Executing Main
-# ==============
+# =========
+# Executing
+# =========
 if __name__ == "__main__":
-    # Multiprocessing logic
-    # fork is faster  - Linux exclusive
-    # spawn is slower - Windows & Linux
-    if platform == "win32":
-        mp.set_start_method("spawn", force=True)
-    else:
-        try: mp.set_start_method("fork", force=True)
-        except: mp.set_start_method("spawn", force=True)
+    # # Multiprocessing logic
+    # # fork is faster  - Linux exclusive
+    # # spawn is slower - Windows & Linux
+    # if platform == "win32":
+    #     mp.set_start_method("spawn", force=True)
+    # else:
+    #     try: mp.set_start_method("fork", force=True)
+    #     except: mp.set_start_method("spawn", force=True)
     
     
-    
+    # Memory/Performance profiler
     cProfile.runctx("main()", globals(), locals(), "Profile.prof")
 
     s = pstats.Stats("Profile.prof")

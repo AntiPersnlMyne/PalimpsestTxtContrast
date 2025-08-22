@@ -82,12 +82,17 @@ cdef int[:,:] _generate_windows_cy(
 
     win_idx = 0
     for row_idx in range(n_rows):
-        row_off = row_idx * win_height
-        actual_height = win_height if row_off + win_height <= img_height else img_height - row_off
-
         for col_idx in range(n_cols):
+            row_off = row_idx * win_height
             col_off = col_idx * win_width
-            actual_width = win_width if col_off + win_width <= img_width else img_width - col_off
+
+            actual_height = win_height
+            if row_off + win_height > img_height:
+                actual_height = img_height - row_off
+
+            actual_width = win_width
+            if col_off + win_width > img_width:
+                actual_width = img_width - col_off
 
             # Fill window valuess
             win_mv[win_idx, 0] = row_off
@@ -103,7 +108,7 @@ cdef int[:,:] _generate_windows_cy(
 def _best_target_cy(
     list src_bands_path,
     int[:,:] win_mv,
-    float_t[:,:] p_matrix = None,
+    np.ndarray p_matrix = None,
 ) -> Target:
     """
     Computes candidate targets for each block, and returns the best (largest L2 norm)
@@ -117,14 +122,17 @@ def _best_target_cy(
     cdef:
         int total_windows = win_mv.shape[0]
         int i, row_off, col_off, win_h, win_w
+
         float_t cur_val
         psize_t cur_idx
         float_t best_val = <float_t> (-3.3e38)
+        # Local best variables
         int best_row = -1
         int best_col = -1
         int best_win_row_off = 0
         int best_win_col_off = 0
-        float_t[:, :, :] block_mv  # typed memoryview for C kernel
+        # Memory view
+        float_t[:, :, :] block_mv  
 
     # Python objects (must be handled with the GIL)
     best_spec: np.ndarray = np.empty(0, dtype=np.float32)
@@ -133,14 +141,15 @@ def _best_target_cy(
     with MultibandBlockReader(src_bands_path) as reader:
         for i in range(total_windows):
             # Build the window tuple: ((row_off, col_off), (height, width))
-            row_off = win_mv[i, 0]
-            col_off = win_mv[i, 1]
-            win_h   = win_mv[i, 2]
-            win_w   = win_mv[i, 3]
-            win_tuple = ((row_off, col_off), (win_h, win_w))
+            row_off = <int> win_mv[i, 0]
+            col_off = <int> win_mv[i, 1]
+            win_h   = <int> win_mv[i, 2]
+            win_w   = <int> win_mv[i, 3]
+            # Read block from window
+            win = np.array([row_off, col_off, win_h, win_w], dtype=np.int32)
+            block = reader.read_multiband_block(win)
 
-            # Read block: (bands, win_h, win_w), float32 contiguous preferred
-            block = reader.read_multiband_block(win_tuple).astype(np.float32, copy=False)
+            # Ensure C contiguous
             if not block.flags['C_CONTIGUOUS']:
                 block = np.ascontiguousarray(block, dtype=np.float32)
 
@@ -150,7 +159,7 @@ def _best_target_cy(
             else:
                 proj_block = block
 
-            # Create typed memoryview (with GIL) then call the cdef kernel without GIL
+            # Find maximum L2 norm across entire block
             block_mv = proj_block
             with nogil:
                 argmax_l2_norms(block_mv, &cur_val, &cur_idx)
@@ -226,9 +235,7 @@ def target_generation_process(
     generated_bands:List[str],
     window_shape:Tuple[int,int],
     max_targets:int,
-    opci_threshold:float,        
-    max_workers:int|None = None,  # currently unused
-    inflight:int,                 # currently unused
+    opci_threshold:float,
     verbose:bool
 ) -> List[np.ndarray]:
     """
@@ -293,7 +300,7 @@ def target_generation_process(
     # Iterate for subsequence targets (t1...tk)
     # =========================================
     if verbose: info("[TGP] Iterating for subsequent targets ...")
-    for _ in tqdm(range(1, max_targets), desc="[TGP] Targets generated", ncols=80):
+    for _ in tqdm(range(1, max_targets), desc="[TGP] Generating targets", unit="target", colour="MAGENTA"):
         p_matrix = compute_orthogonal_complement_matrix(targets)
         best_target = _best_target_cy(
             src_bands_path=generated_bands,
