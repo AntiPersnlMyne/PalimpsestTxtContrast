@@ -91,56 +91,6 @@ cdef int _matvec_cy(
 
 
 # --------------------------------------------------------------------------------------------
-# Helper Functions
-# --------------------------------------------------------------------------------------------
-cdef int argmax_l2_norms(
-    float_t[:, :, :] block_mv,   # shape: (bands, height, width)
-    float_t* out_max_val,        # [output] max L2^2 value (squared norm)
-    psize_t* out_flat_idx        # [output] flat index (row * width + col)
-) nogil:
-    """
-    Compute the pixel with the maximum L2 norm in a hyperspectral block,
-    without allocating any temporary arrays.
-
-    Args:
-        block_mv : float32[:, :, :]
-            Typed memoryview of the block (bands, height, width).
-        out_max_val : float32*
-            Pointer to write the maximum **squared** L2 norm (sum of squares).
-            Use pointer indexing, e.g. out_max_val[0] = value.
-        out_flat_idx : Py_ssize_t*
-            Pointer to write the flat index of the argmax pixel (row * width + col).
-
-
-    Returns:
-        int: Allows cdef to throw error code.
-    """
-    cdef:
-        psize_t bands = block_mv.shape[0]
-        psize_t height = block_mv.shape[1]
-        psize_t width  = block_mv.shape[2]
-        psize_t row, col, b
-        float_t acc
-        float_t max_val = -3.3e38
-        psize_t max_idx = 0
-        psize_t flat_idx
-
-    for row in range(height):
-        for col in range(width):
-            acc = 0.0
-            for b in range(bands):
-                acc += block_mv[b, row, col] * block_mv[b, row, col]
-
-            flat_idx = row * width + col
-            if acc > max_val:
-                max_val = acc
-                max_idx = flat_idx
-
-    out_max_val[0] = max_val
-    out_flat_idx[0] = max_idx
-
-
-# --------------------------------------------------------------------------------------------
 # Matrix Operand Functions
 # --------------------------------------------------------------------------------------------
 def compute_orthogonal_complement_matrix(

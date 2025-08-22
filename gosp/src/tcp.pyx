@@ -10,13 +10,20 @@ from __future__ import annotations
 
 import numpy as np
 cimport numpy as np
+
 from typing import List, Sequence, Tuple
 from libc.math cimport fmaf
+from logging import info
+from tqdm import tqdm
 
-from gosp.build.rastio import MultibandBlockReader, MultibandBlockWriter
-from gosp.build.tgp import _make_windows, WindowType  
-from gosp.build.math_utils import compute_orthogonal_projection_matrix, project_block_onto_subspace
-from gosp.build.parallel import submit_streaming
+from gosp.build.rastio import (
+    MultibandBlockReader, 
+    MultibandBlockWriter  
+)
+from gosp.build.math_utils import(
+    compute_orthogonal_complement_matrix,
+    project_block_onto_subspace
+)
 
 
 # --------------------------------------------------------------------------------------------
@@ -26,7 +33,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.2"
+__version__ = "3.2.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -39,24 +46,8 @@ ctypedef np.float32_t float_t
 
 
 # --------------------------------------------------------------------------------------------
-# Parallel processing
+# C Helper Function
 # --------------------------------------------------------------------------------------------
-# Worker state reuses a reader
-_worker_state: dict[str, object] = {
-    "reader": None,     # MultibandBlockReader
-    "targets": None,    # (targets, bands)
-    "Pk": None,         # (targets, bands, bands)
-}
-
-
-def _init_tcp_worker(paths:Sequence[str], targets:np.ndarray, Pk:np.ndarray) -> None:
-    """Initializer: store immutable arrays in each worker to avoid pickling per task."""
-    _worker_state["reader"]  = MultibandBlockReader(list(paths))
-    _worker_state["targets"] = targets.astype(np.float32, copy=False)
-    _worker_state["Pk"]      = Pk.astype(np.float32, copy=False)
-
-
-
 cdef inline int _compute_scores_inner(
     float_t[:, :, :] proj_mv,           # (bands, h, w)
     const float_t[:] targ_mv,           # (bands,)
@@ -65,15 +56,13 @@ cdef inline int _compute_scores_inner(
     """
     Compute dot(targets[k], proj[:, r, c]) for each pixel (r,c) and store into out_mv.
     
-    Parameters
-    ----------
-    proj_mv (float64):
-        Memory view of projection matrix
-    targ_mv (const float64):
-        Memory view of targets (to be classified)
-    out_mv (float64):
-        Memory view of output slice (height,width)
-    
+    Args: 
+        proj_mv (float64):
+            Memory view of projection matrix
+        targ_mv (const float64):
+            Memory view of targets (to be classified)
+        out_mv (float64):
+            Memory view of output slice (height,width)
     """
     cdef:
         Py_ssize_t bands = proj_mv.shape[0]
@@ -91,65 +80,50 @@ cdef inline int _compute_scores_inner(
             out_mv[row, col] = acc
 
 
-
-def _tcp_window(window: WindowType) -> Tuple[WindowType, np.ndarray]:
+cdef int[:,:] _generate_windows_cy(
+    int img_height, 
+    int img_width, 
+    int win_height, 
+    int win_width
+):
     """
-    Compute per-target OSP responses for a single window.
-
+    Generate window offsets and sizes for an image.
+    
     Returns:
-        Tuple[WindowType, np.ndarray]: (window, scores), where scores are (K-targets, height, width); one band per target.
+        windows: int[:, :] memoryview of shape (total_windows, 4)
+                 Each row: (row_off, col_off, actual_height, actual_width)
     """
-    # Grab worker-shared objects (reader, targets, Pk)
-    reader: MultibandBlockReader = _worker_state["reader"] 
-    targets: np.ndarray = _worker_state["targets"]  # (k-targets, bands)
-    Pk: np.ndarray = _worker_state["Pk"]            # (k-targets, bands, bands)
+    cdef:
+        int n_rows = (img_height + win_height - 1) // win_height
+        int n_cols = (img_width + win_width - 1) // win_width
+        int total_windows = n_rows * n_cols
+        int[:, :] win_mv
+        np.ndarray[int, ndim=2] windows = np.empty((total_windows, 4), dtype=np.int32)
+    
+    win_mv = windows
 
-    # Read block: (bands, height, width)
-    block = reader.read_multiband_block(window).astype(np.float32, copy=False)
-    (_, _), (win_height, win_width) = window
+    cdef int row_idx, col_idx, win_idx
+    cdef int row_off, col_off, actual_height, actual_width
 
-    # Preallocate scores: shape (K, h, w)
-    k_targets = targets.shape[0]
-    scores = np.empty((k_targets, win_height, win_width), dtype=np.float32)
+    win_idx = 0
+    for row_idx in range(n_rows):
+        row_off = row_idx * win_height
+        actual_height = win_height if row_off + win_height <= img_height else img_height - row_off
 
-    # Ensure targets and block are contiguous ; memoryview for fast access in nogil loops
-    if not targets.flags['C_CONTIGUOUS']:
-        targets = np.ascontiguousarray(targets, dtype=np.float32)
+        for col_idx in range(n_cols):
+            col_off = col_idx * win_width
+            actual_width = win_width if col_off + win_width <= img_width else img_width - col_off
 
-    cdef float_t[:, :] targets_mv = targets  # (K, B)
-    if not block.flags['C_CONTIGUOUS']:
-        block = np.ascontiguousarray(block, dtype=np.float32)
+            # Fill window valuess
+            win_mv[win_idx, 0] = row_off
+            win_mv[win_idx, 1] = col_off
+            win_mv[win_idx, 2] = actual_height
+            win_mv[win_idx, 3] = actual_width
 
-    # Create memoryviews
-    # targets_mv[k] is a 1D view; cast to contiguous float[:] for nogil
-    # 2D view for the output slice (h, w)
-    cdef float_t[:, :, :] proj_mv 
-    cdef float_t[:] targ_mv
-    cdef float_t[:, :] out_mv
+            win_idx += 1
 
-    # For each target, compute projected block and then per-pixel dot product
-    cdef Py_ssize_t k
-    for k in range(k_targets):
-        # If only one target, projecting out nothing saves a call; keep same semantics
-        if k_targets == 1:
-            proj_block = block
-        else:
-            # Project block into subspace, excluding target k
-            proj_block = project_block_onto_subspace(block, Pk[k])
+    return win_mv
 
-        # Ensure proj_block is float32 contiguous ndarray
-        if not proj_block.flags['C_CONTIGUOUS'] or proj_block.dtype != np.float32:
-            proj_block = np.ascontiguousarray(proj_block, dtype=np.float32)
-
-        proj_mv = proj_block
-        targ_mv = targets_mv[k]
-        out_mv = scores[k]
-
-        # Call the inner C kernel without the GIL
-        with nogil:
-            _compute_scores_inner(proj_mv, targ_mv, out_mv)
-
-    return window, scores
 
 
 
@@ -162,75 +136,132 @@ def target_classification_process(
     scores_filename: str = "targets_classified.tif",
     max_workers: int|None = None,
     inflight: int = 2,
-    show_progress: bool = True,
+    verbose:bool = True,
 ) -> None:
     """
-    Compute per-target OSP scores across the image and optionally a label map.
+    Compute per-target OSP scores across the image without parallel processing.
 
+    Args:
+        generated_bands (Sequence[str]): Paths to the generated bands.
+        window_shape (Tuple[int,int]): Tile (block) size.
+        targets (List[np.ndarray]): List of target spectra (from TGP).
+        output_dir (str): Directory to write output TIFF.
+        scores_filename (str): Output filename.
+        verbose (bool): Enable progress/info messages.
 
-    Parallel safety:
-      - Workers read-only; parent writes. Worker functions are top-level.
-      - Tasks are (window,) 1-tuples to avoid pickling issues on Windows.
+    Returns:
+        None: Writes output to disk.
     """
+    cdef:
+        int win_height = <int> window_shape[0]
+        int win_width  = <int> window_shape[1]
+        int img_height, img_width, img_bands
+        int[:,:] win_mv
+        int i, total_windows, k, row_off, col_off, win_h, win_w
+        Py_ssize_t k_targets
+
+        float_t[:, :, :] proj_mv
+        float_t[:]       targ_mv
+        float_t[:, :]     out_mv
+        float_t[:, :, :] scores_mv
+        float_t[:, :] targets_mv
+
     if len(targets) == 0:
         raise ValueError("[TCP] No targets provided (TGP output is empty).")
 
-    # Discover geometry and confirm target dimensionality matches
-    with MultibandBlockReader(list(generated_bands)) as reader:
+    # ==============================
+    # Image size & window dimensions
+    # ==============================
+    if verbose: info("[TCP] Reading image dimensions ...")
+    with MultibandBlockReader(generated_bands) as reader:
         img_height, img_width = reader.image_shape
-        sample = reader.read_multiband_block(((0,0), (2,2))) # sample 2x2 block
-        band_count = int(sample.shape[0])
+        img_bands = reader.total_bands
 
-    for i, target in enumerate(targets):
-        if target.shape != (band_count,):
-            raise ValueError(f"[TCP] Target {i} shape {target.shape}, expected ({band_count},)")
 
-    # Precompute per-target projectors and pack arrays for per-task access
-    Pk_list = [compute_orthogonal_projection_matrix([targets[j] for j in range(len(targets)) if j != k]).astype(np.float32)
-               if len(targets) > 1 else np.eye(band_count, dtype=np.float32)
-               for k in range(len(targets))]
-    
-    targets_arr = np.stack([target.astype(np.float32) for target in targets], axis=0)  # (K,B)
-    Pk_arr = np.stack(Pk_list, axis=0).astype(np.float32)                              # (K,B,B)
-    k_targets = targets_arr.shape[0]
+    # ==============================================
+    # Prepare targets and projection matrices
+    # ==============================================
+    if verbose: info("[TCP] Preparing targets ...")
+    k_targets = len(targets)
+    targets_arr = np.stack([t.astype(np.float32) for t in targets], axis=0)  # (K,B)
+    Pk_list = []
 
-    # Score and label writer
-    scores_writer = MultibandBlockWriter(
+    for k in range(k_targets):
+        if k_targets > 1:
+            # Exclude k-th target
+            other_targets = [targets[j] for j in range(k_targets) if j != k]
+            Pk_list.append(compute_orthogonal_complement_matrix(other_targets).astype(np.float32))
+        else:
+            # Single target -> identity
+            Pk_list.append(np.eye(img_bands, dtype=np.float32))
+    Pk_arr = np.stack(Pk_list, axis=0)  # (K,B,B)
+
+    # Ensure contiguous memory
+    if not targets_arr.flags['C_CONTIGUOUS']:
+        targets_arr = np.ascontiguousarray(targets_arr, dtype=np.float32)
+    if not Pk_arr.flags['C_CONTIGUOUS']:
+        Pk_arr = np.ascontiguousarray(Pk_arr, dtype=np.float32)
+
+    # Targets memoryview
+    targets_mv = targets_arr  # (K,B)
+
+
+    # ==============================================
+    # Generate windows
+    # ==============================================
+    if verbose: info("[TCP] Generating windows ...")
+    win_mv = _generate_windows_cy(img_height, img_width, win_height, win_width)
+    total_windows = win_mv.shape[0]
+
+
+    # ==============================================
+    # Initialize writer
+    # ==============================================
+    with MultibandBlockWriter(
         output_dir=output_dir,
         output_image_shape=(img_height, img_width),
         output_image_name=scores_filename,
         window_shape=window_shape,
         num_bands=k_targets,
         output_datatype=np.float32,
-    )
+    ) as writer:
 
-    # Build all windows
-    windows = _make_windows((img_height, img_width), window_shape)
+        # Loop over windows sequentially
+        for i in tqdm(range(total_windows), desc="[TCP] Classifying pixels", unit="win", colour="WHITE"):
+            row_off = win_mv[i, 0]
+            col_off = win_mv[i, 1]
+            win_h   = win_mv[i, 2]
+            win_w   = win_mv[i, 3]
 
-    # Score ("label") all pixels in image
-    with scores_writer as writer:
-        def _consume(result: Tuple[WindowType, np.ndarray]) -> None:
-            # Consumer executes in parent; safe to write here
-            window, scores = result                           # (K,h,w)
-            writer.write_block(window=window, block=scores)
+            # Read block
+            win = np.asarray([row_off, col_off, win_h, win_h])
+            block = reader.read_multiband_block(win)#.astype(np.float32, copy=False)
+            # Check C condigouous
+            if not block.flags['C_CONTIGUOUS']:
+                block = np.ascontiguousarray(block, dtype=np.float32)
 
-        tasks = [(window,) for window in windows]  # one-arg tasks: (window,)
-        submit_streaming(
-            worker=_tcp_window,
-            initializer=_init_tcp_worker,
-            initargs=(list(generated_bands), targets_arr, Pk_arr),
-            tasks=tasks,
-            consumer=_consume,
-            max_workers=max_workers,
-            inflight=inflight,
-            prog_bar_label="[TCP] Labeling targets",
-            prog_bar_color="WHITE",
-            show_progress=show_progress,
-        )
-        
+            # Prepare score array: (K, h, w)
+            scores = np.empty((k_targets, win_h, win_w), dtype=np.float32)
+            scores_mv = scores
 
+            # Compute per-target projected dot-products
+            for k in range(k_targets):
+                if k_targets == 1:
+                    proj_block = block
+                else:
+                    proj_block = project_block_onto_subspace(block, Pk_arr[k])
+                    if not proj_block.flags['C_CONTIGUOUS']:
+                        proj_block = np.ascontiguousarray(proj_block, dtype=np.float32)
 
+                proj_mv = proj_block
+                targ_mv = targets_mv[k]
+                out_mv  = scores_mv[k]
 
+                with nogil:
+                    _compute_scores_inner(proj_mv, targ_mv, out_mv)
+
+            # Write scores for this window
+            writer.write_block(window=win, block=scores)
 
 
 

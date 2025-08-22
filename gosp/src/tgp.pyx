@@ -13,12 +13,12 @@ cimport numpy as np
 from typing import List, Tuple
 from logging import warn, info
 from dataclasses import dataclass
+from tqdm import tqdm
 
 from ..build.math_utils import (
     compute_orthogonal_complement_matrix, 
     compute_opci, 
     project_block_onto_subspace,
-    _argmax_l2_norms
 )
 from ..build.rastio import MultibandBlockReader
 
@@ -153,7 +153,7 @@ def _best_target_cy(
             # Create typed memoryview (with GIL) then call the cdef kernel without GIL
             block_mv = proj_block
             with nogil:
-                _argmax_l2_norms(block_mv, &cur_val, &cur_idx)
+                argmax_l2_norms(block_mv, &cur_val, &cur_idx)
 
             # Update best if current is better
             if cur_val > best_val:
@@ -170,6 +170,54 @@ def _best_target_cy(
         best_win_col_off + best_col,
         best_spec)
 
+
+cdef int argmax_l2_norms(
+    float_t[:, :, :] block_mv,   # shape: (bands, height, width)
+    float_t* out_max_val,        # [output] max L2^2 value (squared norm)
+    psize_t* out_flat_idx        # [output] flat index (row * width + col)
+) nogil:
+    """
+    Compute the pixel with the maximum L2 norm in a hyperspectral block,
+    without allocating any temporary arrays.
+
+    Args:
+        block_mv : float32[:, :, :]
+            Typed memoryview of the block (bands, height, width).
+        out_max_val : float32*
+            Pointer to write the maximum **squared** L2 norm (sum of squares).
+            Use pointer indexing, e.g. out_max_val[0] = value.
+        out_flat_idx : Py_ssize_t*
+            Pointer to write the flat index of the argmax pixel (row * width + col).
+
+
+    Returns:
+        int: Allows cdef to throw error code.
+    """
+    cdef:
+        psize_t bands = block_mv.shape[0]
+        psize_t height = block_mv.shape[1]
+        psize_t width  = block_mv.shape[2]
+        psize_t row, col, b
+        float_t acc
+        float_t max_val = -3.3e38
+        psize_t max_idx = 0
+        psize_t flat_idx
+
+    for row in range(height):
+        for col in range(width):
+            acc = 0.0
+            for b in range(bands):
+                acc += block_mv[b, row, col] * block_mv[b, row, col]
+
+            flat_idx = row * width + col
+            if acc > max_val:
+                max_val = acc
+                max_idx = flat_idx
+
+    out_max_val[0] = max_val
+    out_flat_idx[0] = max_idx
+
+
 # --------------------------------------------------------------------------------------------
 # TGP Function
 # --------------------------------------------------------------------------------------------
@@ -184,8 +232,6 @@ def target_generation_process(
     verbose:bool
 ) -> List[np.ndarray]:
     """
-    Target Generation Process (TGP).
-
     Iteratively projects image into orthogonal subspace and extracts new target vectors
     until OPCI falls below a threshold or a max target count is reached.
 
@@ -229,11 +275,12 @@ def target_generation_process(
     if verbose: info("[TGP] Generating windows ...")
     # Generate array of window dimensions (num_windows, 4) 
     win_mv = _generate_windows_cy(img_height, img_width, win_height, win_width)
-
+    
 
     # =================================
     # Find the first target T0 and OPCI
     # =================================
+    if verbose: info("[TGP] Finding first target ...")
     T0 = _best_target_cy(
         src_bands_path=generated_bands, 
         p_matrix=None,
@@ -245,29 +292,24 @@ def target_generation_process(
     # =========================================
     # Iterate for subsequence targets (t1...tk)
     # =========================================
-    # Iterate until max_targets or OPCI falls below threshold 
-    while len(targets) < max_targets: 
-        # Orthogonal complement projection
+    if verbose: info("[TGP] Iterating for subsequent targets ...")
+    for _ in tqdm(range(1, max_targets), desc="[TGP] Targets generated", ncols=80):
         p_matrix = compute_orthogonal_complement_matrix(targets)
-
-        # Find the best target in the projected subspace
         best_target = _best_target_cy(
             src_bands_path=generated_bands,
-            p_matrix=p_matrix,
             win_mv=win_mv,
+            p_matrix=p_matrix
         )
 
-        # Evaluate OPCI - checks for early stopping
+        # Evaluate OPCI
         opci = compute_opci(p_matrix, best_target.band_spectrum)
         if not np.isfinite(opci):
-            warn("[tgp] OCPI reached a value of infinity, now exiting tgp.")
-            opci = 0.0 # prevent NaN, fallback to 0.0
-        
+            warn("[TGP] OPCI reached infinity; exiting.")
+            opci = 0.0
         if opci < opci_threshold:
-            if verbose: print("[TGP] OPCI fell below threshold, no more targets generated..")
+            if verbose: print("[TGP] OPCI below threshold; stopping.")
             break
 
-        # Accept best_target
         targets.append(best_target.band_spectrum)
 
-    return targets # generated targets; size: [<= max_targets]
+    return targets
