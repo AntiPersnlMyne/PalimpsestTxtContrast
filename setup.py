@@ -39,7 +39,7 @@ extra_link_args = [] if platform == "win32" else ["-fopenmp"]
 # =========================
 extensions = [
     Extension(
-        "gosp." + fn[:-4],                # module name
+        fn[:-4],                         # module name
         [join("gosp", "src", fn)],       # source location
         include_dirs=[get_include()],
         extra_compile_args=extra_compile_args,
@@ -55,6 +55,7 @@ setup(
     name="gosp",
     version="3.1",
     packages=find_packages(where="gosp"),
+    package_dir={"": "gosp"},  # tells setuptools the top-level package is under gosp/
     ext_modules=cythonize(extensions, compiler_directives=cython_directives),
     zip_safe=False,
 )

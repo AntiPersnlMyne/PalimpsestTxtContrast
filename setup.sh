@@ -34,6 +34,6 @@ for f in $(find build/lib/gosp -name "*.so"); do
 done
 
 echo "Cleaning up setup files ..."
-rm -f setup.sh requirements.txt pyproject.toml
+rm -f requirements.txt pyproject.toml setup.sh
 
 echo "Setup complete!"

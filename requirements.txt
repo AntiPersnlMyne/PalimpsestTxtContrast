@@ -4,8 +4,8 @@
 numpy
 
 # Image processing
-# opencv-python      # Image processing functions
-# colorspacious      # 16-bit color space transformations
+# opencv-python     # Image processing functions
+# colorspacious     # 16-bit color space transformations
 
 # Optimization
 cython             # C extensions for Python 
@@ -17,7 +17,7 @@ numba              # JIT compiler and prange
 
 # Raster data
 rasterio           # Raster dataset I/O
-GDAL               # Virtual Raster Title (VRT)
+gdal               # Virtual Raster Title (VRT)
 
 # Graphical User Interface 
 tqdm               # Progress bar
