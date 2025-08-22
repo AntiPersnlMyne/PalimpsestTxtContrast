@@ -15,17 +15,6 @@ Stages:
 """
 
 # --------------------------------------------------------------------------------------------
-# Compile Pipeline Code (so it can be imported)
-# --------------------------------------------------------------------------------------------
-# TODO: Move this to setup.bat/.sh
-# try:
-#     from os import system
-#     system("python setup.py build_ext --inplace")
-# except Exception as e:
-#     print(f"Error compiling Cython scripts:\n{e}")
-
-
-# --------------------------------------------------------------------------------------------
 # Imports Pipeline Modules
 # --------------------------------------------------------------------------------------------
 import logging
@@ -47,7 +36,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.2."
+__version__ = "3.2.4"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"

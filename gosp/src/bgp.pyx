@@ -12,6 +12,9 @@ cimport numpy as np
 
 from typing import Tuple, List
 from os.path import join
+import logging
+from logging import info
+from tqdm import tqdm
 
 from cython.parallel import prange
 from libc.math cimport sqrtf, log1pf
@@ -44,9 +47,9 @@ ctypedef np.float32_t float_t
 ctypedef Py_ssize_t psize_t
 
 
-# ------------------
+# --------------------------------------------------------------------------------------------
 # C helper functions
-# ------------------
+# --------------------------------------------------------------------------------------------
 cdef inline psize_t _total_bands_cy(
     psize_t nbands,
     bint full_synthetic
@@ -196,7 +199,7 @@ cdef int[:,:] _generate_windows_cy(
     int img_width, 
     int win_height, 
     int win_width
-    ):
+):
     """
     Generate window offsets and sizes for an image.
     
@@ -236,10 +239,13 @@ cdef int[:,:] _generate_windows_cy(
     return win_mv
 
 
-# ----------------------------------------
+# --------------------------------------------------------------------------------------------
 # Python-callable Band Creation Function
-# ----------------------------------------
-def _create_bands_from_block(image_block:np.ndarray, full_synthetic:bool):
+# --------------------------------------------------------------------------------------------
+def _create_bands_from_block(
+    image_block:np.ndarray, 
+    full_synthetic:bool
+):
     """
     Python-callable wrapper used by worker processes.
 
@@ -345,10 +351,14 @@ def band_generation_process(
     output_norm_filename:str = "gen_band_norm.tif"   # normalized bands
     unorm_path:str = join(output_dir, output_unorm_filename)
 
+    if verb: logging.basicConfig(level=logging.INFO)
+    else: logging.basicConfig(level=logging.WARNING)  
+
 
     # ==============================
     # Image size & window dimensions
     # ==============================
+    if info: info("[BGP] Getting image dimensions ...")
     with MultibandBlockReader(input_image_paths) as reader:
         img_height, img_width = reader.image_shape
         # Small 1x1 test block to calc number of output bands 
@@ -370,6 +380,7 @@ def band_generation_process(
     # ============================================================
     # Generate windows
     # ============================================================
+    if verb: info("Generating windows ...")
     # Generate array of window dimensions (num_windows, 4) 
     cdef int[:,:] win_mv = _generate_windows_cy(img_height, img_width, win_height, win_width)
     total_windows = win_mv.shape[0]
@@ -378,6 +389,7 @@ def band_generation_process(
     # ============================================================
     # Initialize arrays for band stack and global min/max
     # ============================================================
+    if verb: info("Initializing output arrays ...")
     # Use small dummy block shape for initialization
     cdef:
         np.ndarray[np.float32_t, ndim=3] band_stack = np.empty((num_output_bands, win_height, win_width), dtype=np.float32)
@@ -407,6 +419,7 @@ def band_generation_process(
 
         # Windows store along 0 dimension
         # Data stored alone 1 dimension
+        prog_bar = tqdm(total=total_windows, desc="[BGP] First Pass: unorm", unit="win", colour="CYAN") if verb else None
         for i in range(total_windows):
             # Build window
             row_off = win_mv[i,0] 
@@ -424,14 +437,19 @@ def band_generation_process(
                 _block_minmax_cy(bstack_mv, mins_mv, maxs_mv)
             # Write unnormalized block
             writer.write_block(band_stack, win)
+            
+            # (optional) update progress bar +1
+            if prog_bar: prog_bar.update(1)
+            
 
 
     
     # --------------------------------------------------------------------------------------------
     # Pass 2: Normalize output
     # --------------------------------------------------------------------------------------------
-    # Instantiate block memory view
+    # Instantiate block memory view and progress bar
     cdef float_t[:, :, :] block_mv
+
     
     # Reader - unorm block
     # Writer - norm data to disk
@@ -445,6 +463,7 @@ def band_generation_process(
             output_datatype     = np.float32
         ) as writer:
 
+        prog_bar = tqdm(total=total_windows, desc="[BGP] Second Pass: norm", unit="win", colour="CYAN") if verb else None
         for i in range(total_windows):
             # Build window
             row_off = win_mv[i,0] 
@@ -461,6 +480,9 @@ def band_generation_process(
                 _normalize_block_cy(block_mv, mins_mv, maxs_mv)
             # Writes block to disk
             writer.write_block(block, win)
+
+            # (optional) update progress +1
+            if prog_bar: prog_bar.update(1)
                 
 
 
