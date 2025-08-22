@@ -10,7 +10,6 @@ import numpy as np
 cimport numpy as np
 from os import makedirs
 from os.path import join
-import tempfile
 
 from osgeo import gdal
 import rasterio

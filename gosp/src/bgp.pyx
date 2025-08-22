@@ -31,7 +31,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.5"
+__version__ = "3.2.0"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -350,9 +350,6 @@ def band_generation_process(
     output_norm_filename:str = "gen_band_norm.tif"   # normalized bands
     unorm_path:str = join(output_dir, output_unorm_filename)
 
-    if verbose: logging.basicConfig(level=logging.INFO)
-    else: logging.basicConfig(level=logging.WARNING)  
-
 
     # ==============================
     # Image size & window dimensions
@@ -418,15 +415,15 @@ def band_generation_process(
 
         # Windows store along 0 dimension
         # Data stored alone 1 dimension
-        prog_bar = tqdm(total=total_windows, desc="[BGP] First Pass: unorm", unit="win", colour="CYAN") if verb else None
+        prog_bar = tqdm(total=total_windows, desc="[BGP] First Pass: unorm", unit="win", colour="CYAN") if verbose else None
         for i in range(total_windows):
             # Build window
             row_off = win_mv[i,0] 
             col_off = win_mv[i,1]
-            height  = win_mv[i,2]
-            width   = win_mv[i,3]
+            win_h   = win_mv[i,2]
+            win_w   = win_mv[i,3]
             # Read block from window
-            win = np.asarray([row_off, col_off, height, width], dtype=np.int32)
+            win = np.asarray([row_off, col_off, win_h, win_w], dtype=np.int32)
             block = reader.read_multiband_block(win)
             # Create synthetic bands
             new_block = _create_bands_from_block(block, full_syn)
@@ -462,7 +459,7 @@ def band_generation_process(
             output_datatype     = np.float32
         ) as writer:
 
-        prog_bar = tqdm(total=total_windows, desc="[BGP] Second Pass: norm", unit="win", colour="CYAN") if verb else None
+        prog_bar = tqdm(total=total_windows, desc="[BGP] Second Pass: norm", unit="win", colour="CYAN") if verbose else None
         for i in range(total_windows):
             # Build window
             row_off = win_mv[i,0] 

@@ -39,134 +39,145 @@ OPCI_TOL = 1e-9    # clamp tolerance
 # --------------------------------------------------------------------------------------------
 # Custom Datatypes
 # --------------------------------------------------------------------------------------------
-# Typedefs for memoryviews
 ctypedef np.float32_t float_t
-
-# Typing
-cdef extern from *:
-    pass
-
+ctypedef Py_ssize_t psize_t
 
 
 # --------------------------------------------------------------------------------------------
-# Helper C kernels
+# C Helper Functions
 # --------------------------------------------------------------------------------------------
-cdef int _block_l2_kernel(
+cdef int _block_l2_cy(
     float_t[:, :, :] block_mv, 
     float_t[:, :] out_mv
 ) nogil:
     """
-    block_mv: (bands, h, w)
-    out_mv: (h, w) where we store sqrt(sum_i block[i,r,c]^2)
+    Compute L2 norm at each pixel from a block (bands, h, w).
+    out_mv[row, col] = sqrt(sum_b block[b, row, col]^2).
     """
     cdef:
-        Py_ssize_t bands = block_mv.shape[0]
-        Py_ssize_t height = block_mv.shape[1]
-        Py_ssize_t width = block_mv.shape[2]
-        Py_ssize_t b, row, col
-        float_t acc
+        psize_t bands = block_mv.shape[0]
+        psize_t height = block_mv.shape[1]
+        psize_t width = block_mv.shape[2]
+        psize_t b, row, col
+        float_t sum
     
     for row in range(height):
         for col in range(width):
-            acc = 0.0
+            sum = 0.0
             for b in range(bands):
-                acc += block_mv[b, row, col] * block_mv[b, row, col]
-            out_mv[row, col] = <float_t> csqrt(acc)
+                sum += block_mv[b, row, col] * block_mv[b, row, col]
+            out_mv[row, col] = <float_t> csqrt(sum)
 
 
-cdef int _matvec_quad_form_double(
+cdef int _matvec_cy(
     float_t[:, :] pmat_mv, 
-    float_t[:] x_mv,
-    float_t[:] y_mv
+    float_t[:]    x_mv,
+    float_t[:]    y_mv
 ) nogil:
     """
-    y = P @ x, where P is (n,n) and x is (n,). Output y is (n,).
+    Compute y = M @ x where M is (n,n), x is (n,), y is (n,).
+    All arrays are float32 memoryview.
     """
     cdef:
-        Py_ssize_t n = pmat_mv.shape[0]
-        Py_ssize_t i, j
-        float_t acc
+        psize_t n = pmat_mv.shape[0]
+        psize_t i, j
+        float_t sum
     
     for i in range(n):
-        acc = 0.0
+        sum = 0.0
         for j in range(n):
-            acc += pmat_mv[i, j] * x_mv[j]
-        y_mv[i] = acc
+            sum += pmat_mv[i, j] * x_mv[j]
+        y_mv[i] = sum
 
 
 # --------------------------------------------------------------------------------------------
 # Helper Functions
 # --------------------------------------------------------------------------------------------
-def block_l2_norms(block:np.ndarray) -> np.ndarray:
+cdef int argmax_l2_norms(
+    float_t[:, :, :] block_mv,   # shape: (bands, height, width)
+    float_t* out_max_val,        # [output] max L2^2 value (squared norm)
+    psize_t* out_flat_idx        # [output] flat index (row * width + col)
+) nogil:
     """
-    Compute L2 (Euclidian) norms from (num_bands, height, width) block
+    Compute the pixel with the maximum L2 norm in a hyperspectral block,
+    without allocating any temporary arrays.
 
     Args:
-        block (np.ndarray): Data block from dataset. 
+        block_mv : float32[:, :, :]
+            Typed memoryview of the block (bands, height, width).
+        out_max_val : float32*
+            Pointer to write the maximum **squared** L2 norm (sum of squares).
+            Use pointer indexing, e.g. out_max_val[0] = value.
+        out_flat_idx : Py_ssize_t*
+            Pointer to write the flat index of the argmax pixel (row * width + col).
+
 
     Returns:
-        np.ndarray: 1D array of norms, each index representing a band.
+        int: Allows cdef to throw error code.
     """
-    if block.ndim != 3:
-        raise ValueError("block_l2_norms expects a 3D array (bands, h, w)")
+    cdef:
+        psize_t bands = block_mv.shape[0]
+        psize_t height = block_mv.shape[1]
+        psize_t width  = block_mv.shape[2]
+        psize_t row, col, b
+        float_t acc
+        float_t max_val = -3.3e38
+        psize_t max_idx = 0
+        psize_t flat_idx
 
-    # Ensure float32 contiguous to take memoryview
-    if block.dtype != np.float32 or not block.flags['C_CONTIGUOUS']:
-        block = np.ascontiguousarray(block, dtype=np.float32)
+    for row in range(height):
+        for col in range(width):
+            acc = 0.0
+            for b in range(bands):
+                acc += block_mv[b, row, col] * block_mv[b, row, col]
 
-    cdef height = block.shape[1]
-    cdef width  = block.shape[2]
-    
-    norms = np.empty((height, width), dtype=np.float32)
+            flat_idx = row * width + col
+            if acc > max_val:
+                max_val = acc
+                max_idx = flat_idx
 
-    # Obtain typed memoryviews and call nogil kernel
-    cdef float_t[:, :, :] block_mv = block
-    cdef float_t[:, :] out_mv = norms
-
-    # Use Cython to compute norms with noGIL
-    with nogil:
-        _block_l2_kernel(block_mv, out_mv)
-
-    # out_mv is reference to norms
-    return norms
+    out_max_val[0] = max_val
+    out_flat_idx[0] = max_idx
 
 
 # --------------------------------------------------------------------------------------------
 # Matrix Operand Functions
 # --------------------------------------------------------------------------------------------
-def compute_orthogonal_projection_matrix(
+def compute_orthogonal_complement_matrix(
     target_vectors:list[np.ndarray]
-    ) -> np.ndarray:
+) -> np.ndarray:
     """
-    Computes orthogonal projection matrix P_orth = I - U @ pinv(U)
-    where U stacks target_vectors columnwise (B, K).
-    Returns float32 symmetric orthogonal projector of shape (B,B).
+    Construct an orthogonal projection matrix onto the complement of the
+    subspace spanned by given target vectors.
+
+
+    P_perp = I - U U^+ , where U stacks target_vectors columnwise.
+
 
     Args:
-        target_vectors (list[np.ndarray]): List of 1D target spectral vectors (each shape: [bands])
+    target_vectors (list[np.ndarray]): list of 1D arrays, each (bands,).
+
 
     Returns:
-        np.ndarray[float32]: Orthogonal projection matrix.
+    np.ndarray: (bands, bands) float32 symmetric projector.
     """
     if len(target_vectors) == 0:
         raise ValueError("Must provide at least one target vector")
 
-    # Stack into double precision for numeric stability in pinv
-    U = np.stack(target_vectors, axis=1).astype(np.float64, copy=False)  # (bands, k-targets)
-    # NumPy pinv relies on BLAS/LAPACK = (fast, multithreaded)
+    # Stack in double precision for stable pinv
+    U = np.stack(target_vectors, axis=1).astype(np.float64, copy=False)
     P = U @ np.linalg.pinv(U)
     B = U.shape[0]
     I = np.eye(B, dtype=np.float64)
-    P_orth = I - P
-    # symmetrize and cast once
-    P_orth = 0.5 * (P_orth + P_orth.T)
-    # Enforce float32 and return
-    return P_orth.astype(np.float32, copy=False)
+    P_perp = I - P
+    P_perp = 0.5 * (P_perp + P_perp.T)
+    # Force float32 and return
+    return P_perp.astype(np.float32, copy=False)
 
 
-def project_block_onto_subspace(
+def project_block_onto_complement(
     block: np.ndarray,
-    projection_matrix: np.ndarray|None
+    proj_matrix: np.ndarray|None
 ) -> np.ndarray:
     """
     Projects every pixel in a block into the orthogonal subspace defined by the projection matrix.
@@ -181,32 +192,26 @@ def project_block_onto_subspace(
         np.ndarray: Projected block of same shape as block (bands, height, width)
     """
     # 1 target ("None") = Identity matrix ("block") 
-    if projection_matrix is None: return block
+    if proj_matrix is None: return block
 
     if block.ndim != 3: raise ValueError("block must be 3D (bands, h, w)")
 
-    cdef int bands  = block.shape[0]
-    cdef int height = block.shape[1]
-    cdef int width  = block.shape[2]
+    cdef:
+        int bands  = block.shape[0]
+        int height = block.shape[1]
+        int width  = block.shape[2]
 
     # Enforce block float32 contiguous 
-    if block.dtype != np.float32 or not block.flags['C_CONTIGUOUS']:
-        block = np.ascontiguousarray(block, dtype=np.float32)
-
+    block = np.ascontiguousarray(block, dtype=np.float32)
     # Reshape to (bands, pixels)
-    reshaped = block.reshape(bands, -1).astype(np.float32, copy=False)
+    reshaped = block.reshape(bands, -1)
 
-    # Force projection matrix to float32 and symmetrize
-    pmat = np.asarray(projection_matrix, dtype=np.float32)
-    if pmat.shape != (bands, bands):
-        raise ValueError(f"[project_block_onto_subspace] Bad shapes: P{pmat.shape}, block{(block.shape[0], block.shape[1])}")
+    P_mat = np.ascontiguousarray(proj_matrix, dtype=np.float32)
+    if P_mat.shape != (bands, bands):
+        raise ValueError(f"Bad proj_matrix shape {P_mat.shape}, expected {(bands, bands)}")
+    P_mat = 0.5 * (P_mat + P_mat.T)
 
-    pmat = 0.5 * (pmat + pmat.T)
-
-    # Compute (bands, pixels)
-    projected = pmat.dot(reshaped)
-
-    # Reshape back and ensure float32
+    projected = P_mat.dot(reshaped)
     return projected.reshape(bands, height, width).astype(np.float32, copy=False)
 
 
@@ -215,24 +220,25 @@ def compute_opci(
     spectrum: np.ndarray
 ) -> float:
     """
-    Computes OPCI = sqrt( (x^T * P * x) / (x^T * x) ).
+    Compute Orthogonal Projection Contrast Index (OPCI).
 
-    This returns a scalar in [0,1] measuring how much of `spectrum` (x)
-    lies *in the subspace defined by* projection_matrix P. Small values
-    (near 0) mean x is mostly orthogonal to the projected subspace; large
-    values (near 1) mean x is mostly inside the subspace.
+
+    OPCI = sqrt( (x^T P x) / (x^T x) ).
+
+
+    - Values near 1.0 mean the vector lies mostly in the orthogonal
+    complement (novel target).
+    - Values near 0.0 mean the vector lies mostly within the existing
+    subspace (redundant target).
+
 
     Args:
-        projection_matrix (np.ndarray):
-            Orthogonal projection matrix P (shape: (B,B)) produced by
-            compute_orthogonal_projection_matrix(...). It should be symmetric;
-            we will symmetrize it defensively.
-        spectrum (np.ndarray):
-            1D spectral vector (shape: (B,) or (B,1)). This is the pixel
-            spectrum being evaluated.
+    p_matrix (np.ndarray): (bands, bands) orthogonal complement matrix.
+    spectrum (np.ndarray): 1D spectral vector (bands,).
+
 
     Returns:
-        float: OPCI value in [0,1] (sqrt of ratio of projected energy to total energy).
+    float: OPCI value in [0,1].
     """
     # Convert to a 1D contiguous vector 
     x_vec = np.asarray(spectrum, dtype=np.float32).reshape(-1)
@@ -241,74 +247,42 @@ def compute_opci(
     if not np.isfinite(x_vec).all():
         x_vec = np.nan_to_num(x_vec, nan=0.0, posinf=0.0, neginf=0.0)
 
-    # ============================
     # Compute denominator: ||x||^2
-    # ============================
-    denom_energy = float(np.dot(x_vec, x_vec))
+    denom_energy = np.dot(x_vec, x_vec).item()
     # Very small or zero energy vector — nothing to project.
     if denom_energy <= OPCI_EPS:
         return 0.0
 
-    # =================
-    # Projection Matrix
-    # =================
-    pmat = np.asarray(p_matrix, dtype=np.float32)
-    if pmat.ndim != 2 or pmat.shape[0] != pmat.shape[1] or pmat.shape[0] != x_vec.shape[0]:
-        raise ValueError(f"[compute_opci] Bad shapes: P={pmat.shape}, x={x_vec.shape}")
+    P = np.ascontiguousarray(p_matrix, dtype=np.float32)
+    if P.ndim != 2 or P.shape[0] != P.shape[1] or P.shape[0] != x_vec.shape[0]:
+        raise ValueError(f"[compute_opci] Bad shapes: P={P.shape}, x={x_vec.shape}")
+    P = 0.5 * (P + P.T)
 
-    # Numerical ops on P can introduce tiny asymmetries. Symmetrize to keep
-    # the quadratic form x^T P x real and numerically stable.
-    pmat = 0.5 * (pmat + pmat.T)
 
-    # =================
-    # Compute y = P @ x  
-    # =================
-    # Allocate y as a double vector and compute the matrix-vector product
     num_bands = x_vec.shape[0]
     y_vec = np.empty(num_bands, dtype=np.float32)
 
-    # Create typed memoryviews to pass into the nogil kernel.
-    cdef float_t[:, :] pmat_mv = pmat
+
+    cdef float_t[:, :] P_mv = P
     cdef float_t[:] x_mv = x_vec
     cdef float_t[:] y_mv = y_vec
 
-    # Compute y_mv[:] = pmat_mv @ x_mv ; in noGIL
+
     with nogil:
-        _matvec_quad_form_double(pmat_mv, x_mv, y_mv)
+        _matvec_cy(P_mv, x_mv, y_mv)
 
-    # ==========
-    # OPCI ratio
-    # ==========
-    # numerator_energy = x^T * (P * x) = x^T y
-    numerator_energy = float(np.dot(x_vec, y_vec))
 
-    # ratio is the fractional energy captured by projection: numerator / denom
+    numerator_energy = np.dot(x_vec, y_vec).item()
     opci = numerator_energy / denom_energy
 
-    # ==================
-    # Clamp values [0,1]
-    # ==================
-    # Non-finite result 
+
     if not np.isfinite(opci):
         return 0.0
-    # Negative beyond tolerance.
     if opci < -OPCI_TOL:
-        opci_clamped = 0.0
-    # Positive beyond tolerance
-    elif opci > 1.0 + OPCI_TOL:
-        opci_clamped = 1.0
-    # Final [0,1] clamp
-    else:
-        if opci < 0.0:
-            opci_clamped = 0.0
-        elif opci > 1.0:
-            opci_clamped = 1.0
-        else:
-            opci_clamped = float(opci)
+        return 0.0
+    if opci > 1.0 + OPCI_TOL:
+        return 1.0
 
-    # =============
-    # Correct Norms
-    # =============
-    # Used formula deviates slightly from original paper -> computes a ratio of squared norms; 
-    # Fix: take the square root
-    return np.asarray(np.sqrt(opci_clamped), np.float32)
+
+    cdef float_t opci_clamped = <float> min(max(opci, 0.0), 1.0)
+    return <float_t> csqrt(opci_clamped)
