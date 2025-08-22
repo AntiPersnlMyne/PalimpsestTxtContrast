@@ -9,8 +9,8 @@ from os.path import join
 # =================
 cython_directives = {
     "language_level": 3,    # python3
-    "boundscheck": False,   # skip array bounds check
-    "wraparound": False,    # prevent negative indexing
+    "boundscheck": True,   # skip array bounds check
+    "wraparound": True,    # prevent negative indexing
     "cdivision": True,      # use c-style division
 }
 

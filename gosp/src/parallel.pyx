@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # distutils: language=c
+# cython: profile=True
 
 """parallel.pyx: Parallelization ("multiprocessing") wrapper API. 
 
@@ -279,8 +280,6 @@ def parallel_generate_streaming(
     # Get multiprocessing context depending on user's OS
     # Build worker function around context
     context = mp.get_context()
-    module = __import__(func_module, fromlist=[func_name])
-    func = getattr(module, func_name)
     
     # Preallocate varaibles
     windows_list = list(windows)

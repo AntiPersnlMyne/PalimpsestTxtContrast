@@ -16,7 +16,7 @@ __status__ = "Development" # "Development", or "Production".
 # ---------------
 """
 // (Run) Sets number of avaliable threads from 1 to 8 for multithreading
-OMP_NUM_THREADS=8 python src/main.py
+OMP_NUM_THREADS=8 python main.py
 
 // (Development) Compile Cython files 
 python setup.py build_ext --inplace
@@ -36,38 +36,35 @@ from time import time
 import multiprocessing as mp
 from sys import platform
 
+import pstats, cProfile
+
+
+
 
 # --------------------------------------------------------------------------------------------
 # Driver Code
 # --------------------------------------------------------------------------------------------
 def main():
     start = time()
-
     gosp(
-        input_dir="data/input/test",
-        output_dir="data/output",
-        verbose=True
+        # Input information
+        input_dir="data/input/arch165",   
+        output_dir="/media/g-m/FixedDisk/",         
+        input_image_types="tif",       
+        # BGP and TCP parameters    
+        full_synthetic=True,                   
+        skip_bgp=False,                 
+        max_targets=40,                     
+        opci_threshold=0.01,              
+        # Parallelism fine-tuning
+        window_shape=(256,256),          
+        max_workers=None,                   
+        chunk_size=2,                      
+        inflight=1,                        
+        # Debug
+        verbose=True,                      
     )
-    
-    # gosp(
-    #     # Input information
-    #     input_dir="data/input/arch177_rgb_365cor_lum",   
-    #     output_dir="/media/g-m/FixedDisk/",         
-    #     input_image_types="tif",       
-    #     # BGP and TCP parameters    
-    #     full_synthetic=True,                   
-    #     skip_bgp=False,                 
-    #     max_targets=40,                     
-    #     opci_threshold=0.01,              
-    #     # Parallelism fine-tuning
-    #     window_shape=(128,128),          
-    #     max_workers=None,                   
-    #     chunk_size=4,                      
-    #     inflight=2,                         
-    #     # Debug
-    #     verbose=True,                      
-    # )
-    print(f"\n[main/test] - Execution finished -\nRuntime = {(time() - start):.2f}")
+    print(f"\n[main/arch165] - Execution finished -\nRuntime = {(time() - start):.2f}")
     
 
 
@@ -84,8 +81,12 @@ if __name__ == "__main__":
         try: mp.set_start_method("fork", force=True)
         except: mp.set_start_method("spawn", force=True)
     
-    main()
+    
+    
+    cProfile.runctx("main()", globals(), locals(), "Profile.prof")
 
+    s = pstats.Stats("Profile.prof")
+    s.strip_dirs().sort_stats("time").print_stats()
 
 
 
