@@ -1,5 +1,6 @@
 # Ignore data files
-data
+**/*.tif
+**/*.tiff
 
 # Any Python cache
 **/__pycache__
