@@ -14,3 +14,6 @@ build
 **/*.so
 **/*.pyd
 **/*.vrt
+
+# Image processing library
+python_scripts

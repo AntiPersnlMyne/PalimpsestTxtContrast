@@ -36,7 +36,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.2.4"
+__version__ = "3.2.5"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -60,7 +60,7 @@ def gosp(
     max_targets:int = 10,
     opci_threshold:float = 0.01,
     verbose:bool = False,
-    ) -> None:
+) -> None:
     """
     Runs the Generalized Orthogonal Subspace Projection pipeline (GOSP)
 
@@ -84,16 +84,6 @@ def gosp(
         ocpi_threshold (float, optional): 
             Target purity score. The higher the value (e.g., 0.001), the more pure the target categories. The larger the value (e.g., 0.1), the less pure the target categories. Larger values capture more noise, but are more forgiving to slight target variations. Defaults to 0.01.
     
-        use_parallel (bool, optional): 
-            Enables/Disables parallel processing. If True, significantly increases RAM usages and algorithm speed.
-        max_workers (int, optional): 
-            Number of worker processes. If None, defaults to os.cpu_count() (i.e. all of them). Defaults to None.
-        chunk_size (int, optional): 
-            Number of windows processed per task. Increase to reduce overhead. Defaults to 8.
-        inflight (int): 
-            Number of tasks "kept in the chamber" to consistently keep workers busy. 4+ may blow up your RAM.
-            Lower to reduce RAM; raise to improve throughput.
-            Defaults to 2.
         verbose (bool, optional): 
             Enable/Disable loading bars in terminal.
     """
@@ -105,29 +95,29 @@ def gosp(
     # Check input data exists
     if not input_files: raise FileNotFoundError(f"No input images found in {input_dir} with extension(s): {input_image_types}")
 
-    # Verbose enables debug, else prints warnings/errors only
+    # Verbose enables debug messages, else prints warnings/errors only
     if verbose: logging.basicConfig(level=logging.INFO)
-    else: logging.basicConfig(level=logging.WARNING)  
+    else: logging.basicConfig(level=logging.WARNING)
 
 
     logging.info("[GOSP] Running Band Generation Process (BGP)...")
     
-    if not skip_bgp:
-        band_generation_process(
-            input_image_paths=input_files,
-            output_dir=output_dir,
-            window_shape=window_shape,
-            full_synthetic=full_synthetic,
-            verbose=verbose
-        )
-    else:
-        # Change TGP to read input files instead of synthetic bands
-        write_original_multiband(
-            input_image_paths=input_files,
-            output_dir=output_dir,
-            window_shape=window_shape,
-            verbose=verbose
-        )
+    # if not skip_bgp:
+    #     band_generation_process(
+    #         input_image_paths=input_files,
+    #         output_dir=output_dir,
+    #         window_shape=window_shape,
+    #         full_synthetic=full_synthetic,
+    #         verbose=verbose
+    #     )
+    # else:
+    #     # Change TGP to read input files instead of synthetic bands
+    #     write_original_multiband(
+    #         input_image_paths=input_files,
+    #         output_dir=output_dir,
+    #         window_shape=window_shape,
+    #         verbose=verbose
+    #     )
 
 
     logging.info("[GOSP] Running Target Generation Process (TGP)...")
@@ -150,7 +140,7 @@ def gosp(
         output_dir=targets_classified_dir,
         verbose=verbose
     )
-    
+
     remove(generated_bands_dir) # Cleanup temp file
 
     logging.info(f"[GOSP] Complete. Results written to: {targets_classified_dir}")
