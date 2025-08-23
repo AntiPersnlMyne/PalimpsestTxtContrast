@@ -30,7 +30,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.2.0"
+__version__ = "3.2.1"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Development" # "Prototype", "Development", "Production"
@@ -295,7 +295,7 @@ def target_generation_process(
     )
     targets.append(T0.band_spectrum)
 
-    
+
     # =========================================
     # Iterate for subsequence targets (t1...tk)
     # =========================================
