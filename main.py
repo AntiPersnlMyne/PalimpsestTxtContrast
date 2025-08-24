@@ -44,14 +44,14 @@ def main():
         # BGP and TCP parameters
         full_synthetic=True,                   
         skip_bgp=False,                 
-        max_targets=10,                     
-        opci_threshold=0.01,              
+        max_targets=50,                
+        opci_threshold=0.001,              
         # Throughput
-        window_shape=(1024,1024),                 
+        window_shape=(256,256),                 
         # Debug
         verbose=True,                      
     )
-    print(f"\n[main/arch177_rgb] - Execution finished -\nRuntime = {(time() - start):.2f}")
+    print(f"\n[main/arch177_rgb_365cor_lum] - Execution finished -\nRuntime = {(time() - start):.2f}")
     
 
 
