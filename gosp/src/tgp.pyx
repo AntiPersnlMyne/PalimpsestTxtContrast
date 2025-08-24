@@ -193,7 +193,7 @@ cdef int argmax_l2_norms(
         block_mv : float32[:, :, :]
             Typed memoryview of the block (bands, height, width).
         out_max_val : float32*
-            Pointer to write the maximum **squared** L2 norm (sum of squares).
+            Pointer to write the maximum L2 norm (sum of squares).
             Use pointer indexing, e.g. out_max_val[0] = value.
         out_flat_idx : Py_ssize_t*
             Pointer to write the flat index of the argmax pixel (row * width + col).

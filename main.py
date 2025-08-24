@@ -19,7 +19,7 @@ __status__ = "Development" # "Development", or "Production".
 python setup.py build_ext --inplace
 
 // (Install) Build & Compile Cython files
-pip install -e . && rm -r build || del build && rm -r gosp/gosp.egg-info || del gosp\gosp.egg-info
+pip install -e . && rm -r build || del build && rm -r gosp/gosp.egg-info || del gosp/gosp.egg-info
 """
 
 
@@ -38,16 +38,16 @@ def main():
     start = time()
     gosp(
         # Input information
-        input_dir="data/input/arch177_rgb",   
+        input_dir="data/input/arch177_365cor",   
         output_dir="data/output",
         input_image_types="tif",
         # BGP and TCP parameters
         full_synthetic=True,                   
         skip_bgp=False,                 
-        max_targets=40,                     
+        max_targets=10,                     
         opci_threshold=0.01,              
         # Throughput
-        window_shape=(800,800),                 
+        window_shape=(1024,1024),                 
         # Debug
         verbose=True,                      
     )
