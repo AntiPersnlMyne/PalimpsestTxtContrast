@@ -13,6 +13,7 @@ import numpy as np
 cimport numpy as np
 
 from libc.math cimport sqrt as csqrt
+from cython.parallel import prange
 
 
 # --------------------------------------------------------------------------------------------
@@ -22,7 +23,7 @@ __author__ = "Gian-Mateo (GM) Tifone"
 __copyright__ = "2025, RIT MISHA"
 __credits__ = ["Gian-Mateo Tifone"]
 __license__ = "MIT"
-__version__ = "3.1.2"
+__version__ = "3.1.3"
 __maintainer__ = "MISHA Team"
 __email__ = "mt9485@rit.edu"
 __status__ = "Production" # "Prototype", "Development", "Production"
@@ -102,7 +103,7 @@ def compute_orthogonal_complement_matrix(
     return P_perp.astype(np.float32, copy=False)
 
 
-def project_block_onto_complement(
+def project_block_onto_subspace(
     block: np.ndarray,
     proj_matrix: np.ndarray|None
 ) -> np.ndarray:
@@ -210,11 +211,11 @@ def compute_opci(
     cdef float_t opci_clamped = <float> min(max(opci, 0.0), 1.0)
     return <float_t> csqrt(opci_clamped)
 
-
+# TODO: update the logic.
 cdef void _project_block_cy(
-    float_t[:, :, :] block_mv,     # shape: (bands, height, width)
-    float_t[:, :] P_mv,            # shape: (bands, bands)
-    float_t[:, :, :] out_mv        # shape: (bands, height, width)
+    float_t[:, ::1] block_mv,     # shape: (bands, pixels)
+    float_t[:, ::1] P_mv,            # shape: (bands, bands)
+    float_t[:, ::1] out_mv        # shape: (bands, pixels)
 ) noexcept nogil:
     """
     Project a block into a subspace defined by P (bands x bands).
@@ -239,7 +240,8 @@ cdef void _project_block_cy(
                     acc += P_mv[b, k] * block_mv[k, row, col]
                 out_mv[b, row, col] = acc
 
-
+# TODO: Update the calls "_compliemnt" to "_subspace"
+#       update the logic
 def project_block_onto_subspace(
     block: np.ndarray,
     proj_matrix: np.ndarray
