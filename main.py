@@ -38,20 +38,20 @@ def main():
     start = time()
     gosp(
         # Input information
-        input_dir="data/input/arch177_rgb",   
-        output_dir="data/output",
+        input_dir="data/input/arch177_rgb_365cor_lum",   
+        output_dir="/media/g-m/FixedDisk",
         input_image_types="tif",
         # BGP and TCP parameters
         full_synthetic=True,                   
         skip_bgp=False,                 
-        max_targets=40,                     
-        opci_threshold=0.01,              
+        max_targets=50,                
+        opci_threshold=0.001,              
         # Throughput
-        window_shape=(800,800),                 
+        window_shape=(256,256),                 
         # Debug
         verbose=True,                      
     )
-    print(f"\n[main/arch177_rgb] - Execution finished -\nRuntime = {(time() - start):.2f}")
+    print(f"\n[main/arch177_rgb_365cor_lum] - Execution finished -\nRuntime = {(time() - start):.2f}")
     
 
 

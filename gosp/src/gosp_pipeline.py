@@ -102,22 +102,22 @@ def gosp(
 
     logging.info("[GOSP] Running Band Generation Process (BGP)...")
     
-    # if not skip_bgp:
-    #     band_generation_process(
-    #         input_image_paths=input_files,
-    #         output_dir=output_dir,
-    #         window_shape=window_shape,
-    #         full_synthetic=full_synthetic,
-    #         verbose=verbose
-    #     )
-    # else:
-    #     # Change TGP to read input files instead of synthetic bands
-    #     write_original_multiband(
-    #         input_image_paths=input_files,
-    #         output_dir=output_dir,
-    #         window_shape=window_shape,
-    #         verbose=verbose
-    #     )
+    if not skip_bgp:
+        band_generation_process(
+            input_image_paths=input_files,
+            output_dir=output_dir,
+            window_shape=window_shape,
+            full_synthetic=full_synthetic,
+            verbose=verbose
+        )
+    else:
+        # Change TGP to read input files instead of synthetic bands
+        write_original_multiband(
+            input_image_paths=input_files,
+            output_dir=output_dir,
+            window_shape=window_shape,
+            verbose=verbose
+        )
 
 
     logging.info("[GOSP] Running Target Generation Process (TGP)...")
