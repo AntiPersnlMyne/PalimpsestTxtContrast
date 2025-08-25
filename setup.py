@@ -12,6 +12,7 @@ cython_directives = {
     "boundscheck": False,   # skip array bounds check
     "wraparound": False,    # prevent negative indexing
     "cdivision": True,      # use c-style division
+    "nonecheck": False      # skip null/none value check
 }
 
 # ============
@@ -30,7 +31,7 @@ pyx_files = [
 # =========================================
 # OpenMP Compiler Flags (platform-specific)
 # =========================================
-extra_compile_args = ["/openmp"] if platform == "win32" else ["-fopenmp"]
+extra_compile_args = ["/openmp"] if platform == "win32" else ["-O3", "-fopenmp"]
 extra_link_args = [] if platform == "win32" else ["-fopenmp"]
 
 # =========================

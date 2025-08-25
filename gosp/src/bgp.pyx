@@ -12,7 +12,6 @@ cimport numpy as np
 
 from typing import Tuple, List
 from os.path import join
-import logging
 from logging import info
 from tqdm import tqdm
 
