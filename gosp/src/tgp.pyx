@@ -124,7 +124,6 @@ cdef void _best_target(
 # TGP Function
 # --------------------------------------------------------------------------------------------
 def target_generation_process(
-    *, # requirement of keyword args
     np.float32_t[:,:,::1] vrt,
     int window_height,
     int window_width,

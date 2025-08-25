@@ -11,7 +11,6 @@ import numpy as np
 cimport numpy as np
 
 from typing import Tuple, List
-from os.path import join
 from logging import info
 from tqdm import tqdm
 
@@ -46,7 +45,7 @@ ctypedef np.float32_t float32_t
 # --------------------------------------------------------------------------------------------
 # C Functions
 # --------------------------------------------------------------------------------------------
-cdef inline Py_ssize_t _total_bands(
+cdef inline Py_ssize_t total_bands(
     Py_ssize_t nbands,
     bint full_synthetic
 ) noexcept nogil:
@@ -57,7 +56,7 @@ cdef inline Py_ssize_t _total_bands(
     return total
 
 
-cdef void _create_bands_from_block(
+cdef void create_bands_from_block(
     float32_t[:, :, :] src,        # (bands, h, w)
     float32_t[:, :, :] out,        # (out_bands, h, w)
     bint full_synthetic
@@ -109,7 +108,7 @@ cdef void _create_bands_from_block(
         dst += bands
 
 
-cdef void _block_minmax(
+cdef void block_minmax(
     float32_t[:, :, :] block,
     float32_t[:] band_mins,
     float32_t[:] band_maxs
@@ -120,7 +119,6 @@ cdef void _block_minmax(
     cdef Py_ssize_t height = block.shape[1]
     cdef Py_ssize_t width  = block.shape[2]
     cdef float32_t v, local_min, local_max
-
     for b in prange(bands, nogil=True, schedule="static"):
         local_min = band_mins[b]
         local_max = band_maxs[b]
@@ -135,7 +133,7 @@ cdef void _block_minmax(
         band_maxs[b] = local_max
 
 
-cdef void _normalize_block(
+cdef void normalize_block(
     float32_t[:, :, :] block,
     float32_t[:] band_mins,
     float32_t[:] band_maxs
@@ -177,15 +175,13 @@ def band_generation_process(
       - Pass 2: regenerate + normalize, write directly to final file
     """
     cdef bint full_syn = <bint> full_synthetic
-    cdef int win_h = <int> window_shape[0]
-    cdef int win_w = <int> window_shape[1]
     cdef int img_h, img_w
 
     # Inspect image dims + output bands
     with MultibandBlockReader(input_image_paths) as reader:
-        img_h, img_w = reader.image_shape
+        img_h, img_w = reader.get_image_shape()
         test_block = np.ascontiguousarray(reader.read_multiband_block(np.array([0,0,1,1], dtype=np.int32)), dtype=np.float32)
-    num_bands_out = _total_bands(test_block.shape[0], full_syn)
+    num_bands_out = total_bands(test_block.shape[0], full_syn)
     # Free temp memory
     del test_block
 
@@ -202,25 +198,28 @@ def band_generation_process(
         for win in reader.generate_windows(window_shape):
             block = np.ascontiguousarray(reader.read_multiband_block(win), dtype=np.float32)
             out = np.empty((num_bands_out, block.shape[1], block.shape[2]), dtype=np.float32)
-            with nogil:
-                _create_bands_from_block(block, out, full_syn)
-                _block_minmax(out, mins_mv, maxs_mv)
+            # Create bands
+            create_bands_from_block(block, out, full_syn)
+            # Grab statistics from block
+            block_minmax(out, mins_mv, maxs_mv)
             prog.update(1)
         prog.close()
 
     # Pass 2: regenerate + normalize, direct write
     if verbose: info("[BGP] Pass 2: regenerating + normalizing ...")
     with MultibandBlockReader(input_image_paths) as reader, \
-         MultibandBlockWriter(output_dir, (img_h, img_w), "gen_band_norm.tif", window_shape, num_bands_out, np.float32) as writer:
-        prog = tqdm(total=reader.num_windows(window_shape), desc="[BGP] Pass 2 write", disable=not verbose)
-        for win in reader.generate_windows(window_shape):
-            block = np.ascontiguousarray(reader.read_multiband_block(win), dtype=np.float32)
-            out = np.empty((num_bands_out, block.shape[1], block.shape[2]), dtype=np.float32)
-            with nogil:
-                _create_bands_from_block(block, out, full_syn)
-                _normalize_block(out, mins_mv, maxs_mv)
-            writer.write_block(out, win)
-            prog.update(1)
-        prog.close()
+        MultibandBlockWriter(
+            output_dir, (img_h, img_w), "gen_band_norm.tif", 
+            window_shape, np.float32, num_bands_out) \
+        as writer:
+            prog = tqdm(total=reader.num_windows(window_shape), desc="[BGP] Pass 2 write", disable=not verbose)
+            for win in reader.generate_windows(window_shape):
+                block = np.ascontiguousarray(reader.read_multiband_block(win), dtype=np.float32)
+                out = np.empty((num_bands_out, block.shape[1], block.shape[2]), dtype=np.float32)
+                create_bands_from_block(block, out, full_syn)
+                normalize_block(out, mins_mv, maxs_mv)
+                writer.write_block(out, win)
+                prog.update(1)
+            prog.close()
     
     return None

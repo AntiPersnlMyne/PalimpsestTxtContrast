@@ -14,9 +14,6 @@ from os.path import join
 from osgeo import gdal
 import rasterio
 from rasterio.windows import Window
-cdef extern from "Python.h": pass  
-
-from gosp.build.file_utils import rm
 
 
 # --------------------------------------------------------------------------------------------
@@ -36,8 +33,6 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 # Custom Datatypes
 # --------------------------------------------------------------------------------------------
 np.import_array()
-
-WindowType = tuple[tuple[int, int], tuple[int, int]]
 
 ctypedef np.float32_t float_t
 ctypedef np.uint16_t uint16_t
@@ -135,22 +130,22 @@ cdef class MultibandBlockReader:
     def __del__(self):
         self.close()
 
-    @property
-    def image_shape(self):
+    def get_image_shape(self):
         return self.image_shape
 
-    @property
-    def total_bands(self):
+    def get_total_bands(self):
         return self.total_bands
 
     def close(self):
         """Safely close dataset and free VRT path if present."""
         try:
-            if self.dataset is not None: self.dataset = None
-            if self.vrt is not None: self.vrt = None
-            gdal.Unlink(self.vrt_path)
+            if self.dataset is not None:
+                self.dataset = None
+            if self.vrt_path is not None:
+                gdal.Unlink(self.vrt_path)
         except Exception:
             pass
+
 
     def read_multiband_block(self, np.ndarray[int, ndim=1] window):
         """
@@ -193,6 +188,38 @@ cdef class MultibandBlockReader:
 
         return block
 
+
+    def generate_windows(self, tuple window_shape):
+        """
+        Yield windows as int32 arrays: [row_off, col_off, win_h, win_w].
+        """
+        cdef int win_h = <int> window_shape[0]
+        cdef int win_w = <int> window_shape[1]
+        if win_h <= 0 or win_w <= 0:
+            raise ValueError("[rastio] window_shape must be positive")
+
+
+        cdef int n_rows = (self.rasterY + win_h - 1) // win_h
+        cdef int n_cols = (self.rasterX + win_w - 1) // win_w
+        cdef int row, col, row_off, col_off, h, w
+
+
+        for row in range(n_rows):
+            row_off = row * win_h
+            h = win_h if row_off + win_h <= self.rasterY else self.rasterY - row_off
+            for col in range(n_cols):
+                col_off = col * win_w
+                w = win_w if col_off + win_w <= self.rasterX else self.rasterX - col_off
+                yield np.array([row_off, col_off, h, w], dtype=np.int32)
+
+
+    cpdef int num_windows(self, tuple window_shape):
+        """Return total number of windows for a given (win_h, win_w)."""
+        cdef int win_h = <int> window_shape[0]
+        cdef int win_w = <int> window_shape[1]
+        cdef int n_rows = (self.rasterY + win_h - 1) // win_h
+        cdef int n_cols = (self.rasterX + win_w - 1) // win_w
+        return n_rows * n_cols
 
 # --------------------------------------------------------------------------------------------
 # Writer (Output)

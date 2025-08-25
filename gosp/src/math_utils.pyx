@@ -47,20 +47,19 @@ ctypedef Py_ssize_t psize_t
 # --------------------------------------------------------------------------------------------
 # C Helper Functions
 # --------------------------------------------------------------------------------------------
-cdef int _matvec_cy(
-    float_t[:, :] pmat_mv, 
-    float_t[:]    x_mv,
-    float_t[:]    y_mv
-) nogil:
+cdef void _matvec(
+    const float_t[:, :] pmat_mv,
+    const float_t[:]    x_mv,
+          float_t[:]    y_mv,
+) noexcept nogil:
     """
     Compute y = M @ x where M is (n,n), x is (n,), y is (n,).
-    All arrays are float32 memoryview.
+    All arrays are float32 memoryviews.
     """
     cdef:
         psize_t n = pmat_mv.shape[0]
         psize_t i, j
         float_t sum
-    
     for i in range(n):
         sum = 0.0
         for j in range(n):
@@ -68,9 +67,36 @@ cdef int _matvec_cy(
         y_mv[i] = sum
 
 
-# --------------------------------------------------------------------------------------------
-# Matrix Operand Functions
-# --------------------------------------------------------------------------------------------
+cdef void _project_block(
+    const float_t[:, :, :] block_mv, # (bands, h, w)
+    const float_t[:, :]    P_mv,     # (bands, bands)
+          float_t[:, :, :] out_mv    # (bands, h, w)
+) noexcept nogil:
+    """
+    Project a block into a subspace defined by P (bands x bands).
+
+
+    Args:
+    block_mv: input block (bands, h, w)
+    P_mv: projection matrix (bands, bands)
+    out_mv: preallocated output (bands, h, w)
+    """
+    cdef:
+        psize_t bands = block_mv.shape[0]
+        psize_t height = block_mv.shape[1]
+        psize_t width = block_mv.shape[2]
+        psize_t row, col, b, k
+
+    # Parallelize over rows 
+    for row in prange(height, nogil=True, schedule='static'):
+        for col in range(width):
+            # Compute P @ block[:, row, col] => out[:, row, col]
+            for b in range(bands):
+                out_mv[b,row,col] = 0.0 # sanity, set to 0
+                for k in range(bands):
+                    out_mv[b, row, col] += P_mv[b, k] * block_mv[k, row, col]
+                
+
 def compute_orthogonal_complement_matrix(
     target_vectors:list[np.ndarray]
 ) -> np.ndarray:
@@ -124,21 +150,22 @@ def project_block_onto_subspace(
 
     if block.ndim != 3: raise ValueError("block must be 3D (bands, h, w)")
 
+    # Enforce float32 contiguous
+    block_f = np.ascontiguousarray(block, dtype=np.float32)
+    P = np.ascontiguousarray(proj_matrix, dtype=np.float32)
+    # Symmetrize once (idempotent)
+    P = 0.5 * (P + P.T)
+
     cdef:
-        int bands  = block.shape[0]
-        int height = block.shape[1]
-        int width  = block.shape[2]
+        float_t[:, :, :] block_mv = block_f
+        float_t[:, :] P_mv = P
+        np.ndarray[np.float32_t, ndim=3] out_f = np.empty_like(block_f, dtype=np.float32)
+        float_t[:, :, :] out_mv = out_f
 
-    # Enforce block float32 contiguous 
-    block = np.ascontiguousarray(block, dtype=np.float32)
-    # Reshape to (bands, pixels)
-    reshaped = block.reshape(bands, -1)
+    with nogil:
+        _project_block(block_mv, P_mv, out_mv)
 
-    P_mat = np.ascontiguousarray(proj_matrix, dtype=np.float32)
-    P_mat = 0.5 * (P_mat + P_mat.T)
-
-    projected = P_mat.dot(reshaped)
-    return projected.reshape(bands, height, width)
+    return out_f
 
 
 def compute_opci(
@@ -147,24 +174,15 @@ def compute_opci(
 ) -> float:
     """
     Compute Orthogonal Projection Contrast Index (OPCI).
-
-
     OPCI = sqrt( (x^T P x) / (x^T x) ).
 
-
-    - Values near 1.0 mean the vector lies mostly in the orthogonal
-    complement (novel target).
-    - Values near 0.0 mean the vector lies mostly within the existing
-    subspace (redundant target).
-
-
     Args:
-    p_matrix (np.ndarray): (bands, bands) orthogonal complement matrix.
-    spectrum (np.ndarray): 1D spectral vector (bands,).
+        p_matrix (np.ndarray): (bands, bands) orthogonal complement matrix.
+        spectrum (np.ndarray): 1D spectral vector (bands,).
 
 
     Returns:
-    float: OPCI value in [0,1].
+        float: OPCI value in [0,1].
     """
     # Convert to a 1D contiguous vector 
     x_vec = np.asarray(spectrum, dtype=np.float32).reshape(-1)
@@ -182,19 +200,15 @@ def compute_opci(
     P = np.ascontiguousarray(p_matrix, dtype=np.float32)
     P = 0.5 * (P + P.T)
 
+    y_vec = np.empty_like(x_vec, dtype=np.float32)
 
-    num_bands = x_vec.shape[0]
-    y_vec = np.empty(num_bands, dtype=np.float32)
-
-
-    cdef float_t[:, :] P_mv = P
-    cdef float_t[:] x_mv = x_vec
-    cdef float_t[:] y_mv = y_vec
-
+    cdef:
+        float_t[:, :] P_mv = P
+        float_t[:] x_mv = x_vec
+        float_t[:] y_mv = y_vec
 
     with nogil:
-        _matvec_cy(P_mv, x_mv, y_mv)
-
+        _matvec(P_mv, x_mv, y_mv)
 
     numerator_energy = np.dot(x_vec, y_vec).item()
     opci = numerator_energy / denom_energy
@@ -207,79 +221,6 @@ def compute_opci(
     if opci > 1.0 + OPCI_TOL:
         return 1.0
 
-
     cdef float_t opci_clamped = <float> min(max(opci, 0.0), 1.0)
     return <float_t> csqrt(opci_clamped)
 
-# TODO: update the logic.
-cdef void _project_block_cy(
-    float_t[:, ::1] block_mv,     # shape: (bands, pixels)
-    float_t[:, ::1] P_mv,            # shape: (bands, bands)
-    float_t[:, ::1] out_mv        # shape: (bands, pixels)
-) noexcept nogil:
-    """
-    Project a block into a subspace defined by P (bands x bands).
-
-    Args:
-        block_mv: memoryview of input block (bands, h, w)
-        P_mv: memoryview of projection matrix (bands, bands)
-        out_mv: preallocated output memoryview (bands, h, w)
-    """
-    cdef:
-        Py_ssize_t b, row, col, k
-        Py_ssize_t bands = block_mv.shape[0]
-        Py_ssize_t height = block_mv.shape[1]
-        Py_ssize_t width = block_mv.shape[2]
-        float_t acc
-
-    for row in range(height):
-        for col in range(width):
-            for b in range(bands):
-                acc = 0.0
-                for k in range(bands):
-                    acc += P_mv[b, k] * block_mv[k, row, col]
-                out_mv[b, row, col] = acc
-
-# TODO: Update the calls "_compliemnt" to "_subspace"
-#       update the logic
-def project_block_onto_subspace(
-    block: np.ndarray,
-    proj_matrix: np.ndarray
-) -> np.ndarray:
-    """
-    Project each pixel in a block into the subspace defined by proj_matrix
-    using a fast Cython memoryview implementation (nogil).
-
-    Args:
-        block: ndarray, shape (bands, height, width), dtype float32
-        proj_matrix: ndarray, shape (bands, bands), dtype float32
-
-    Returns:
-        Projected block: ndarray, shape (bands, height, width), dtype float32
-    """
-    cdef:
-        # int bands = block.shape[0]
-        # int height = block.shape[1]
-        # int width  = block.shape[2]
-        float_t[:, :, :] block_mv
-        float_t[:, :] P_mv
-        float_t[:, :, :] out_mv
-        np.ndarray out_block
-
-    # Ensure contiguous float32 arrays
-    block = np.ascontiguousarray(block, dtype=np.float32)
-    proj_matrix = np.ascontiguousarray(proj_matrix, dtype=np.float32)
-
-    # Allocate output
-    out_block = np.empty_like(block, dtype=np.float32)
-
-    # Create memoryviews
-    block_mv = block
-    P_mv = proj_matrix
-    out_mv = out_block
-
-    # Call C kernel without GIL
-    with nogil:
-        _project_block_cy(block_mv, P_mv, out_mv)
-
-    return out_block

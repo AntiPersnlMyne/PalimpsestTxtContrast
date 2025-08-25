@@ -46,13 +46,13 @@ def main():
     start = time()
     gosp(
         # Input information
-        input_dir="data/input/arch177_365cor",   
+        input_dir="data/input/test",   
         output_dir="data/output",
         input_image_types="tif",
         # BGP and TCP parameters
         full_synthetic=True,                   
         skip_bgp=False,                 
-        max_targets=50,                
+        max_targets=3,                
         opci_threshold=0.1,              
         # Throughput
         window_shape=(256,256),                 
