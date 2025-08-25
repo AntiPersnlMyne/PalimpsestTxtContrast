@@ -1,4 +1,4 @@
-# Required Python 3.13+
+# Requires Python 3.13+
 
 # Data arrays and backbone of every other library
 numpy
@@ -12,7 +12,7 @@ cython             # C extensions for Python
 setuptools         # Build Cython
 numba              # JIT compiler and prange
 # dask[complete]   # Parallel processing
-# cupy-cuda13x     # NumPy GPU-acceleration
+cupy-cuda12x     # NumPy GPU-acceleration
 # dask-cuda        # Dask GPU-acceleration
 
 # Raster data
@@ -21,3 +21,4 @@ gdal               # Virtual Raster Title (VRT)
 
 # Graphical User Interface 
 tqdm               # Progress bar
+numba-Progress     # Nogil tqdm wrapper

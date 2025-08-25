@@ -24,7 +24,6 @@ pyx_files = [
     "rastio.pyx",
     "parallel.pyx",
     "skip_bgp.pyx",
-    "file_utils.pyx",
     "math_utils.pyx",
 ]
 

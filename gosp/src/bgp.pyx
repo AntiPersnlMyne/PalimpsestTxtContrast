@@ -20,8 +20,6 @@ from cython.parallel import prange
 from libc.math cimport sqrtf, log1pf
 
 from gosp.build.rastio import MultibandBlockReader, MultibandBlockWriter
-# from gosp.build.parallel import parallel_normalize_streaming, parallel_generate_streaming
-from gosp.build.file_utils import rm
 
 
 # --------------------------------------------------------------------------------------------
@@ -43,143 +41,88 @@ __status__ = "Development" # "Prototype", "Development", "Production"
 np.import_array()
 
 # Typed aliases for readability
-ctypedef np.float32_t float_t
-ctypedef Py_ssize_t psize_t
+ctypedef np.float32_t float32_t
 
 
 # --------------------------------------------------------------------------------------------
-# C Helper Functions
+# C Functions
 # --------------------------------------------------------------------------------------------
-cdef inline psize_t _total_bands_cy(
-    psize_t nbands,
+cdef inline Py_ssize_t _total_bands(
+    Py_ssize_t nbands,
     bint full_synthetic
 ) noexcept nogil:
-    """
-    Expected total bands from input band count `nbands` and `full_synthetic` flag.
-
-    Formula:
-      total = n + n*(n-1)/2   # original + pairwise
-      if full_synthetic: add 2*n (sqrt + log1p)
-    """
-    cdef psize_t total = nbands + (nbands * (nbands - 1)) // 2
+    """ Returns total number of bands that will be created"""
+    cdef Py_ssize_t total = nbands + (nbands * (nbands - 1)) // 2
     if full_synthetic:
         total += 2 * nbands
     return total
 
 
-cdef int _create_bands_from_block_cy(
-    float_t[:, :, :] src_mv,        # (bands, height, width)
-    float_t[:, :, :] bandstack_mv,  # (total_bands, h, w) preallocated
+cdef void _create_bands_from_block(
+    float32_t[:, :, :] src,        # (bands, h, w)
+    float32_t[:, :, :] out,        # (out_bands, h, w)
     bint full_synthetic
 ) noexcept nogil:
     """
-    Fill bandstack_mv with generated bands.
-    + auto- and cross-correlation
-    + (optional) sqrt and log1p
+    Fills out with synthetic bands:
+      - Auto correlation
+      - Cross correlation
+      - (optional) sqrt and ln 
     """
     cdef:
-        psize_t bands  = src_mv.shape[0]
-        psize_t height = src_mv.shape[1]
-        psize_t width  = src_mv.shape[2]
+        Py_ssize_t b, i, j, row, col
+        Py_ssize_t bands = src.shape[0]
+        Py_ssize_t height = src.shape[1]
+        Py_ssize_t width  = src.shape[2]
+        Py_ssize_t dst = 0
+        float32_t v
 
-        psize_t dst_idx = 0
-        psize_t b, row, col, i, j
-        psize_t idx, total_px=height * width
-
-        float_t val
-
-    # ==============
-    # Original Bands
-    # ==============
+    # Original
     for b in range(bands):
-        # Parallel by rows - kinda like pointers
-        for row in prange(height, nogil=True, schedule="static"):  
+        for row in prange(height, nogil=True, schedule="static"):
             for col in range(width):
-                bandstack_mv[dst_idx+b, row, col] = src_mv[b, row, col]
-                
-    dst_idx += bands
+                out[dst + b, row, col] = src[b, row, col]
+    dst += bands
 
-    # ========================================
-    # Correlations (no redundant combinations)
-    # ========================================
-    # Ensure no redundant combinations
+    # Pairwise products
     for i in range(bands - 1):
         for j in range(i + 1, bands):
             for row in prange(height, nogil=True, schedule="static"):
-                    for col in range(width):
-                        bandstack_mv[dst_idx, row, col] = src_mv[i, row, col] * src_mv[j, row, col]
-            dst_idx += 1
+                for col in range(width):
+                    out[dst, row, col] = src[i, row, col] * src[j, row, col]
+            dst += 1
 
-    # ===================================
-    # "full_synthetic" log and sqrt bands
-    # ===================================
     if full_synthetic:
-        # sqrt bands
+        # sqrt
         for b in range(bands):
             for row in prange(height, nogil=True, schedule="static"):
                 for col in range(width):
-                    # clamp negative to 0
-                    val = src_mv[b, row, col]
-                    bandstack_mv[dst_idx+b, row, col] = sqrtf(val) if val >= 0.0 else 0.0
-        dst_idx += bands
+                    v = src[b, row, col]
+                    out[dst + b, row, col] = sqrtf(v) if v >= 0.0 else 0.0
+        dst += bands
 
-        # log bands
+        # log1p
         for b in range(bands):
             for row in prange(height, nogil=True, schedule="static"):
                 for col in range(width):
-                    val = src_mv[b, row, col]
-                    # Check: log1p undefined for val <= -1; 
-                    bandstack_mv[dst_idx + b, row, col] = log1pf(-0.99) if val <= -1.0 else log1pf(val)
-        dst_idx += bands
+                    v = src[b, row, col]
+                    out[dst + b, row, col] = log1pf(-0.99) if v <= -1.0 else log1pf(v)
+        dst += bands
 
 
-cdef int _normalize_block_cy(
-    float_t[:, :, :] block,
-    float_t[:]       band_mins,
-    float_t[:]       band_maxs
+cdef void _block_minmax(
+    float32_t[:, :, :] block,
+    float32_t[:] band_mins,
+    float32_t[:] band_maxs
 ) noexcept nogil:
-    """
-    Normalize each band in a block: (x - min) / (max - min).
-    Safe against division by zero.
-    """
-    cdef:
-        ssize_t b, row, col, height, width, bands
-        float_t denom, block_val
-
-    bands = block.shape[0]
-    height = block.shape[1]
-    width = block.shape[2]
+    """ Lightweight pass, gathering of min/max value of each band """ 
+    cdef Py_ssize_t b, row, col
+    cdef Py_ssize_t bands = block.shape[0]
+    cdef Py_ssize_t height = block.shape[1]
+    cdef Py_ssize_t width  = block.shape[2]
+    cdef float32_t v, local_min, local_max
 
     for b in prange(bands, nogil=True, schedule="static"):
-        denom = band_maxs[b] - band_mins[b]
-        if denom == 0:
-            for row in range(height):
-                for col in range(width):
-                    block[b, row, col] = 0.0
-        else:
-            for row in range(height):
-                for col in range(width):
-                    block_val = block[b, row, col]
-                    block[b, row, col] = (block_val - band_mins[b]) / denom
-
-
-cdef int _block_minmax_cy(
-    float_t[:, :, :] block,      # shape (bands, h, w)
-    float_t[:] band_mins,        # global running mins
-    float_t[:] band_maxs         # global running maxs
-) noexcept nogil:
-    """
-    Update band_mins and band_maxs with values from this block.
-    Scans each band in one pass.
-    """
-    cdef:
-        psize_t b, row, col
-        psize_t bands = block.shape[0]
-        psize_t height = block.shape[1]
-        psize_t width = block.shape[2]
-        float_t v, local_min, local_max
-
-    for b in prange(bands, nogil=True, schedule="static"):  # parallel over bands
         local_min = band_mins[b]
         local_max = band_maxs[b]
         for row in range(height):
@@ -189,298 +132,96 @@ cdef int _block_minmax_cy(
                     local_min = v
                 elif v > local_max:
                     local_max = v
-
         band_mins[b] = local_min
         band_maxs[b] = local_max
 
 
-cdef int[:,:] _generate_windows_cy(
-    int img_height, 
-    int img_width, 
-    int win_height, 
-    int win_width
-) noexcept:
-    """
-    Generate window offsets and sizes for an image.
-    
-    Returns:
-        windows: int[:, :] memoryview of shape (total_windows, 4)
-                 Each row: (row_off, col_off, actual_height, actual_width)
-    """
-    cdef:
-        int n_rows = (img_height + win_height - 1) // win_height
-        int n_cols = (img_width + win_width - 1) // win_width
-        int total_windows = n_rows * n_cols
-        int[:, :] win_mv
-        np.ndarray[int, ndim=2] windows = np.empty((total_windows, 4), dtype=np.int32)
-    
-    win_mv = windows
+cdef void _normalize_block(
+    float32_t[:, :, :] block,
+    float32_t[:] band_mins,
+    float32_t[:] band_maxs
+) noexcept nogil:
+    """ Uses the found min/max to normalize to float32 [0,1] range """
+    cdef Py_ssize_t b, row, col
+    cdef Py_ssize_t bands = block.shape[0]
+    cdef Py_ssize_t height = block.shape[1]
+    cdef Py_ssize_t width  = block.shape[2]
+    cdef float32_t denom, val
 
-    cdef int row_idx, col_idx, win_idx
-    cdef int row_off, col_off, actual_height, actual_width
-
-    win_idx = 0
-    for row_idx in range(n_rows):
-        row_off = row_idx * win_height
-        actual_height = win_height if row_off + win_height <= img_height else img_height - row_off
-
-        for col_idx in range(n_cols):
-            col_off = col_idx * win_width
-            actual_width = win_width if col_off + win_width <= img_width else img_width - col_off
-
-            # Fill window valuess
-            win_mv[win_idx, 0] = row_off
-            win_mv[win_idx, 1] = col_off
-            win_mv[win_idx, 2] = actual_height
-            win_mv[win_idx, 3] = actual_width
-
-            win_idx += 1
-
-    return win_mv
-
-
-# --------------------------------------------------------------------------------------------
-# Python Wrapper for C Helpers
-# --------------------------------------------------------------------------------------------
-def _create_bands_from_block(
-    image_block:np.ndarray, 
-    full_synthetic:bool
-):
-    """
-    Python-callable wrapper used by worker processes.
-
-    Args:
-      image_block (ndarray):
-        (bands, height, width). Data will be cast to float32).
-      full_synthetic (bool):
-        If true, generates additional sqrt and log bands.
-
-    Returns:
-      ndarray: band_stack=(total_bands, height, width) ; dtype=float32
-    """
-    if image_block.ndim != 3:
-        raise ValueError(f"[BGP] image_block must be 3D (bands,h,w); got shape {(image_block.shape[0], image_block.shape[1])}")
-
-    # Ensure float32 and contiguous layout (no copies if already correct)
-    if image_block.dtype != np.float32 or not image_block.flags['C_CONTIGUOUS']:
-        src = np.ascontiguousarray(image_block, dtype=np.float32)
-    else:
-        src = image_block
-
-    # Source dims
-    cdef: 
-        psize_t bands  = <psize_t> src.shape[0]
-        psize_t height = <psize_t> src.shape[1]
-        psize_t width  = <psize_t> src.shape[2]
-
-    # Convert bool to bint
-    cdef bint full_syn = full_synthetic
-
-    # Calculat output (#bands) size
-    tot_num_bands = _total_bands_cy(bands, full_syn)
-
-    # Preallocate output array (float32)
-    band_stack = np.empty((int(tot_num_bands), height, width), dtype=np.float32)
-
-    # Get fast C memoryviews 
-    cdef float_t[:, :, :] src_mv = src
-    cdef float_t[:, :, :] bs_mv = band_stack
-
-    # noGIL kernel to create band_stack
-    with nogil:
-        _create_bands_from_block_cy(src_mv, bs_mv, full_syn)
-
-    return band_stack
+    for b in prange(bands, nogil=True, schedule="static"):
+        denom = band_maxs[b] - band_mins[b]
+        if denom == 0.0:
+            for row in range(height):
+                for col in range(width):
+                    block[b, row, col] = 0.0
+        else:
+            for row in range(height):
+                for col in range(width):
+                    val = block[b, row, col]
+                    block[b, row, col] = (val - band_mins[b]) / denom
 
 
 
 # --------------------------------------------------------------------------------------------
-# Band Generation Process (BGP, Python callable)
+# Band Generation Process (2-pass, single output)
 # --------------------------------------------------------------------------------------------
 def band_generation_process(
     input_image_paths:List[str],
     output_dir:str,
     window_shape:Tuple[int, int],
     full_synthetic:bool,
-    verbose:bool,           
-):
+    verbose:bool=True
+) -> None:
     """
-    The Band Generation Process. Generates synthetic, non-linear bands as combinations of existing bands. 
-    Output is normalized range [0,1] per band.
-
-    Overview:
-      - Scans input to determine image shape / number of output bands.
-      - Runs Pass 1 (generate un-normalized bands) in parallel via parallel_generate_streaming.
-      - Runs Pass 2 (normalize) via parallel_normalize_streaming.
-      - Removes temporary unnormalized file.
-
-    Args:
-        input_image_paths (List[str]): 
-            List of paths to input images / multispectral data.
-        dst_dir (str): 
-            Output directory of generated band image. 
-        window_shape (Tuple[int,int]): 
-            Shape of each block to process. 
-            Larger blocks proceess faster and use more memory. 
-            Smaller block process slower with a smaller memory footprint. 
-        full_synthetic (bint): 
-            If True, generate ln and sqrt bands.
-        max_workers (int): 
-            Number of cores for paralellization. If None, defaults to number of processors on the machine.
-            i.e. more workers = more fast.
-        chunk_size (int): 
-            How many windows of data the program can parallelize at once. 
-            i.e. more chunks = more fast. Try 8 or 16 if RAM allows.
-        inflight (int): 
-            Controls memory footprint. At most `inflight * max_workers` blocks in RAM. Defaults to 2.
-        verbose (bint): 
-            If true, shows progress bars.
+    Two pass system:
+      - Pass 1: stats-only (global min/max per band)
+      - Pass 2: regenerate + normalize, write directly to final file
     """
-    cdef:
-        bint full_syn  = <bint> full_synthetic
-        int win_height = <int> window_shape[0] 
-        int win_width  = <int> window_shape[1]
-        int img_height, img_width
+    cdef bint full_syn = <bint> full_synthetic
+    cdef int win_h = <int> window_shape[0]
+    cdef int win_w = <int> window_shape[1]
+    cdef int img_h, img_w
 
-    # (Hardcoded) output file names
-    output_unorm_filename:str = "gen_band_unorm.tif" # un-normalized bands
-    output_norm_filename:str = "gen_band_norm.tif"   # normalized bands
-    unorm_path:str = join(output_dir, output_unorm_filename)
-
-
-    # ==============================
-    # Image size & window dimensions
-    # ==============================
-    if verbose: info("[BGP] Getting image dimensions ...")
+    # Inspect image dims + output bands
     with MultibandBlockReader(input_image_paths) as reader:
-        img_height, img_width = reader.image_shape
-        # Small 1x1 test block to calc number of output bands 
-        test_win = np.array([0, 0, 1, 1], dtype=np.int32)
-        test_block = np.array(reader.read_multiband_block(test_win), copy=True)
-    
-    # Ensure float32 and contigouous
-    if test_block.dtype != np.float32 or not test_block.flags['C_CONTIGUOUS']:
-        test_block = np.ascontiguousarray(test_block, dtype=np.float32)
+        img_h, img_w = reader.image_shape
+        test_block = np.ascontiguousarray(reader.read_multiband_block(np.array([0,0,1,1], dtype=np.int32)), dtype=np.float32)
+    num_bands_out = _total_bands(test_block.shape[0], full_syn)
+    # Free temp memory
+    del test_block
 
-    # Create bands to test output size
-    sample_output = _create_bands_from_block(test_block, full_syn)
-    num_output_bands = int(sample_output.shape[0])
-    
-    # free temporaries
-    del test_block, sample_output
-    
+    # Allocate global stats
+    band_mins = np.full(num_bands_out, np.inf, dtype=np.float32)
+    band_maxs = np.full(num_bands_out, -np.inf, dtype=np.float32)
+    cdef float32_t[:] mins_mv = band_mins
+    cdef float32_t[:] maxs_mv = band_maxs
 
-    # ============================================================
-    # Generate windows
-    # ============================================================
-    if verbose: info("Generating windows ...")
-    # Generate array of window dimensions (num_windows, 4) 
-    cdef int[:,:] win_mv = _generate_windows_cy(img_height, img_width, win_height, win_width)
-    total_windows = win_mv.shape[0]
+    # Pass 1: stats collection
+    if verbose: info("[BGP] Pass 1: scanning for min/max ...")
+    with MultibandBlockReader(input_image_paths) as reader:
+        prog = tqdm(total=reader.num_windows(window_shape), desc="[BGP] Pass 1 stats", disable=not verbose)
+        for win in reader.generate_windows(window_shape):
+            block = np.ascontiguousarray(reader.read_multiband_block(win), dtype=np.float32)
+            out = np.empty((num_bands_out, block.shape[1], block.shape[2]), dtype=np.float32)
+            with nogil:
+                _create_bands_from_block(block, out, full_syn)
+                _block_minmax(out, mins_mv, maxs_mv)
+            prog.update(1)
+        prog.close()
 
-
-    # ============================================================
-    # Initialize arrays for band stack and global min/max
-    # ============================================================
-    if verbose: info("Initializing output arrays ...")
-    # Use small dummy block shape for initialization
-    cdef:
-        np.ndarray[np.float32_t, ndim=3] band_stack = np.empty((num_output_bands, win_height, win_width), dtype=np.float32)
-        float_t[:, :, :] bstack_mv = band_stack
-
-        np.ndarray[np.float32_t, ndim=1] band_mins = np.full(num_output_bands, np.inf, dtype=np.float32)
-        np.ndarray[np.float32_t, ndim=1] band_maxs = np.full(num_output_bands, -np.inf, dtype=np.float32)
-        float_t[:] mins_mv = band_mins
-        float_t[:] maxs_mv = band_maxs
-
-
-
-    # --------------------------------------------------------------------------------------------
-    # Pass 1: Generate unnormalized output + global min/max for pass 2
-    # --------------------------------------------------------------------------------------------   
-    # Reader - original data blocks
-    # Writer - unorm data to disk
+    # Pass 2: regenerate + normalize, direct write
+    if verbose: info("[BGP] Pass 2: regenerating + normalizing ...")
     with MultibandBlockReader(input_image_paths) as reader, \
-         MultibandBlockWriter(
-            output_dir          = output_dir,
-            output_image_shape  = (img_height, img_width),
-            output_image_name   = output_unorm_filename,
-            window_shape        = window_shape,
-            num_bands           = num_output_bands,
-            output_datatype     = np.float32
-        ) as writer:                
-
-        # Windows store along 0 dimension
-        # Data stored alone 1 dimension
-        prog_bar = tqdm(total=total_windows, desc="[BGP] First Pass: unorm", unit="win", colour="CYAN") if verbose else None
-        for i in range(total_windows):
-            # Build window
-            row_off = win_mv[i,0] 
-            col_off = win_mv[i,1]
-            win_h   = win_mv[i,2]
-            win_w   = win_mv[i,3]
-            # Read block from window
-            win = np.asarray([row_off, col_off, win_h, win_w], dtype=np.int32)
-            block = reader.read_multiband_block(win)
-            # Create synthetic bands
-            new_block = _create_bands_from_block(block, full_syn)
-            band_stack[:new_block.shape[0], :new_block.shape[1], :new_block.shape[2]] = new_block
-            # Update min/max per band
+         MultibandBlockWriter(output_dir, (img_h, img_w), "gen_band_norm.tif", window_shape, num_bands_out, np.float32) as writer:
+        prog = tqdm(total=reader.num_windows(window_shape), desc="[BGP] Pass 2 write", disable=not verbose)
+        for win in reader.generate_windows(window_shape):
+            block = np.ascontiguousarray(reader.read_multiband_block(win), dtype=np.float32)
+            out = np.empty((num_bands_out, block.shape[1], block.shape[2]), dtype=np.float32)
             with nogil:
-                _block_minmax_cy(bstack_mv, mins_mv, maxs_mv)
-            # Write unnormalized block
-            writer.write_block(band_stack, win)
-            
-            # (optional) update progress bar +1
-            if prog_bar: prog_bar.update(1)
-            
-
-
+                _create_bands_from_block(block, out, full_syn)
+                _normalize_block(out, mins_mv, maxs_mv)
+            writer.write_block(out, win)
+            prog.update(1)
+        prog.close()
     
-    # --------------------------------------------------------------------------------------------
-    # Pass 2: Normalize output
-    # --------------------------------------------------------------------------------------------
-    # Instantiate block memory view and progress bar
-    cdef float_t[:, :, :] block_mv
-
-    
-    # Reader - unorm block
-    # Writer - norm data to disk
-    with MultibandBlockReader([unorm_path]) as reader, \
-         MultibandBlockWriter(
-            output_dir          = output_dir,
-            output_image_shape  = (img_height, img_width),
-            output_image_name   = output_norm_filename,
-            window_shape        = window_shape,
-            num_bands           = num_output_bands,
-            output_datatype     = np.float32
-        ) as writer:
-
-        prog_bar = tqdm(total=total_windows, desc="[BGP] Second Pass: norm", unit="win", colour="CYAN") if verbose else None
-        for i in range(total_windows):
-            # Build window
-            row_off = win_mv[i,0] 
-            col_off = win_mv[i,1]
-            height  = win_mv[i,2]
-            width   = win_mv[i,3]
-            # Read block from window
-            win = np.asarray([row_off, col_off, height, width], dtype=np.int32)
-            block = reader.read_multiband_block(win)
-            # Memory views to data
-            block_mv = block
-            # Normalize blocks with C-kernels
-            with nogil:
-                _normalize_block_cy(block_mv, mins_mv, maxs_mv)
-            # Writes block to disk
-            writer.write_block(block, win)
-
-            # (optional) update progress +1
-            if prog_bar: prog_bar.update(1)
-                
-
-
-    # ======================
-    # Cleanup Temporary File
-    # ======================
-    rm(unorm_path) 
-    
+    return None

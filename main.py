@@ -27,8 +27,16 @@ pip install -e . && rm -r build || del build && rm -r gosp/gosp.egg-info || del 
 # Imports
 # --------------------------------------------------------------------------------------------
 from gosp import gosp
-from time import time
+
 import pstats, cProfile
+
+from time import time
+from warnings import filterwarnings
+
+
+# GeoTIFF warning suppression
+filterwarnings("ignore", category=UserWarning, message="Dataset has no geotransform, gcps, or rpcs.*")
+
 
 
 # --------------------------------------------------------------------------------------------
@@ -45,7 +53,7 @@ def main():
         full_synthetic=True,                   
         skip_bgp=False,                 
         max_targets=50,                
-        opci_threshold=0.001,              
+        opci_threshold=0.1,              
         # Throughput
         window_shape=(256,256),                 
         # Debug
@@ -55,9 +63,9 @@ def main():
     
 
 
-# =========
-# Executing
-# =========
+# ================
+# Executing Driver
+# ================
 if __name__ == "__main__":    
     # Memory/Performance profiler
     
